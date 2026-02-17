@@ -1,0 +1,30 @@
+{
+  "name": "workhub",
+  "version": "1.0.0",
+  "description": "CRM для малого бізнесу",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac"
+  },
+  "dependencies": {
+    "crypto-js": "^4.2.0",
+    "date-fns": "^3.6.0",
+    "electron-store": "^8.2.0",
+    "firebase": "^10.14.1",
+    "jspdf": "^4.1.0",
+    "puppeteer": "^21.x",
+    "stripe": "^14.x"
+  },
+  "devDependencies": {
+    "electron": "^28.3.3",
+    "electron-builder": "^24.13.3"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}
