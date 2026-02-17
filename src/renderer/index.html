@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="uk">
+<!-- <head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+ <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' https://www.gstatic.com;
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' https://fonts.gstatic.com;
+    connect-src 'self' https://*.firebaseio.com https://*.googleapis.com wss://*.firebaseio.com;
+  " />
+  <meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' https://www.gstatic.com https://cdnjs.cloudflare.com;
+  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+  font-src 'self' https://fonts.gstatic.com;
+  connect-src 'self' https://*.firebaseio.com https://*.googleapis.com wss://*.firebaseio.com;
+" />
+  <title>WorkHub</title>
+
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+ 
+  <link rel="stylesheet" href="./styles/variables.css" />
+  <link rel="stylesheet" href="./styles/reset.css" />
+  <link rel="stylesheet" href="./styles/base.css" />
+  <link rel="stylesheet" href="./styles/titlebar.css" />
+  <link rel="stylesheet" href="./styles/auth.css" />
+  <link rel="stylesheet" href="./styles/navigation.css" />
+  <link rel="stylesheet" href="./styles/dashboard.css" />
+  <link rel="stylesheet" href="./styles/animations.css" />
+</head> -->
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' https://www.gstatic.com;
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' https://fonts.gstatic.com;
+    connect-src 'self' 
+      https://*.firebaseio.com 
+      https://*.googleapis.com 
+      https://api.telegram.org
+      wss://*.firebaseio.com;
+  ">
+  <title>WorkHub</title>
+  <link rel="stylesheet" href="./styles/variables.css" />
+  <link rel="stylesheet" href="./styles/reset.css" />
+  <link rel="stylesheet" href="./styles/base.css" />
+  <link rel="stylesheet" href="./styles/titlebar.css" />
+  <link rel="stylesheet" href="./styles/auth.css" />
+  <link rel="stylesheet" href="./styles/navigation.css" />
+  <link rel="stylesheet" href="./styles/dashboard.css" />
+  <link rel="stylesheet" href="./styles/animations.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- Кастомний titlebar -->
+  <div class="titlebar">
+    <div class="titlebar-drag">
+      <div class="titlebar-logo">W</div>
+      <span class="titlebar-name">WorkHub</span>
+    </div>
+    <div class="titlebar-controls">
+      <button class="tb-btn" id="tb-minimize">&#8722;</button>
+      <button class="tb-btn" id="tb-maximize">&#9744;</button>
+      <button class="tb-btn tb-close" id="tb-close">&#10005;</button>
+    </div>
+  </div>
+
+  <!-- App -->
+  <div id="app">
+    <div id="page-container"></div>
+  </div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
