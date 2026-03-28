@@ -32,19 +32,91 @@ export async function render(container) {
   const user    = getCurrentUser()
   const profile = await getUserProfile(user.uid)
 
-  // Немає профессії → показуємо setup БЕЗ sidebar
-  if (!profile?.profession) {
-    document.getElementById('sidebar')?.remove()
-    renderSetup(container, user)
+  // Учасник команди (воркер)
+  if (profile?.accountType === 'worker') {
+    renderWorkerDashboard(container, profile)
     return
   }
 
-  // Є профессія → дашборд
+  // Власник без профессії і без завершеного онбординг — на вибір ніші
+  if (!profile?.profession && !profile?.onboardingDone) {
+    navigate('choose-profession')
+    return
+  }
+
+  // Власник — повноцінний дашборд
   renderDashboard(container, profile)
 }
 
 // ═══════════════════════════════════════════════════════════
-// SETUP
+// WORKER DASHBOARD
+// ═══════════════════════════════════════════════════════════
+function renderWorkerDashboard(container, profile) {
+  injectStyles()
+  const name = profile?.name?.split(' ')[0] || 'Користувач'
+
+  if (!profile?.workspaceId) {
+    // Ще не приєднався до команди
+    container.innerHTML = `
+      <div class="worker-welcome">
+        <div class="worker-welcome-icon">👋</div>
+        <h1 class="worker-welcome-title">${getGreeting()}, ${name}!</h1>
+        <p class="worker-welcome-sub">
+          Щоб почати роботу, вам потрібен код запрошення від вашого менеджера або власника бізнесу.
+        </p>
+        <button class="btn btn-primary worker-join-btn" id="go-join">
+          👥 Ввести код запрошення
+        </button>
+        <div class="worker-welcome-hint">
+          Зверніться до вашого керівника, він надішле вам 6-значний код
+        </div>
+      </div>
+    `
+    container.querySelector('#go-join').addEventListener('click', () => navigate('join'))
+    return
+  }
+
+  // Приєднався — показуємо що є доступ до
+  const modules = profile.workspaceModules || []
+  const MODULE_META = {
+    dashboard: { icon: '⊞', label: 'Дашборд' }, clients: { icon: '👥', label: 'Клієнти' },
+    projects: { icon: '📁', label: 'Проекти' }, invoices: { icon: '📄', label: 'Рахунки' },
+    contracts: { icon: '📝', label: 'Договори' }, tasks: { icon: '✓', label: 'Задачі' },
+    timer: { icon: '⏱', label: 'Таймер' }, finances: { icon: '💰', label: 'Фінанси' },
+    'tax-calendar': { icon: '📅', label: 'Податки' }, appointments: { icon: '🗓', label: 'Розклад' },
+    services: { icon: '💅', label: 'Послуги' }, 'content-plan': { icon: '📱', label: 'Контент' },
+    accounts: { icon: '🔗', label: 'Акаунти' }, passwords: { icon: '🔑', label: 'Паролі' },
+    notes: { icon: '🗒', label: 'Нотатки' },
+  }
+
+  container.innerHTML = `
+    <div class="worker-dash">
+      <div class="worker-dash-header">
+        <h1>${getGreeting()}, ${name}!</h1>
+        <p class="worker-dash-role">Ваша роль: <strong>${profile.workspaceRole || 'Учасник'}</strong></p>
+      </div>
+      <div class="worker-modules-title">Ваші розділи</div>
+      <div class="worker-modules-grid">
+        ${modules.filter(id => id !== 'dashboard').map(id => {
+          const m = MODULE_META[id]
+          if (!m) return ''
+          return `
+            <div class="worker-module-card" data-route="${id}">
+              <div class="worker-module-icon">${m.icon}</div>
+              <div class="worker-module-label">${m.label}</div>
+            </div>
+          `
+        }).join('')}
+      </div>
+    </div>
+  `
+  container.querySelectorAll('.worker-module-card').forEach(c =>
+    c.addEventListener('click', () => navigate(c.dataset.route))
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
+// SETUP (legacy — власники без profession через старий флоу)
 // ═══════════════════════════════════════════════════════════
 function renderSetup(container, user) {
   injectStyles()
@@ -334,6 +406,31 @@ function injectStyles() {
     .profession-card.selected .prof-card-check { opacity:1; transform:scale(1); }
     .qs-card { cursor:pointer; }
     .qs-card:hover .qs-title { color:var(--accent-blue); }
+
+    /* Worker dashboard */
+    .worker-welcome {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      min-height: calc(100vh - 80px); padding: 40px; text-align: center;
+    }
+    .worker-welcome-icon  { font-size: 64px; margin-bottom: 20px; }
+    .worker-welcome-title { font-family: var(--font-display); font-size: 32px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 14px; }
+    .worker-welcome-sub   { font-size: 15px; color: var(--text-secondary); line-height: 1.6; max-width: 420px; margin-bottom: 28px; }
+    .worker-join-btn      { padding: 14px 36px; font-size: 16px; margin-bottom: 16px; }
+    .worker-welcome-hint  { font-size: 12px; color: var(--text-muted); }
+
+    .worker-dash         { padding: 32px 36px; max-width: 800px; }
+    .worker-dash-header  { margin-bottom: 28px; }
+    .worker-dash-header h1 { font-family: var(--font-display); font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px; }
+    .worker-dash-role    { font-size: 14px; color: var(--text-secondary); }
+    .worker-modules-title { font-family: var(--font-display); font-size: 14px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 14px; }
+    .worker-modules-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; }
+    .worker-module-card  {
+      background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-lg);
+      padding: 20px 16px; cursor: pointer; text-align: center; transition: all .2s;
+    }
+    .worker-module-card:hover { border-color: var(--accent-blue); transform: translateY(-2px); box-shadow: var(--shadow-sm); }
+    .worker-module-icon  { font-size: 28px; margin-bottom: 10px; }
+    .worker-module-label { font-size: 13px; font-weight: 600; }
   `
   document.head.appendChild(style)
 }

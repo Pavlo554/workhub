@@ -1,6 +1,7 @@
 // src/renderer/modules/clients/index.js
 import { db } from '../../services/firebase.js'
-import { getCurrentUser } from '../../services/auth.js'
+import { getCurrentUser, getUserProfile } from '../../services/auth.js'
+import { checkPlanLimit } from '../../services/plan-guard.js'
 import {
   collection, addDoc, getDocs, deleteDoc,
   doc, updateDoc, query, orderBy, serverTimestamp
@@ -96,6 +97,7 @@ export async function render(container) {
   let clients    = []
   let editingId  = null
   const user     = getCurrentUser()
+  const profile  = await getUserProfile(user.uid)   // з кешу — миттєво
 
   // ── Load clients ─────────────────────────────────────────
   async function loadClients() {
@@ -207,7 +209,10 @@ export async function render(container) {
     editingId = null
   }
 
-  container.querySelector('#add-client-btn').addEventListener('click', () => openModal())
+  container.querySelector('#add-client-btn').addEventListener('click', () => {
+    if (!checkPlanLimit(profile, 'clients', clients.length)) return
+    openModal()
+  })
   container.querySelector('#modal-close').addEventListener('click', closeModal)
   container.querySelector('#modal-cancel').addEventListener('click', closeModal)
   container.querySelector('#modal').addEventListener('click', (e) => {

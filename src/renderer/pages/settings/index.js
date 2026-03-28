@@ -1,5 +1,6 @@
 // src/renderer/pages/settings/index.js
-import { getCurrentUser, getUserProfile } from '../../services/auth.js'
+import { navigate } from '../../../core/router.js'
+import { getCurrentUser, getUserProfile, updateProfileCache } from '../../services/auth.js'
 import { auth, db } from '../../services/firebase.js'
 import { signOut, updatePassword, updateEmail, EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js'
 import { doc, updateDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
@@ -93,67 +94,64 @@ export async function render(container) {
       <!-- Бізнес інформація -->
       <div class="settings-section">
         <div class="section-header">
-          <h2 class="section-title">💼 Бізнес інформація</h2>
+          <h2 class="section-title">💼 Мій бізнес</h2>
+          <p class="section-desc">Ця інформація використовується в рахунках, договорах та навігації</p>
         </div>
         <div class="settings-card">
-          
+
           <!-- Назва бізнесу -->
           <div class="form-group">
-            <label class="form-label">Назва компанії/бізнесу</label>
-            <input 
-              type="text" 
-              class="form-input" 
-              id="input-business" 
+            <label class="form-label">Назва бізнесу або ваше ім'я *</label>
+            <input
+              type="text"
+              class="form-input"
+              id="input-business"
               value="${profile.businessName || ''}"
-              placeholder="ФОП Петренко І.І."
+              placeholder="ФОП Іванов або Design Studio"
             >
           </div>
 
-          <!-- Професія -->
-          <div class="form-group">
-            <label class="form-label">Професія</label>
-            <select class="form-select" id="input-profession">
-              <option value="">Оберіть професію</option>
-              <option value="psychologist" ${profile.profession === 'psychologist' ? 'selected' : ''}>👨‍⚕️ Психолог</option>
-              <option value="coach" ${profile.profession === 'coach' ? 'selected' : ''}>🎯 Коуч</option>
-              <option value="therapist" ${profile.profession === 'therapist' ? 'selected' : ''}>💆 Терапевт</option>
-              <option value="consultant" ${profile.profession === 'consultant' ? 'selected' : ''}>💡 Консультант</option>
-              <option value="designer" ${profile.profession === 'designer' ? 'selected' : ''}>🎨 Дизайнер</option>
-              <option value="developer" ${profile.profession === 'developer' ? 'selected' : ''}>💻 Розробник</option>
-              <option value="photographer" ${profile.profession === 'photographer' ? 'selected' : ''}>📷 Фотограф</option>
-              <option value="other" ${profile.profession === 'other' ? 'selected' : ''}>🔧 Інше</option>
-            </select>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+            <div class="form-group">
+              <label class="form-label">Веб-сайт</label>
+              <input type="text" class="form-input" id="input-website"
+                value="${profile.website || ''}" placeholder="yoursite.com">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Instagram</label>
+              <div class="input-with-prefix">
+                <span class="input-prefix">@</span>
+                <input type="text" class="form-input input-with-prefix-field" id="input-instagram"
+                  value="${profile.instagram || ''}" placeholder="username">
+              </div>
+            </div>
           </div>
 
-          <!-- Веб-сайт -->
+          <!-- Ніша -->
           <div class="form-group">
-            <label class="form-label">Веб-сайт</label>
-            <input 
-              type="url" 
-              class="form-input" 
-              id="input-website" 
-              value="${profile.website || ''}"
-              placeholder="https://mysite.com"
-            >
-          </div>
-
-          <!-- Instagram -->
-          <div class="form-group">
-            <label class="form-label">Instagram</label>
-            <div class="input-with-prefix">
-              <span class="input-prefix">@</span>
-              <input 
-                type="text" 
-                class="form-input input-with-prefix-field" 
-                id="input-instagram" 
-                value="${profile.instagram || ''}"
-                placeholder="username"
-              >
+            <label class="form-label">Сфера діяльності</label>
+            <p class="form-hint" style="margin-bottom:12px">Визначає які модулі доступні в меню</p>
+            <div class="niche-grid">
+              ${[
+                { id: 'freelancer', icon: '💻', title: 'Фрілансер',       desc: 'Проекти, рахунки, договори, таймер' },
+                { id: 'accountant', icon: '📊', title: 'Бухгалтер / ФОП', desc: 'Фінанси, рахунки, податковий календар' },
+                { id: 'smm',        icon: '📱', title: 'SMM / Маркетолог', desc: 'Контент-план, акаунти, клієнти' },
+                { id: 'beauty',     icon: '💅', title: 'Салон краси',      desc: 'Записи, послуги, розклад' },
+              ].map(n => `
+                <div class="niche-card ${profile.profession === n.id ? 'selected' : ''}" data-niche="${n.id}">
+                  <span class="niche-icon">${n.icon}</span>
+                  <div class="niche-info">
+                    <div class="niche-title">${n.title}</div>
+                    <div class="niche-desc">${n.desc}</div>
+                  </div>
+                  <div class="niche-check">✓</div>
+                </div>
+              `).join('')}
             </div>
           </div>
 
           <button class="btn-primary btn-large" id="save-business-btn">
-            💾 Зберегти бізнес інформацію
+            💾 Зберегти та оновити меню
           </button>
         </div>
       </div>
@@ -298,26 +296,46 @@ export async function render(container) {
       }
     })
 
+    // Вибір ніші
+    let selectedNiche = profile.profession || null
+    container.querySelectorAll('.niche-card').forEach(card => {
+      card.addEventListener('click', () => {
+        container.querySelectorAll('.niche-card').forEach(c => c.classList.remove('selected'))
+        card.classList.add('selected')
+        selectedNiche = card.dataset.niche
+      })
+    })
+
     // Збереження бізнес інфо
     container.querySelector('#save-business-btn')?.addEventListener('click', async () => {
       const businessName = container.querySelector('#input-business').value.trim()
-      const profession = container.querySelector('#input-profession').value
-      const website = container.querySelector('#input-website').value.trim()
-      const instagram = container.querySelector('#input-instagram').value.trim()
+      const website      = container.querySelector('#input-website').value.trim()
+      const instagram    = container.querySelector('#input-instagram').value.trim()
 
-      const loading = showLoading('Збереження...')
+      if (!businessName) { showToast("Введіть назву бізнесу", 'error'); return }
+      if (!selectedNiche) { showToast('Оберіть сферу діяльності', 'error'); return }
+
+      const loading = showLoading('Зберігаємо...')
 
       try {
-        await updateDoc(doc(db, 'users', user.uid), {
-          businessName,
-          profession,
-          website,
-          instagram,
-          updatedAt: serverTimestamp()
-        })
+        const bizData = {
+          businessName, website, instagram,
+          profession:     selectedNiche,
+          accountType:    'owner',
+          onboardingDone: true,
+          updatedAt:      serverTimestamp(),
+        }
+        await updateDoc(doc(db, 'users', user.uid), bizData)
+        updateProfileCache(user.uid, bizData)
+
+        // Оновлюємо sidebar з новою нішею
+        const { renderNavigation } = await import('../../components/navigation.js')
+        const updatedProfile = { ...profile, ...bizData }
+        const sidebar = document.getElementById('sidebar')
+        if (sidebar) renderNavigation(sidebar, updatedProfile)
 
         loading.remove()
-        showToast('Бізнес інформацію оновлено!', 'success')
+        showToast('Збережено! Меню оновлено 🎉', 'success')
       } catch (err) {
         loading.remove()
         console.error(err)
@@ -373,7 +391,7 @@ export async function render(container) {
 
     // Керування підпискою
     container.querySelector('#manage-subscription-btn')?.addEventListener('click', () => {
-      window.router.navigate('/subscribe')
+      navigate('subscribe')
     })
 
     // Вихід
@@ -431,6 +449,31 @@ function injectStyles() {
   style.id = 'settings-styles'
   style.textContent = `
     .settings-page { padding: 32px 36px; max-width: 800px; margin: 0 auto; }
+    .section-desc { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+
+    /* Niche cards */
+    .niche-grid { display: flex; flex-direction: column; gap: 8px; }
+    .niche-card {
+      display: flex; align-items: center; gap: 14px;
+      background: var(--bg-tertiary); border: 2px solid var(--border);
+      border-radius: var(--radius-md); padding: 14px 16px;
+      cursor: pointer; transition: all .2s; position: relative;
+    }
+    .niche-card:hover { border-color: rgba(255,255,255,.2); }
+    .niche-card.selected { border-color: var(--accent-blue); background: rgba(79,142,247,.08); }
+    .niche-icon  { font-size: 24px; flex-shrink: 0; }
+    .niche-info  { flex: 1; min-width: 0; }
+    .niche-title { font-weight: 700; font-size: 14px; margin-bottom: 2px; }
+    .niche-desc  { font-size: 12px; color: var(--text-secondary); }
+    .niche-check {
+      width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+      background: var(--bg-secondary); border: 2px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; color: transparent; transition: all .2s;
+    }
+    .niche-card.selected .niche-check {
+      background: var(--accent-blue); border-color: var(--accent-blue); color: #fff;
+    }
 
     .settings-header { margin-bottom: 40px; }
     .settings-title { font-family: var(--font-display); font-size: 36px; font-weight: 800; margin-bottom: 8px; }

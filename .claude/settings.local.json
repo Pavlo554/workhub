@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find c:UserslezzerDesktopworkhub -type f -name *.json -o -name *.js -o -name *.jsx -o -name *.ts -o -name *.tsx)",
+      "Bash(find c:UserslezzerDesktopworkhubsrc -type f \\\\\\(-name *.js -o -name *.jsx \\\\\\))",
+      "Bash(find \"c:\\\\Users\\\\lezzer\\\\Desktop\\\\workhub\\\\src\" -type f -name \"*.js\" -exec wc -l {} +)",
+      "Bash(grep -r \"Redux\\\\|Zustand\\\\|Context\\\\|Store\\\\|useState\\\\|useReducer\" c:UserslezzerDesktopworkhubsrc --include=*.js)"
+    ]
+  }
+}

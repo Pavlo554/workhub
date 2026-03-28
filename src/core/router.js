@@ -14,12 +14,12 @@ export async function navigate(routeName, params = {}) {
 
   const container = document.getElementById('page-container')
 
-  // Анімація виходу
+  // Анімація виходу та завантаження модуля — паралельно
   container.classList.add('page-exit')
-  await sleep(150)
-
-  // Завантажуємо і рендеримо сторінку
-  const pageModule = await routes[routeName]()
+  const [pageModule] = await Promise.all([
+    routes[routeName](),
+    sleep(100)
+  ])
   container.innerHTML = ''
   container.classList.remove('page-exit')
   container.classList.add('page-enter')

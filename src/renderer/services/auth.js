@@ -36,13 +36,30 @@ export async function loginUser({ email, password }) {
 
 // ── Вихід ─────────────────────────────────────────────────
 export async function logoutUser() {
+  clearProfileCache()
   await signOut(auth)
 }
 
-// ── Профіль з Firestore ───────────────────────────────────
+// ── Профіль з Firestore (з кешем) ────────────────────────
+let _profileCache    = null
+let _profileCacheUid = null
+
 export async function getUserProfile(uid) {
-  const snap = await getDoc(doc(db, 'users', uid))
-  return snap.exists() ? snap.data() : null
+  if (_profileCache && _profileCacheUid === uid) return _profileCache
+  const snap   = await getDoc(doc(db, 'users', uid))
+  _profileCache    = snap.exists() ? snap.data() : null
+  _profileCacheUid = uid
+  return _profileCache
+}
+
+export function updateProfileCache(uid, data) {
+  _profileCacheUid = uid
+  _profileCache    = _profileCache ? { ..._profileCache, ...data } : data
+}
+
+export function clearProfileCache() {
+  _profileCache    = null
+  _profileCacheUid = null
 }
 
 // ── Поточний юзер ─────────────────────────────────────────

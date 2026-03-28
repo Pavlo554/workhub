@@ -5,4 +5,10 @@ contextBridge.exposeInMainWorld('electron', {
   maximize: () => ipcRenderer.send('window-maximize'),
   close:    () => ipcRenderer.send('window-close'),
   platform: process.platform,
+
+  timer: {
+    start:  () => ipcRenderer.invoke('timer:start'),
+    stop:   () => ipcRenderer.invoke('timer:stop'),
+    status: () => ipcRenderer.invoke('timer:status'),
+  },
 })
