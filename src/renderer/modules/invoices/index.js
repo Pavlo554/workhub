@@ -1,6 +1,7 @@
 // src/renderer/modules/invoices/index.js
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getUserProfile } from '../../services/auth.js'
+import { checkPlanLimit } from '../../services/plan-guard.js'
 import {
   collection, addDoc, getDocs, deleteDoc, doc, updateDoc,
   query, orderBy, serverTimestamp
@@ -8,7 +9,6 @@ import {
 
 export async function render(container) {
   const user = getCurrentUser()
-  const profile = await getUserProfile(user.uid)
 
   container.innerHTML = `
     <div class="invoices-page">
@@ -124,6 +124,7 @@ export async function render(container) {
   let invoices = []
   let editingId = null
   let currentFilter = 'all'
+  const profile = await getUserProfile(user.uid)   // з кешу — миттєво
 
   // Load
   async function loadInvoices() {
@@ -250,7 +251,12 @@ export async function render(container) {
     editingId = null
   }
 
-  container.querySelector('#add-invoice-btn').addEventListener('click', () => openModal())
+  container.querySelector('#add-invoice-btn').addEventListener('click', () => {
+    const thisMonth = new Date().toISOString().slice(0, 7)
+    const monthCount = invoices.filter(i => (i.date || '').startsWith(thisMonth)).length
+    if (!checkPlanLimit(profile, 'invoices-monthly', monthCount)) return
+    openModal()
+  })
   container.querySelector('#modal-close').addEventListener('click', closeModal)
   container.querySelector('#modal-cancel').addEventListener('click', closeModal)
   container.querySelector('#modal').addEventListener('click', (e) => {

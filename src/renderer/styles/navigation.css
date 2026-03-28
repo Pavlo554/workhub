@@ -1,6 +1,6 @@
 .nav-wrapper { display: flex; flex-direction: column; height: 100%; padding: 16px 12px; gap: 8px; }
 
-.nav-user { display: flex; align-items: center; gap: 10px; padding: 10px 8px; border-radius: var(--radius-sm); transition: background var(--transition); cursor: pointer; }
+.nav-user { display: flex; align-items: center; gap: 10px; padding: 10px 8px; border-radius: var(--radius-sm); transition: background var(--transition); cursor: pointer; width: 100%; text-align: left; }
 .nav-user:hover { background: var(--bg-hover); }
 
 .nav-avatar { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; flex-shrink: 0; }
@@ -40,6 +40,34 @@
   margin-top: 4px;
 }
 .nav-item-upgrade:hover { background: rgba(251,191,36,0.15) !important; }
+
+.nav-item-admin { color: #F87171 !important; }
+.nav-item-admin:hover { background: rgba(248,113,113,0.1) !important; }
+
+.nav-item-team { color: #34D399 !important; }
+.nav-item-team:hover { background: rgba(52,211,153,0.1) !important; }
+
+.nav-item-join { color: var(--text-secondary) !important; font-size: 12px !important; }
+.nav-item-join:hover { background: var(--bg-hover) !important; }
+
+.nav-item-cabinet { color: var(--accent-blue) !important; }
+.nav-item-cabinet:hover { background: var(--accent-blue-dim) !important; }
+
+.nav-workspace-badge {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: #34D399;
+  padding: 4px 10px; margin: 0 4px;
+  border: 1px solid rgba(52,211,153,.3); border-radius: var(--radius-full);
+  background: rgba(52,211,153,.08);
+}
+.nav-ws-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #34D399; flex-shrink: 0;
+  animation: ws-pulse 2.5s ease-in-out infinite;
+}
+@keyframes ws-pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+.nav-ws-role { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .nav-divider { height: 1px; background: var(--border); margin: 8px 4px; }
 

@@ -2,7 +2,7 @@
 export const PROFESSIONS = {
   freelancer: {
     id: 'freelancer', label: 'Фрілансер', icon: '💻', color: '#4F8EF7',
-    modules: ['dashboard','clients','projects','invoices','contracts','tasks','passwords','notes'],
+    modules: ['dashboard','clients','projects','invoices','contracts','tasks','timer','passwords','notes'],
     quickActions: [
       { label: 'Новий клієнт',  icon: '👤', action: 'new-client' },
       { label: 'Новий рахунок', icon: '📄', action: 'new-invoice' },

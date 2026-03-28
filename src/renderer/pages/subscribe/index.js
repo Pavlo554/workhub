@@ -1,6 +1,6 @@
 // src/renderer/pages/subscribe/index.js
-import { getCurrentUser, getUserProfile } from '../../services/auth.js'
-import { createPayment, openLiqPayCheckout } from '../../services/liqpay.js'
+import { getCurrentUser, getUserProfile, updateProfileCache } from '../../services/auth.js'
+import { createPayment, openLiqPayCheckout, updateSubscription } from '../../services/liqpay.js'
 import { getCryptoAddress, calculateCryptoAmount, createPendingPayment } from '../../services/crypto-payment.js'
 import { sendPaymentNotification } from '../../services/telegram-notifications.js'
 
@@ -322,6 +322,12 @@ export async function render(container) {
         const { data, signature } = await createPayment(user.uid, plan.id, plan.price)
         
         openLiqPayCheckout(data, signature, async () => {
+          try {
+            await updateSubscription(user.uid, plan.id)
+            updateProfileCache(user.uid, { plan: plan.id, subscriptionStatus: 'active' })
+          } catch (err) {
+            console.error('Subscription update error:', err)
+          }
           modal.remove()
           showSuccessModal(plan.name)
           setTimeout(() => location.reload(), 2000)

@@ -18,7 +18,7 @@ export async function render(container) {
     <div class="onboarding-page">
       <div class="onboarding-content">
         <div class="onboarding-header">
-          <div class="onboarding-step">Крок 1 з 2</div>
+          <div class="onboarding-step">Крок 2 з 3</div>
           <h1 class="onboarding-title">Оберіть свою сферу</h1>
           <p class="onboarding-subtitle">WorkHub автоматично налаштує потрібні інструменти під вашу роботу</p>
         </div>

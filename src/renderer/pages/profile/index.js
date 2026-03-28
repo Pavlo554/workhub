@@ -1,15 +1,27 @@
 // src/renderer/pages/profile/index.js
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getUserProfile } from '../../services/auth.js'
-import { collection, query, where, getDocs, orderBy, limit } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
+import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
+
+// Простий кеш з TTL 60 секунд
+const cache = { data: null, ts: 0 }
+const CACHE_TTL = 60_000
 
 export async function render(container) {
   const user = getCurrentUser()
-  const profile = await getUserProfile(user.uid)
 
-  // Завантажуємо статистику
-  const stats = await loadStatistics(user.uid)
+  injectStyles()
 
+  // Показуємо скелетон одразу — не чекаємо Firebase
+  container.innerHTML = buildSkeleton()
+
+  // Завантажуємо профіль і статистику паралельно
+  const [profile, stats] = await Promise.all([
+    getUserProfile(user.uid),
+    loadStatistics(user.uid)
+  ])
+
+  // Підставляємо реальний контент
   container.innerHTML = `
     <div class="profile-analytics-page">
       
@@ -222,7 +234,6 @@ export async function render(container) {
     </div>
   `
 
-  injectStyles()
   attachEventListeners()
   renderCharts(stats)
 
@@ -295,13 +306,18 @@ export async function render(container) {
 }
 
 async function loadStatistics(userId) {
-  try {
-    // Завантажуємо клієнтів
-    const clientsSnapshot = await getDocs(collection(db, 'users', userId, 'clients'))
-    const totalClients = clientsSnapshot.size
+  // Повертаємо кешовані дані якщо вони ще свіжі
+  if (cache.data && Date.now() - cache.ts < CACHE_TTL) {
+    return cache.data
+  }
 
-    // Завантажуємо рахунки
-    const invoicesSnapshot = await getDocs(collection(db, 'users', userId, 'invoices'))
+  try {
+    // Завантажуємо клієнтів і рахунки паралельно
+    const [clientsSnapshot, invoicesSnapshot] = await Promise.all([
+      getDocs(collection(db, 'users', userId, 'clients')),
+      getDocs(collection(db, 'users', userId, 'invoices'))
+    ])
+    const totalClients = clientsSnapshot.size
     const invoices = invoicesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
     
     const totalInvoices = invoices.length
@@ -337,7 +353,7 @@ async function loadStatistics(userId) {
     const revenueByDay = getLast7DaysData(invoices, 'amount')
     const clientsByDay = getLast7DaysClients(clientsSnapshot.docs)
 
-    return {
+    const result = {
       totalClients,
       totalInvoices,
       totalRevenue,
@@ -349,6 +365,10 @@ async function loadStatistics(userId) {
       revenueByDay,
       clientsByDay
     }
+
+    cache.data = result
+    cache.ts = Date.now()
+    return result
   } catch (err) {
     console.error('Error loading stats:', err)
     return {
@@ -410,6 +430,28 @@ function getLast7DaysClients(clients) {
   return days
 }
 
+function buildSkeleton() {
+  return `
+    <div class="profile-analytics-page">
+      <div class="analytics-header">
+        <div class="header-user">
+          <div class="skel skel-circle" style="width:64px;height:64px"></div>
+          <div>
+            <div class="skel skel-line" style="width:220px;height:28px;margin-bottom:8px"></div>
+            <div class="skel skel-line" style="width:160px;height:16px"></div>
+          </div>
+        </div>
+      </div>
+      <div class="stats-grid">
+        ${Array(4).fill('<div class="stat-card"><div class="skel skel-block" style="height:110px"></div></div>').join('')}
+      </div>
+      <div class="charts-row">
+        ${Array(2).fill('<div class="chart-card"><div class="skel skel-block" style="height:260px"></div></div>').join('')}
+      </div>
+    </div>
+  `
+}
+
 function getActivityIcon(type) {
   const icons = {
     paid: '✓',
@@ -439,6 +481,13 @@ function injectStyles() {
   const style = document.createElement('style')
   style.id = 'profile-analytics-styles'
   style.textContent = `
+    /* Skeleton */
+    .skel { background: var(--bg-tertiary); border-radius: var(--radius-md); animation: skel-pulse 1.4s ease-in-out infinite; }
+    .skel-circle { border-radius: 50%; }
+    .skel-line { display: block; }
+    .skel-block { display: block; border-radius: var(--radius-lg); }
+    @keyframes skel-pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
     .profile-analytics-page { padding: 32px 36px; max-width: 1400px; margin: 0 auto; }
 
     /* Header */
