@@ -4,7 +4,12 @@
       "Bash(find c:UserslezzerDesktopworkhub -type f -name *.json -o -name *.js -o -name *.jsx -o -name *.ts -o -name *.tsx)",
       "Bash(find c:UserslezzerDesktopworkhubsrc -type f \\\\\\(-name *.js -o -name *.jsx \\\\\\))",
       "Bash(find \"c:\\\\Users\\\\lezzer\\\\Desktop\\\\workhub\\\\src\" -type f -name \"*.js\" -exec wc -l {} +)",
-      "Bash(grep -r \"Redux\\\\|Zustand\\\\|Context\\\\|Store\\\\|useState\\\\|useReducer\" c:UserslezzerDesktopworkhubsrc --include=*.js)"
+      "Bash(grep -r \"Redux\\\\|Zustand\\\\|Context\\\\|Store\\\\|useState\\\\|useReducer\" c:UserslezzerDesktopworkhubsrc --include=*.js)",
+      "Bash(grep -rn \"''users'', user\\\\.uid\" \"c:/Users/lezzer/Desktop/workhub/src/renderer/modules/tasks/index.js\" \"c:/Users/lezzer/Desktop/workhub/src/renderer/modules/notes/index.js\" \"c:/Users/lezzer/Desktop/workhub/src/renderer/modules/passwords/index.js\" \"c:/Users/lezzer/Desktop/workhub/src/renderer/modules/projects/index.js\" \"c:/Users/lezzer/Desktop/workhub/src/renderer/modules/invoices/index.js\" \"c:/Users/lezzer/Desktop/workhub/src/renderer/modules/contracts/index.js\" \"c:/Users/lezzer/Desktop/workhub/src/renderer/modules/accounts/index.js\" \"c:/Users/lezzer/Desktop/workhub/src/renderer/modules/content-plan/index.js\")",
+      "Bash(echo \"Exit: $?\")",
+      "Bash(npm run:*)",
+      "Bash(where docker:*)",
+      "Bash(docker --version)"
     ]
   }
 }

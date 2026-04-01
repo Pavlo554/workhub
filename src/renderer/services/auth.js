@@ -67,6 +67,20 @@ export function getCurrentUser() {
   return auth.currentUser
 }
 
+// ── Базовий шлях для даних активного бізнесу ─────────────
+// Головний бізнес:  "users/{uid}"
+// Другий бізнес:    "users/{uid}/businesses/{bizId}"
+export function getActiveBasePath(uid) {
+  const bizId = _profileCache?.activeBusiness
+  if (bizId) return `users/${uid}/businesses/${bizId}`
+  return `users/${uid}`
+}
+
+// Повертає масив сегментів для використання в collection(db, ...segments, 'module')
+export function getActivePathSegments(uid) {
+  return getActiveBasePath(uid).split('/')
+}
+
 // ── Слухач стану авторизації ──────────────────────────────
 export function onAuthChange(callback) {
   return onAuthStateChanged(auth, callback)

@@ -226,3 +226,48 @@ ipcMain.handle('timer:status', async () => {
     currentTitle: trackingData.currentTitle || null,
   }
 })
+
+// ── IPC: Telegram канал ────────────────────────────────────
+const https = require('https')
+
+function tgApiRequest(token, method, params = {}) {
+  return new Promise((resolve, reject) => {
+    const query = new URLSearchParams(params).toString()
+    const url   = `https://api.telegram.org/bot${token}/${method}${query ? '?' + query : ''}`
+    https.get(url, (res) => {
+      let data = ''
+      res.on('data', chunk => { data += chunk })
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data)
+          if (json.ok) resolve(json.result)
+          else reject(new Error(json.description || 'Telegram API error'))
+        } catch (e) { reject(e) }
+      })
+    }).on('error', reject)
+  })
+}
+
+ipcMain.handle('tg:fetchChannel', async (_, { token, username }) => {
+  if (!token || !username) return { error: 'Потрібен токен і username каналу' }
+
+  const chatId = username.startsWith('@') ? username : '@' + username
+
+  try {
+    const [chat, count] = await Promise.all([
+      tgApiRequest(token, 'getChat',            { chat_id: chatId }),
+      tgApiRequest(token, 'getChatMemberCount', { chat_id: chatId }),
+    ])
+    return {
+      id:           chat.id,
+      title:        chat.title,
+      username:     chat.username,
+      description:  chat.description || '',
+      photo:        chat.photo || null,
+      subscribers:  count,
+      link:         chat.username ? `https://t.me/${chat.username}` : null,
+    }
+  } catch (err) {
+    return { error: err.message }
+  }
+})

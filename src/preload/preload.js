@@ -11,4 +11,8 @@ contextBridge.exposeInMainWorld('electron', {
     stop:   () => ipcRenderer.invoke('timer:stop'),
     status: () => ipcRenderer.invoke('timer:status'),
   },
+
+  tg: {
+    fetchChannel: (token, username) => ipcRenderer.invoke('tg:fetchChannel', { token, username }),
+  },
 })
