@@ -1,591 +1,534 @@
 // src/renderer/pages/profile/index.js
 import { db } from '../../services/firebase.js'
-import { getCurrentUser, getUserProfile } from '../../services/auth.js'
+import { getCurrentUser, getUserProfile, getActivePathSegments } from '../../services/auth.js'
+import { getProfessionConfig } from '../../../core/profession-config.js'
+import { navigate } from '../../../core/router.js'
 import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
-// Простий кеш з TTL 60 секунд
-const cache = { data: null, ts: 0 }
-const CACHE_TTL = 60_000
-
 export async function render(container) {
+  injectStyles()
   const user = getCurrentUser()
 
-  injectStyles()
+  // Skeleton
+  container.innerHTML = `
+    <div class="pf-page">
+      <div class="pf-header">
+        <div class="pf-hdr-left">
+          <div class="pf-avatar-skel pf-skel"></div>
+          <div>
+            <div class="pf-skel" style="width:220px;height:28px;border-radius:8px;margin-bottom:8px"></div>
+            <div class="pf-skel" style="width:140px;height:16px;border-radius:6px"></div>
+          </div>
+        </div>
+      </div>
+      <div class="pf-kpi-row">
+        ${[0,1,2,3].map(() => `<div class="pf-kpi-card pf-skel" style="height:100px"></div>`).join('')}
+      </div>
+      <div class="pf-charts-row">
+        ${[0,1].map(() => `<div class="pf-chart-card pf-skel" style="height:240px"></div>`).join('')}
+      </div>
+    </div>
+  `
 
-  // Показуємо скелетон одразу — не чекаємо Firebase
-  container.innerHTML = buildSkeleton()
-
-  // Завантажуємо профіль і статистику паралельно
   const [profile, stats] = await Promise.all([
     getUserProfile(user.uid),
-    loadStatistics(user.uid)
+    loadStats(user)
   ])
 
-  // Підставляємо реальний контент
+  const config = getProfessionConfig(profile?.profession)
+  const profColor = config.color || '#4F8EF7'
+  const name = profile?.name?.split(' ')[0] || 'Користувач'
+
   container.innerHTML = `
-    <div class="profile-analytics-page">
-      
-      <!-- Header -->
-      <div class="analytics-header">
-        <div class="header-user">
-          <div class="user-avatar">
+    <div class="pf-page">
+
+      <!-- ── Header ── -->
+      <div class="pf-header">
+        <div class="pf-hdr-left">
+          <div class="pf-avatar" style="background:linear-gradient(135deg,${profColor},${profColor}88)">
             ${(profile?.name || 'U')[0].toUpperCase()}
           </div>
-          <div class="user-info">
-            <h1 class="user-name">Привіт, ${profile?.name || 'Користувач'}! 👋</h1>
-            <p class="user-subtitle">Ось ваша статистика за останній час</p>
-          </div>
-        </div>
-        <div class="header-actions">
-          <button class="btn-icon" id="btn-settings" title="Налаштування">
-            ⚙️
-          </button>
-          <button class="btn-icon" id="btn-refresh" title="Оновити">
-            🔄
-          </button>
-        </div>
-      </div>
-
-      <!-- Stats Cards -->
-      <div class="stats-grid">
-        
-        <div class="stat-card card-blue">
-          <div class="stat-icon">👥</div>
-          <div class="stat-content">
-            <div class="stat-value">${stats.totalClients}</div>
-            <div class="stat-label">Всього клієнтів</div>
-          </div>
-          <div class="stat-trend ${stats.clientsGrowth >= 0 ? 'trend-up' : 'trend-down'}">
-            ${stats.clientsGrowth >= 0 ? '↗' : '↘'} ${Math.abs(stats.clientsGrowth)}%
-          </div>
-        </div>
-
-        <div class="stat-card card-green">
-          <div class="stat-icon">💰</div>
-          <div class="stat-content">
-            <div class="stat-value">₴${stats.totalRevenue.toLocaleString('uk-UA')}</div>
-            <div class="stat-label">Загальний дохід</div>
-          </div>
-          <div class="stat-trend ${stats.revenueGrowth >= 0 ? 'trend-up' : 'trend-down'}">
-            ${stats.revenueGrowth >= 0 ? '↗' : '↘'} ${Math.abs(stats.revenueGrowth)}%
-          </div>
-        </div>
-
-        <div class="stat-card card-purple">
-          <div class="stat-icon">📄</div>
-          <div class="stat-content">
-            <div class="stat-value">${stats.totalInvoices}</div>
-            <div class="stat-label">Рахунків створено</div>
-          </div>
-          <div class="stat-trend trend-neutral">
-            За весь час
-          </div>
-        </div>
-
-        <div class="stat-card card-orange">
-          <div class="stat-icon">⏱️</div>
-          <div class="stat-content">
-            <div class="stat-value">${stats.pendingInvoices}</div>
-            <div class="stat-label">Очікує оплати</div>
-          </div>
-          <div class="stat-trend trend-warning">
-            ${stats.pendingInvoices > 0 ? 'Потребує уваги' : 'Все оплачено'}
-          </div>
-        </div>
-
-      </div>
-
-      <!-- Charts Row -->
-      <div class="charts-row">
-        
-        <!-- Revenue Chart -->
-        <div class="chart-card">
-          <div class="chart-header">
-            <h3 class="chart-title">📈 Дохід за місяць</h3>
-            <select class="chart-period" id="revenue-period">
-              <option value="7">7 днів</option>
-              <option value="30" selected>30 днів</option>
-              <option value="90">90 днів</option>
-            </select>
-          </div>
-          <div class="chart-body">
-            <canvas id="revenue-chart"></canvas>
-          </div>
-        </div>
-
-        <!-- Clients Chart -->
-        <div class="chart-card">
-          <div class="chart-header">
-            <h3 class="chart-title">👥 Нові клієнти</h3>
-            <select class="chart-period" id="clients-period">
-              <option value="7">7 днів</option>
-              <option value="30" selected>30 днів</option>
-              <option value="90">90 днів</option>
-            </select>
-          </div>
-          <div class="chart-body">
-            <canvas id="clients-chart"></canvas>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- Activity Section -->
-      <div class="activity-section">
-        
-        <!-- Recent Activity -->
-        <div class="activity-card">
-          <div class="activity-header">
-            <h3 class="activity-title">🕐 Остання активність</h3>
-            <a href="#/invoices" class="activity-link">Всі рахунки →</a>
-          </div>
-          <div class="activity-list">
-            ${stats.recentActivity.length > 0 ? stats.recentActivity.map(item => `
-              <div class="activity-item">
-                <div class="activity-icon ${item.type}">${getActivityIcon(item.type)}</div>
-                <div class="activity-content">
-                  <div class="activity-text">${item.text}</div>
-                  <div class="activity-time">${formatTimeAgo(item.date)}</div>
-                </div>
-                <div class="activity-amount">${item.amount ? '₴' + item.amount : ''}</div>
-              </div>
-            `).join('') : '<div class="empty-state">Поки немає активності</div>'}
-          </div>
-        </div>
-
-        <!-- Top Clients -->
-        <div class="top-clients-card">
-          <div class="activity-header">
-            <h3 class="activity-title">⭐ Топ клієнти</h3>
-            <a href="#/clients" class="activity-link">Всі клієнти →</a>
-          </div>
-          <div class="clients-list">
-            ${stats.topClients.length > 0 ? stats.topClients.map((client, idx) => `
-              <div class="client-item">
-                <div class="client-rank">#${idx + 1}</div>
-                <div class="client-avatar">${client.name[0].toUpperCase()}</div>
-                <div class="client-info">
-                  <div class="client-name">${client.name}</div>
-                  <div class="client-count">${client.invoiceCount} рахунків</div>
-                </div>
-                <div class="client-amount">₴${client.totalAmount.toLocaleString('uk-UA')}</div>
-              </div>
-            `).join('') : '<div class="empty-state">Поки немає клієнтів</div>'}
-          </div>
-        </div>
-
-      </div>
-
-      <!-- Account Info -->
-      <div class="account-section">
-        <div class="account-card">
-          <div class="account-header">
-            <h3 class="account-title">💎 Ваша підписка</h3>
-          </div>
-          <div class="account-body">
-            <div class="subscription-info">
-              <div class="subscription-plan">
-                <div class="plan-badge plan-${profile?.plan || 'free'}">
-                  ${(profile?.plan || 'free').toUpperCase()}
-                </div>
-                <div class="plan-status">
-                  ${profile?.subscriptionStatus === 'active' ? '✓ Активна' : '○ Неактивна'}
-                </div>
-              </div>
-              ${profile?.subscriptionEnd ? `
-                <div class="subscription-end">
-                  Діє до: <strong>${new Date(profile.subscriptionEnd).toLocaleDateString('uk-UA')}</strong>
-                </div>
-              ` : ''}
+          <div>
+            <h1 class="pf-name">${getGreeting()}, ${name}! ${config.icon}</h1>
+            <div class="pf-meta">
+              <span class="pf-biz">${profile?.businessName || 'Мій бізнес'}</span>
+              <span class="pf-dot">·</span>
+              <span>${config.label}</span>
+              <span class="pf-dot">·</span>
+              <span>${getTodayLabel()}</span>
             </div>
-            <button class="btn-upgrade" id="btn-upgrade">
+          </div>
+        </div>
+        <div class="pf-hdr-right">
+          <button class="pf-hdr-btn" id="pf-btn-settings" title="Налаштування">⚙️ Налаштування</button>
+          <button class="pf-hdr-btn pf-hdr-btn-primary" id="pf-btn-upgrade">
+            ${profile?.plan === 'free' ? '⭐ Оновити до PRO' : '💎 ' + (profile?.plan||'').toUpperCase()}
+          </button>
+        </div>
+      </div>
+
+      <!-- ── KPI cards ── -->
+      <div class="pf-kpi-row">
+        <div class="pf-kpi-card" style="--kc:#4F8EF7">
+          <div class="pf-kpi-icon">👥</div>
+          <div class="pf-kpi-val">${stats.totalClients}</div>
+          <div class="pf-kpi-lbl">Всього клієнтів</div>
+          ${stats.newClientsMonth > 0 ? `<div class="pf-kpi-sub pf-up">↗ +${stats.newClientsMonth} цього місяця</div>` : ''}
+        </div>
+        <div class="pf-kpi-card" style="--kc:#34D399">
+          <div class="pf-kpi-icon">💰</div>
+          <div class="pf-kpi-val">₴${fmtNum(stats.totalRevenue)}</div>
+          <div class="pf-kpi-lbl">Загальний дохід</div>
+          ${stats.monthRevenue > 0 ? `<div class="pf-kpi-sub pf-up">↗ ₴${fmtNum(stats.monthRevenue)} цього місяця</div>` : ''}
+        </div>
+        <div class="pf-kpi-card" style="--kc:#A78BFA">
+          <div class="pf-kpi-icon">📄</div>
+          <div class="pf-kpi-val">${stats.totalInvoices}</div>
+          <div class="pf-kpi-lbl">Рахунків створено</div>
+          <div class="pf-kpi-sub">${stats.paidInvoices} оплачено</div>
+        </div>
+        <div class="pf-kpi-card" style="--kc:${stats.pendingInvoices > 0 ? '#F59E0B' : '#34D399'}">
+          <div class="pf-kpi-icon">${stats.pendingInvoices > 0 ? '⏳' : '✅'}</div>
+          <div class="pf-kpi-val">${stats.pendingInvoices}</div>
+          <div class="pf-kpi-lbl">Очікує оплати</div>
+          <div class="pf-kpi-sub ${stats.pendingInvoices > 0 ? 'pf-warn' : 'pf-up'}">
+            ${stats.pendingInvoices > 0 ? 'Потребує уваги' : 'Все оплачено ✓'}
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Charts ── -->
+      <div class="pf-charts-row">
+        <div class="pf-chart-card">
+          <div class="pf-chart-hdr">
+            <span class="pf-chart-title">📈 Дохід за останні 7 днів</span>
+            <span class="pf-chart-total">₴${fmtNum(stats.totalRevenue)}</span>
+          </div>
+          <div class="pf-chart-body" id="pf-rev-chart"></div>
+          <div class="pf-chart-labels" id="pf-rev-labels"></div>
+        </div>
+        <div class="pf-chart-card">
+          <div class="pf-chart-hdr">
+            <span class="pf-chart-title">👥 Нові клієнти за 7 днів</span>
+            <span class="pf-chart-total">+${stats.newClientsWeek} цього тижня</span>
+          </div>
+          <div class="pf-chart-body" id="pf-cli-chart"></div>
+          <div class="pf-chart-labels" id="pf-cli-labels"></div>
+        </div>
+      </div>
+
+      <!-- ── Bottom grid ── -->
+      <div class="pf-bottom">
+
+        <!-- Activity -->
+        <div class="pf-section">
+          <div class="pf-section-hdr">
+            <span class="pf-section-title">🕐 Остання активність</span>
+            <button class="pf-link" data-route="invoices">Всі рахунки →</button>
+          </div>
+          ${stats.recentActivity.length > 0 ? stats.recentActivity.map(item => `
+            <div class="pf-act-row">
+              <div class="pf-act-icon ${item.status}">📄</div>
+              <div class="pf-act-info">
+                <div class="pf-act-text">${item.text}</div>
+                <div class="pf-act-time">${item.timeAgo}</div>
+              </div>
+              ${item.amount ? `<div class="pf-act-amount ${item.status === 'paid' ? 'pf-green' : 'pf-yellow'}">₴${fmtNum(item.amount)}</div>` : ''}
+            </div>
+          `).join('') : '<div class="pf-empty">Активності ще немає</div>'}
+        </div>
+
+        <!-- Top clients -->
+        <div class="pf-section">
+          <div class="pf-section-hdr">
+            <span class="pf-section-title">⭐ Топ клієнти</span>
+            <button class="pf-link" data-route="clients">Всі клієнти →</button>
+          </div>
+          ${stats.topClients.length > 0 ? stats.topClients.map((c, i) => `
+            <div class="pf-client-row">
+              <div class="pf-rank" style="background:${['#F59E0B','#9CA3AF','#CD7F32','#4F8EF7','#A78BFA'][i]||'#4F8EF7'}">#${i+1}</div>
+              <div class="pf-client-av" style="background:${strColor(c.name)}">${c.name[0].toUpperCase()}</div>
+              <div class="pf-client-info">
+                <div class="pf-client-name">${c.name}</div>
+                <div class="pf-client-sub">${c.count} ${plural(c.count,'рахунок','рахунки','рахунків')}</div>
+              </div>
+              <div class="pf-client-amt">₴${fmtNum(c.total)}</div>
+            </div>
+          `).join('') : '<div class="pf-empty">Клієнтів з рахунками ще немає</div>'}
+        </div>
+
+        <!-- Profile info + plan -->
+        <div class="pf-col-side">
+
+          <div class="pf-section">
+            <div class="pf-section-hdr"><span class="pf-section-title">👤 Профіль</span></div>
+            ${infoRow('📧', 'Email',   user.email)}
+            ${infoRow('📞', 'Телефон', profile?.phone)}
+            ${infoRow('🏙', 'Місто',   profile?.city)}
+            ${infoRow('🌐', 'Сайт',    profile?.website)}
+            <div class="pf-info-edit">
+              <button class="pf-link" id="pf-btn-edit">✏️ Редагувати профіль</button>
+            </div>
+          </div>
+
+          <div class="pf-section pf-plan-card">
+            <div class="pf-section-hdr"><span class="pf-section-title">💎 Підписка</span></div>
+            <div class="pf-plan-badge pf-plan-${profile?.plan || 'free'}">
+              ${(profile?.plan || 'FREE').toUpperCase()}
+            </div>
+            ${profile?.subscriptionEnd ? `<div class="pf-plan-end">Діє до: <strong>${new Date(profile.subscriptionEnd).toLocaleDateString('uk-UA')}</strong></div>` : ''}
+            <button class="pf-upgrade-btn" id="pf-btn-upgrade2">
               ${profile?.plan === 'free' ? '⭐ Оновити до PRO' : '📊 Керувати підпискою'}
             </button>
           </div>
-        </div>
 
-        <div class="account-card">
-          <div class="account-header">
-            <h3 class="account-title">👤 Профіль</h3>
-          </div>
-          <div class="account-body">
-            <div class="profile-info-grid">
-              <div class="profile-info-item">
-                <div class="info-label">Email</div>
-                <div class="info-value">${user.email}</div>
-              </div>
-              <div class="profile-info-item">
-                <div class="info-label">Телефон</div>
-                <div class="info-value">${profile?.phone || 'Не вказано'}</div>
-              </div>
-              <div class="profile-info-item">
-                <div class="info-label">Місто</div>
-                <div class="info-value">${profile?.city || 'Не вказано'}</div>
-              </div>
-              <div class="profile-info-item">
-                <div class="info-label">Бізнес</div>
-                <div class="info-value">${profile?.businessName || 'Не вказано'}</div>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
     </div>
   `
 
-  attachEventListeners()
-  renderCharts(stats)
+  // Charts
+  renderBarChart('pf-rev-chart', 'pf-rev-labels', stats.revenueByDay, '#4F8EF7')
+  renderBarChart('pf-cli-chart', 'pf-cli-labels', stats.clientsByDay, '#34D399')
 
-  function attachEventListeners() {
-    // Налаштування
-    container.querySelector('#btn-settings')?.addEventListener('click', () => {
-      window.router.navigate('/settings')
-    })
-
-    // Оновити
-    container.querySelector('#btn-refresh')?.addEventListener('click', () => {
-      location.reload()
-    })
-
-    // Оновити підписку
-    container.querySelector('#btn-upgrade')?.addEventListener('click', () => {
-      window.router.navigate('/subscribe')
-    })
-  }
-
-  function renderCharts(stats) {
-    // Простий bar chart для доходу
-    renderSimpleChart('revenue-chart', stats.revenueByDay, '#4F8EF7')
-    
-    // Простий line chart для клієнтів
-    renderSimpleChart('clients-chart', stats.clientsByDay, '#34D399')
-  }
-
-  function renderSimpleChart(canvasId, data, color) {
-    const canvas = document.getElementById(canvasId)
-    if (!canvas) return
-
-    const ctx = canvas.getContext('2d')
-    const width = canvas.width = canvas.offsetWidth * 2
-    const height = canvas.height = canvas.offsetHeight * 2
-    ctx.scale(2, 2)
-
-    const maxValue = Math.max(...data.map(d => d.value), 1)
-    const barWidth = (width / 2) / data.length - 10
-    const chartHeight = height / 2 - 60
-
-    // Малюємо bars
-    data.forEach((item, idx) => {
-      const barHeight = (item.value / maxValue) * chartHeight
-      const x = idx * (barWidth + 10) + 20
-      const y = chartHeight - barHeight + 20
-
-      // Gradient
-      const gradient = ctx.createLinearGradient(0, y, 0, chartHeight + 20)
-      gradient.addColorStop(0, color)
-      gradient.addColorStop(1, color + '44')
-
-      ctx.fillStyle = gradient
-      ctx.fillRect(x, y, barWidth, barHeight)
-
-      // Label
-      ctx.fillStyle = '#9CA3AF'
-      ctx.font = '10px Inter'
-      ctx.textAlign = 'center'
-      ctx.fillText(item.label, x + barWidth / 2, chartHeight + 40)
-
-      // Value
-      if (item.value > 0) {
-        ctx.fillStyle = '#fff'
-        ctx.font = 'bold 11px Inter'
-        ctx.fillText(item.value, x + barWidth / 2, y - 5)
-      }
-    })
-  }
+  // Events
+  container.querySelectorAll('.pf-link[data-route]').forEach(btn =>
+    btn.addEventListener('click', () => navigate(btn.dataset.route))
+  )
+  container.querySelector('#pf-btn-settings')?.addEventListener('click', () => navigate('settings'))
+  container.querySelector('#pf-btn-upgrade')?.addEventListener('click', () => navigate('subscribe'))
+  container.querySelector('#pf-btn-upgrade2')?.addEventListener('click', () => navigate('subscribe'))
+  container.querySelector('#pf-btn-edit')?.addEventListener('click', () => navigate('settings'))
 }
 
-async function loadStatistics(userId) {
-  // Повертаємо кешовані дані якщо вони ще свіжі
-  if (cache.data && Date.now() - cache.ts < CACHE_TTL) {
-    return cache.data
-  }
+// ── Bar chart (CSS-based, no canvas) ─────────────────────
+function renderBarChart(bodyId, labelsId, data, color) {
+  const bodyEl   = document.getElementById(bodyId)
+  const labelsEl = document.getElementById(labelsId)
+  if (!bodyEl || !labelsEl) return
+
+  const max = Math.max(...data.map(d => d.value), 1)
+  bodyEl.innerHTML = data.map(d => {
+    const pct = Math.round((d.value / max) * 100)
+    return `
+      <div class="pf-bar-wrap" title="${d.value}">
+        <div class="pf-bar-val">${d.value > 0 ? (d.value >= 1000 ? fmtNum(d.value) : d.value) : ''}</div>
+        <div class="pf-bar" style="height:${Math.max(pct, d.value > 0 ? 4 : 1)}%;background:${color}"></div>
+      </div>
+    `
+  }).join('')
+  labelsEl.innerHTML = data.map(d => `<div class="pf-bar-lbl">${d.label}</div>`).join('')
+}
+
+// ── Data loader ───────────────────────────────────────────
+async function loadStats(user) {
+  const base = getActivePathSegments(user.uid)
+  const now  = new Date()
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const weekStart  = new Date(now); weekStart.setDate(now.getDate() - 6); weekStart.setHours(0,0,0,0)
 
   try {
-    // Завантажуємо клієнтів і рахунки паралельно
-    const [clientsSnapshot, invoicesSnapshot] = await Promise.all([
-      getDocs(collection(db, 'users', userId, 'clients')),
-      getDocs(collection(db, 'users', userId, 'invoices'))
+    const [clientsSnap, invoicesSnap] = await Promise.all([
+      getDocs(collection(db, ...base, 'clients')),
+      getDocs(collection(db, ...base, 'invoices')),
     ])
-    const totalClients = clientsSnapshot.size
-    const invoices = invoicesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-    
-    const totalInvoices = invoices.length
-    const totalRevenue = invoices.reduce((sum, inv) => sum + (inv.amount || 0), 0)
-    const pendingInvoices = invoices.filter(inv => inv.status === 'pending').length
 
-    // Остання активність (останні 5 рахунків)
-    const recentActivity = invoices
-      .sort((a, b) => new Date(b.date) - new Date(a.date))
-      .slice(0, 5)
+    const clients  = clientsSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+    const invoices = invoicesSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+
+    // Clients
+    const totalClients    = clients.length
+    const newClientsMonth = clients.filter(c => toDate(c.createdAt) >= monthStart).length
+    const newClientsWeek  = clients.filter(c => toDate(c.createdAt) >= weekStart).length
+
+    // Invoices
+    const totalInvoices  = invoices.length
+    const paidInvoices   = invoices.filter(i => i.status === 'paid').length
+    const pendingInvoices = invoices.filter(i => i.status === 'unpaid' || i.status === 'pending').length
+    const totalRevenue   = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + (Number(i.amount)||0), 0)
+    const monthRevenue   = invoices.filter(i => i.status === 'paid' && toDate(i.createdAt) >= monthStart)
+                                   .reduce((s, i) => s + (Number(i.amount)||0), 0)
+
+    // Recent activity
+    const recentActivity = [...invoices]
+      .sort((a, b) => toDate(b.createdAt) - toDate(a.createdAt))
+      .slice(0, 6)
       .map(inv => ({
-        type: inv.status || 'pending',
-        text: `Рахунок для ${inv.client}`,
-        amount: inv.amount,
-        date: inv.date
+        text:    `Рахунок для ${inv.clientName || inv.client || '—'}`,
+        status:  inv.status || 'unpaid',
+        amount:  inv.amount,
+        timeAgo: timeAgo(toDate(inv.createdAt)),
       }))
 
-    // Топ клієнти
-    const clientStats = {}
-    invoices.forEach(inv => {
-      if (!clientStats[inv.client]) {
-        clientStats[inv.client] = { name: inv.client, invoiceCount: 0, totalAmount: 0 }
-      }
-      clientStats[inv.client].invoiceCount++
-      clientStats[inv.client].totalAmount += inv.amount || 0
+    // Top clients by revenue
+    const clientMap = {}
+    invoices.filter(i => i.status === 'paid').forEach(inv => {
+      const name = inv.clientName || inv.client || '—'
+      if (!clientMap[name]) clientMap[name] = { name, total: 0, count: 0 }
+      clientMap[name].total += Number(inv.amount) || 0
+      clientMap[name].count++
     })
-    
-    const topClients = Object.values(clientStats)
-      .sort((a, b) => b.totalAmount - a.totalAmount)
-      .slice(0, 5)
+    const topClients = Object.values(clientMap).sort((a, b) => b.total - a.total).slice(0, 5)
 
-    // Дані для графіків (останні 7 днів)
-    const revenueByDay = getLast7DaysData(invoices, 'amount')
-    const clientsByDay = getLast7DaysClients(clientsSnapshot.docs)
+    // Charts — last 7 days
+    const revenueByDay = last7Days(invoices, d => d.status === 'paid' ? (Number(d.amount)||0) : 0)
+    const clientsByDay = last7Days(clients,  () => 1, 'createdAt')
 
-    const result = {
-      totalClients,
-      totalInvoices,
-      totalRevenue,
-      pendingInvoices,
-      clientsGrowth: Math.floor(Math.random() * 20), // Mock
-      revenueGrowth: Math.floor(Math.random() * 30), // Mock
-      recentActivity,
-      topClients,
-      revenueByDay,
-      clientsByDay
-    }
-
-    cache.data = result
-    cache.ts = Date.now()
-    return result
+    return { totalClients, newClientsMonth, newClientsWeek, totalInvoices, paidInvoices, pendingInvoices, totalRevenue, monthRevenue, recentActivity, topClients, revenueByDay, clientsByDay }
   } catch (err) {
-    console.error('Error loading stats:', err)
-    return {
-      totalClients: 0,
-      totalInvoices: 0,
-      totalRevenue: 0,
-      pendingInvoices: 0,
-      clientsGrowth: 0,
-      revenueGrowth: 0,
-      recentActivity: [],
-      topClients: [],
-      revenueByDay: Array(7).fill(0).map((_, i) => ({ label: `День ${i+1}`, value: 0 })),
-      clientsByDay: Array(7).fill(0).map((_, i) => ({ label: `День ${i+1}`, value: 0 }))
-    }
-  }
-}
-
-function getLast7DaysData(invoices, field) {
-  const days = []
-  const today = new Date()
-  
-  for (let i = 6; i >= 0; i--) {
-    const date = new Date(today)
-    date.setDate(date.getDate() - i)
-    const dateStr = date.toISOString().split('T')[0]
-    
-    const dayInvoices = invoices.filter(inv => inv.date?.startsWith(dateStr))
-    const value = dayInvoices.reduce((sum, inv) => sum + (inv[field] || 0), 0)
-    
-    days.push({
-      label: date.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit' }),
-      value: field === 'amount' ? Math.round(value) : dayInvoices.length
+    console.error('Stats error:', err)
+    const empty7 = Array.from({length:7}, (_,i) => {
+      const d = new Date(); d.setDate(d.getDate() - (6-i))
+      return { label: d.toLocaleDateString('uk-UA',{day:'2-digit',month:'2-digit'}), value: 0 }
     })
+    return { totalClients:0, newClientsMonth:0, newClientsWeek:0, totalInvoices:0, paidInvoices:0, pendingInvoices:0, totalRevenue:0, monthRevenue:0, recentActivity:[], topClients:[], revenueByDay:empty7, clientsByDay:empty7 }
   }
-  
-  return days
 }
 
-function getLast7DaysClients(clients) {
-  const days = []
-  const today = new Date()
-  
-  for (let i = 6; i >= 0; i--) {
-    const date = new Date(today)
-    date.setDate(date.getDate() - i)
-    const dateStr = date.toISOString().split('T')[0]
-    
-    const count = clients.filter(doc => {
-      const data = doc.data()
-      return data.createdAt?.toDate().toISOString().startsWith(dateStr)
-    }).length
-    
-    days.push({
-      label: date.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit' }),
-      value: count
-    })
-  }
-  
-  return days
+function last7Days(items, getValue, dateField = 'createdAt') {
+  return Array.from({length:7}, (_,i) => {
+    const d = new Date(); d.setDate(d.getDate() - (6-i)); d.setHours(0,0,0,0)
+    const next = new Date(d); next.setDate(d.getDate()+1)
+    const value = items.filter(item => {
+      const t = toDate(item[dateField])
+      return t >= d && t < next
+    }).reduce((s, item) => s + getValue(item), 0)
+    return { label: d.toLocaleDateString('uk-UA',{day:'2-digit',month:'2-digit'}), value: Math.round(value) }
+  })
 }
 
-function buildSkeleton() {
-  return `
-    <div class="profile-analytics-page">
-      <div class="analytics-header">
-        <div class="header-user">
-          <div class="skel skel-circle" style="width:64px;height:64px"></div>
-          <div>
-            <div class="skel skel-line" style="width:220px;height:28px;margin-bottom:8px"></div>
-            <div class="skel skel-line" style="width:160px;height:16px"></div>
-          </div>
-        </div>
-      </div>
-      <div class="stats-grid">
-        ${Array(4).fill('<div class="stat-card"><div class="skel skel-block" style="height:110px"></div></div>').join('')}
-      </div>
-      <div class="charts-row">
-        ${Array(2).fill('<div class="chart-card"><div class="skel skel-block" style="height:260px"></div></div>').join('')}
-      </div>
-    </div>
-  `
+// ── Helpers ───────────────────────────────────────────────
+function toDate(val) {
+  if (!val) return new Date(0)
+  if (val?.toDate) return val.toDate()
+  return new Date(val)
 }
 
-function getActivityIcon(type) {
-  const icons = {
-    paid: '✓',
-    pending: '⏱',
-    cancelled: '✗'
-  }
-  return icons[type] || '📄'
-}
-
-function formatTimeAgo(dateStr) {
-  if (!dateStr) return 'Невідомо'
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diff = now - date
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-  const hours = Math.floor(diff / (1000 * 60 * 60))
-  const minutes = Math.floor(diff / (1000 * 60))
-  
-  if (days > 0) return `${days} дн. тому`
-  if (hours > 0) return `${hours} год. тому`
-  if (minutes > 0) return `${minutes} хв. тому`
+function timeAgo(date) {
+  const diff = Date.now() - date.getTime()
+  const m = Math.floor(diff / 60000), h = Math.floor(diff / 3600000), d = Math.floor(diff / 86400000)
+  if (d > 0) return `${d} дн. тому`
+  if (h > 0) return `${h} год. тому`
+  if (m > 0) return `${m} хв. тому`
   return 'Щойно'
 }
 
+function fmtNum(n) {
+  const num = Number(n)
+  if (isNaN(num)) return '0'
+  if (num >= 1000000) return (num/1000000).toFixed(1).replace('.0','') + 'M'
+  if (num >= 1000)    return (num/1000).toFixed(1).replace('.0','') + 'k'
+  return num.toLocaleString('uk-UA')
+}
+
+function plural(n, one, few, many) {
+  const m = n % 10, m2 = n % 100
+  if (m === 1 && m2 !== 11) return one
+  if (m >= 2 && m <= 4 && (m2 < 10 || m2 >= 20)) return few
+  return many
+}
+
+function strColor(str) {
+  const COLORS = ['#4F8EF7','#34D399','#A78BFA','#F59E0B','#F472B6','#38BDF8']
+  let h = 0; for (const c of str) h = c.charCodeAt(0) + ((h<<5)-h)
+  return COLORS[Math.abs(h) % COLORS.length]
+}
+
+function getGreeting() {
+  const h = new Date().getHours()
+  if (h < 12) return 'Доброго ранку'
+  if (h < 17) return 'Доброго дня'
+  if (h < 21) return 'Доброго вечора'
+  return 'Добраніч'
+}
+
+function getTodayLabel() {
+  return new Date().toLocaleDateString('uk-UA', { weekday:'long', day:'numeric', month:'long' })
+}
+
+function infoRow(icon, label, val) {
+  if (!val) return ''
+  return `
+    <div class="pf-info-row">
+      <span class="pf-info-icon">${icon}</span>
+      <div class="pf-info-body">
+        <div class="pf-info-lbl">${label}</div>
+        <div class="pf-info-val">${val}</div>
+      </div>
+    </div>
+  `
+}
+
+// ── Styles ────────────────────────────────────────────────
 function injectStyles() {
-  if (document.getElementById('profile-analytics-styles')) return
+  if (document.getElementById('pf-styles')) return
   const style = document.createElement('style')
-  style.id = 'profile-analytics-styles'
+  style.id = 'pf-styles'
   style.textContent = `
-    /* Skeleton */
-    .skel { background: var(--bg-tertiary); border-radius: var(--radius-md); animation: skel-pulse 1.4s ease-in-out infinite; }
-    .skel-circle { border-radius: 50%; }
-    .skel-line { display: block; }
-    .skel-block { display: block; border-radius: var(--radius-lg); }
-    @keyframes skel-pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .pf-page { padding:28px 32px; max-width:1300px; display:flex; flex-direction:column; gap:20px; }
+  .pf-skel { background:var(--bg-tertiary); border-radius:var(--radius-md); animation:pf-pulse 1.4s infinite; }
+  .pf-avatar-skel { width:64px; height:64px; border-radius:50%; }
+  @keyframes pf-pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
-    .profile-analytics-page { padding: 32px 36px; max-width: 1400px; margin: 0 auto; }
+  /* ── Header ── */
+  .pf-header {
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+  }
+  .pf-hdr-left { display:flex; align-items:center; gap:18px; }
+  .pf-avatar {
+    width:60px; height:60px; border-radius:50%; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    font-size:26px; font-weight:800; color:#fff;
+  }
+  .pf-name {
+    font-family:var(--font-display); font-size:24px; font-weight:800;
+    letter-spacing:-0.02em; margin-bottom:5px;
+  }
+  .pf-meta { display:flex; gap:6px; font-size:13px; color:var(--text-secondary); align-items:center; flex-wrap:wrap; }
+  .pf-biz  { font-weight:600; color:var(--text-primary); }
+  .pf-dot  { color:var(--text-muted); }
 
-    /* Header */
-    .analytics-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; }
-    .header-user { display: flex; align-items: center; gap: 20px; }
-    .user-avatar { width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 800; color: #fff; }
-    .user-name { font-family: var(--font-display); font-size: 32px; font-weight: 800; margin-bottom: 4px; }
-    .user-subtitle { font-size: 16px; color: var(--text-secondary); }
-    .header-actions { display: flex; gap: 12px; }
-    .btn-icon { width: 44px; height: 44px; border-radius: var(--radius-md); background: var(--bg-secondary); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; transition: all .2s; }
-    .btn-icon:hover { border-color: var(--accent-blue); transform: translateY(-2px); }
+  .pf-hdr-right { display:flex; gap:8px; align-items:center; flex-shrink:0; }
+  .pf-hdr-btn {
+    padding:8px 16px; border-radius:var(--radius-md); font-size:13px; font-weight:600;
+    border:1px solid var(--border); background:var(--bg-secondary); color:var(--text-primary);
+    cursor:pointer; transition:all .15s;
+  }
+  .pf-hdr-btn:hover { border-color:var(--accent-blue); }
+  .pf-hdr-btn-primary { background:var(--accent-blue); border-color:var(--accent-blue); color:#fff; }
+  .pf-hdr-btn-primary:hover { filter:brightness(1.1); }
 
-    /* Stats Grid */
-    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 32px; }
-    .stat-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; position: relative; overflow: hidden; transition: all .3s; }
-    .stat-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); }
-    .stat-card::before { content: ''; position: absolute; top: 0; right: 0; width: 100px; height: 100px; border-radius: 50%; opacity: 0.1; }
-    .card-blue::before { background: #4F8EF7; }
-    .card-green::before { background: #34D399; }
-    .card-purple::before { background: #A78BFA; }
-    .card-orange::before { background: #F59E0B; }
-    
-    .stat-icon { font-size: 32px; margin-bottom: 12px; }
-    .stat-value { font-family: var(--font-display); font-size: 36px; font-weight: 900; margin-bottom: 4px; }
-    .stat-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; }
-    .stat-trend { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: var(--radius-sm); display: inline-block; }
-    .trend-up { background: rgba(52,211,153,0.2); color: #34D399; }
-    .trend-down { background: rgba(239,68,68,0.2); color: #EF4444; }
-    .trend-neutral { background: rgba(156,163,175,0.2); color: #9CA3AF; }
-    .trend-warning { background: rgba(245,158,11,0.2); color: #F59E0B; }
+  /* ── KPI ── */
+  .pf-kpi-row { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px; }
+  .pf-kpi-card {
+    background:var(--bg-secondary); border:1px solid var(--border);
+    border-left:3px solid var(--kc,var(--accent-blue)); border-radius:var(--radius-lg);
+    padding:18px 20px; transition:transform .15s, box-shadow .15s;
+  }
+  .pf-kpi-card:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,.2); }
+  .pf-kpi-icon { font-size:22px; margin-bottom:10px; }
+  .pf-kpi-val  {
+    font-family:var(--font-display); font-size:32px; font-weight:800;
+    letter-spacing:-0.03em; color:var(--kc,var(--text-primary)); line-height:1; margin-bottom:4px;
+  }
+  .pf-kpi-lbl { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); }
+  .pf-kpi-sub { font-size:11px; margin-top:6px; }
+  .pf-up   { color:#34D399; }
+  .pf-warn { color:#F59E0B; }
+  .pf-green { color:#34D399 !important; }
+  .pf-yellow { color:#F59E0B !important; }
 
-    /* Charts */
-    .charts-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; margin-bottom: 32px; }
-    .chart-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; }
-    .chart-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-    .chart-title { font-family: var(--font-display); font-size: 18px; font-weight: 700; }
-    .chart-period { padding: 6px 12px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; cursor: pointer; }
-    .chart-body { height: 200px; }
-    .chart-body canvas { width: 100%; height: 100%; }
+  /* ── Charts ── */
+  .pf-charts-row { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:900px) { .pf-charts-row { grid-template-columns:1fr; } }
 
-    /* Activity */
-    .activity-section { display: grid; grid-template-columns: 1.5fr 1fr; gap: 20px; margin-bottom: 32px; }
-    .activity-card, .top-clients-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; }
-    .activity-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-    .activity-title { font-family: var(--font-display); font-size: 18px; font-weight: 700; }
-    .activity-link { font-size: 13px; color: var(--accent-blue); font-weight: 600; text-decoration: none; }
-    .activity-link:hover { text-decoration: underline; }
+  .pf-chart-card {
+    background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-lg);
+    padding:20px 22px;
+  }
+  .pf-chart-hdr   { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .pf-chart-title { font-size:14px; font-weight:700; }
+  .pf-chart-total { font-family:var(--font-display); font-size:18px; font-weight:800; color:var(--text-secondary); }
 
-    .activity-list { display: flex; flex-direction: column; gap: 12px; }
-    .activity-item { display: flex; align-items: center; gap: 12px; padding: 12px; background: var(--bg-tertiary); border-radius: var(--radius-md); }
-    .activity-icon { width: 36px; height: 36px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
-    .activity-icon.paid { background: rgba(52,211,153,0.2); }
-    .activity-icon.pending { background: rgba(245,158,11,0.2); }
-    .activity-icon.cancelled { background: rgba(239,68,68,0.2); }
-    .activity-content { flex: 1; }
-    .activity-text { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
-    .activity-time { font-size: 12px; color: var(--text-secondary); }
-    .activity-amount { font-weight: 700; font-size: 15px; }
+  .pf-chart-body {
+    display:flex; align-items:flex-end; gap:6px; height:120px;
+    border-bottom:1px solid var(--border); padding-bottom:4px;
+  }
+  .pf-bar-wrap { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; position:relative; }
+  .pf-bar-val  { font-size:9px; color:var(--text-muted); margin-bottom:2px; font-weight:600; text-align:center; }
+  .pf-bar      { width:100%; border-radius:3px 3px 0 0; min-height:2px; transition:height .3s; }
+  .pf-chart-labels { display:flex; gap:6px; margin-top:6px; }
+  .pf-bar-lbl  { flex:1; text-align:center; font-size:10px; color:var(--text-muted); }
 
-    .clients-list { display: flex; flex-direction: column; gap: 12px; }
-    .client-item { display: flex; align-items: center; gap: 12px; padding: 12px; background: var(--bg-tertiary); border-radius: var(--radius-md); }
-    .client-rank { width: 24px; height: 24px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #4F8EF7 100%); color: #fff; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
-    .client-avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #A78BFA 0%, #8B5CF6 100%); color: #fff; font-size: 16px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
-    .client-info { flex: 1; }
-    .client-name { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
-    .client-count { font-size: 12px; color: var(--text-secondary); }
-    .client-amount { font-weight: 700; font-size: 15px; }
+  /* ── Bottom ── */
+  .pf-bottom { display:grid; grid-template-columns:1fr 1fr 320px; gap:16px; align-items:start; }
+  @media (max-width:1100px) { .pf-bottom { grid-template-columns:1fr 1fr; } }
+  @media (max-width:700px)  { .pf-bottom { grid-template-columns:1fr; } }
 
-    .empty-state { text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 14px; }
+  .pf-col-side { display:flex; flex-direction:column; gap:16px; }
 
-    /* Account */
-    .account-section { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-    .account-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; }
-    .account-header { margin-bottom: 20px; }
-    .account-title { font-family: var(--font-display); font-size: 18px; font-weight: 700; }
-    
-    .subscription-info { margin-bottom: 20px; }
-    .subscription-plan { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-    .plan-badge { padding: 6px 16px; border-radius: var(--radius-full); font-size: 12px; font-weight: 800; letter-spacing: 0.05em; }
-    .plan-free { background: rgba(156,163,175,0.2); color: #9CA3AF; }
-    .plan-pro { background: linear-gradient(135deg, #667eea 0%, #4F8EF7 100%); color: #fff; }
-    .plan-business { background: linear-gradient(135deg, #34D399 0%, #10B981 100%); color: #fff; }
-    .plan-status { font-size: 13px; color: var(--text-secondary); }
-    .subscription-end { font-size: 14px; color: var(--text-secondary); }
+  .pf-section {
+    background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-lg);
+    padding:18px 20px;
+  }
+  .pf-section-hdr {
+    display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;
+  }
+  .pf-section-title { font-size:14px; font-weight:700; }
+  .pf-link {
+    font-size:12px; color:var(--accent-blue); background:none; border:none;
+    cursor:pointer; padding:0; font-weight:500;
+  }
+  .pf-link:hover { text-decoration:underline; }
 
-    .btn-upgrade { width: 100%; padding: 12px; background: linear-gradient(135deg, #667eea 0%, #4F8EF7 100%); border: none; border-radius: var(--radius-md); color: #fff; font-weight: 700; font-size: 14px; cursor: pointer; transition: all .3s; }
-    .btn-upgrade:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(79,142,247,0.4); }
+  /* Activity */
+  .pf-act-row {
+    display:flex; align-items:center; gap:12px; padding:10px 0;
+    border-bottom:1px solid var(--border);
+  }
+  .pf-act-row:last-child { border-bottom:none; }
+  .pf-act-icon {
+    width:34px; height:34px; border-radius:var(--radius-sm); flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; font-size:16px;
+  }
+  .pf-act-icon.paid    { background:rgba(52,211,153,.15); }
+  .pf-act-icon.unpaid,
+  .pf-act-icon.pending { background:rgba(245,158,11,.15); }
+  .pf-act-info  { flex:1; min-width:0; }
+  .pf-act-text  { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pf-act-time  { font-size:11px; color:var(--text-muted); margin-top:2px; }
+  .pf-act-amount { font-size:14px; font-weight:700; white-space:nowrap; }
 
-    .profile-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    .profile-info-item { }
-    .info-label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
-    .info-value { font-size: 14px; font-weight: 600; }
+  /* Top clients */
+  .pf-client-row {
+    display:flex; align-items:center; gap:10px; padding:10px 0;
+    border-bottom:1px solid var(--border);
+  }
+  .pf-client-row:last-child { border-bottom:none; }
+  .pf-rank {
+    width:22px; height:22px; border-radius:50%; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    font-size:10px; font-weight:800; color:#fff;
+  }
+  .pf-client-av {
+    width:36px; height:36px; border-radius:50%; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    font-size:15px; font-weight:700; color:#fff;
+  }
+  .pf-client-info { flex:1; min-width:0; }
+  .pf-client-name { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pf-client-sub  { font-size:11px; color:var(--text-muted); margin-top:1px; }
+  .pf-client-amt  { font-size:14px; font-weight:700; white-space:nowrap; }
 
-    @media (max-width: 1024px) {
-      .activity-section { grid-template-columns: 1fr; }
-      .account-section { grid-template-columns: 1fr; }
-      .charts-row { grid-template-columns: 1fr; }
-    }
+  /* Profile info */
+  .pf-info-row {
+    display:flex; gap:12px; align-items:center; padding:8px 0;
+    border-bottom:1px solid var(--border);
+  }
+  .pf-info-row:last-of-type { border-bottom:none; }
+  .pf-info-icon { font-size:16px; flex-shrink:0; width:22px; text-align:center; }
+  .pf-info-lbl  { font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); font-weight:600; }
+  .pf-info-val  { font-size:13px; font-weight:600; margin-top:1px; }
+  .pf-info-edit { padding-top:12px; }
+
+  /* Plan */
+  .pf-plan-badge {
+    display:inline-block; padding:6px 18px; border-radius:var(--radius-full);
+    font-size:13px; font-weight:800; letter-spacing:.06em; margin-bottom:10px;
+  }
+  .pf-plan-free     { background:rgba(156,163,175,.2); color:#9CA3AF; }
+  .pf-plan-pro      { background:linear-gradient(135deg,#667eea,#4F8EF7); color:#fff; }
+  .pf-plan-business { background:linear-gradient(135deg,#34D399,#10B981); color:#fff; }
+  .pf-plan-end      { font-size:13px; color:var(--text-secondary); margin-bottom:14px; }
+  .pf-upgrade-btn {
+    width:100%; padding:11px; border-radius:var(--radius-md); border:none;
+    background:linear-gradient(135deg,#667eea,#4F8EF7); color:#fff;
+    font-weight:700; font-size:13px; cursor:pointer; transition:all .2s;
+  }
+  .pf-upgrade-btn:hover { filter:brightness(1.1); transform:translateY(-1px); box-shadow:0 6px 20px rgba(79,142,247,.35); }
+
+  .pf-empty { padding:24px; text-align:center; font-size:13px; color:var(--text-muted); }
   `
   document.head.appendChild(style)
 }

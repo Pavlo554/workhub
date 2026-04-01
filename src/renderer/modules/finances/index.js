@@ -1,391 +1,966 @@
 // src/renderer/modules/finances/index.js
 import { db } from '../../services/firebase.js'
-import { getCurrentUser } from '../../services/auth.js'
+import { getCurrentUser, getActivePathSegments } from '../../services/auth.js'
 import {
-  collection, addDoc, getDocs, deleteDoc, doc, updateDoc,
-  query, orderBy, where, serverTimestamp
+  collection, addDoc, getDocs, deleteDoc,
+  doc, updateDoc, query, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
+// ── Category definitions ───────────────────────────────────────────────────
+const INCOME_CATS = [
+  { id: 'freelance',   icon: '💻', label: 'Фріланс'     },
+  { id: 'salary',      icon: '👤', label: 'Зарплата'    },
+  { id: 'project',     icon: '📁', label: 'Проект'      },
+  { id: 'investment',  icon: '📈', label: 'Інвестиції'  },
+  { id: 'sale',        icon: '🛒', label: 'Продаж'      },
+  { id: 'other',       icon: '📦', label: 'Інше'        },
+]
+
+const EXPENSE_CATS = [
+  { id: 'rent',        icon: '🏢', label: 'Оренда'      },
+  { id: 'utilities',   icon: '💡', label: 'Комунальні'  },
+  { id: 'food',        icon: '🍽', label: 'Їжа'         },
+  { id: 'transport',   icon: '🚗', label: 'Транспорт'   },
+  { id: 'comms',       icon: '📱', label: 'Зв\'язок'    },
+  { id: 'marketing',   icon: '📣', label: 'Маркетинг'   },
+  { id: 'equipment',   icon: '🖥', label: 'Обладнання'  },
+  { id: 'other',       icon: '📦', label: 'Інше'        },
+]
+
+function getCatMeta(type, catId) {
+  const list = type === 'income' ? INCOME_CATS : EXPENSE_CATS
+  return list.find(c => c.id === catId) || { icon: '📦', label: catId || 'Інше' }
+}
+
+function fmtAmt(v) {
+  return '₴' + Math.abs(v || 0).toLocaleString('uk-UA', { minimumFractionDigits: 0 })
+}
+
+function fmtDate(val) {
+  if (!val) return '—'
+  const d = new Date(val)
+  if (isNaN(d)) return val
+  return d.toLocaleDateString('uk-UA', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+function today() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+// ── Styles ─────────────────────────────────────────────────────────────────
+function injectStyles() {
+  if (document.getElementById('fn-styles')) return
+  const style = document.createElement('style')
+  style.id = 'fn-styles'
+  style.textContent = `
+    /* ── Layout ── */
+    .fn-layout {
+      display: flex;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg-primary, #0F1117);
+      font-family: inherit;
+    }
+
+    /* ── Left panel ── */
+    .fn-left {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-right: 1px solid var(--border, rgba(255,255,255,.08));
+    }
+
+    .fn-left-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0 20px 24px;
+    }
+    .fn-left-scroll::-webkit-scrollbar { width: 4px; }
+    .fn-left-scroll::-webkit-scrollbar-track { background: transparent; }
+    .fn-left-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 2px; }
+
+    /* ── Header ── */
+    .fn-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 24px 20px 16px;
+      flex-shrink: 0;
+    }
+    .fn-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text-primary, #F1F5F9);
+      margin: 0 0 4px;
+    }
+    .fn-sub {
+      font-size: 13px;
+      color: var(--text-secondary, #94A3B8);
+      margin: 0;
+    }
+
+    /* ── Stat cards ── */
+    .fn-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .fn-stat {
+      background: var(--bg-secondary, #1A1D2E);
+      border: 1px solid var(--border, rgba(255,255,255,.08));
+      border-radius: 12px;
+      padding: 14px 16px;
+      border-left: 4px solid transparent;
+      transition: transform .15s, box-shadow .15s;
+    }
+    .fn-stat:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 16px rgba(0,0,0,.25);
+    }
+    .fn-stat-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--text-secondary, #94A3B8);
+      margin-bottom: 6px;
+    }
+    .fn-stat-val {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary, #F1F5F9);
+    }
+    .fn-stat.fn-stat-income  { border-left-color: #34D399; }
+    .fn-stat.fn-stat-expense { border-left-color: #EF4444; }
+    .fn-stat.fn-stat-balance { border-left-color: #4F8EF7; }
+    .fn-stat-income  .fn-stat-label { color: #34D399; }
+    .fn-stat-expense .fn-stat-label { color: #EF4444; }
+    .fn-stat-balance .fn-stat-label { color: #4F8EF7; }
+
+    /* ── Filter pills ── */
+    .fn-filters {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .fn-pill {
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1px solid var(--border, rgba(255,255,255,.1));
+      background: transparent;
+      color: var(--text-secondary, #94A3B8);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .fn-pill:hover {
+      border-color: rgba(255,255,255,.25);
+      color: var(--text-primary, #F1F5F9);
+    }
+    .fn-pill.active {
+      background: var(--accent, #4F8EF7);
+      border-color: var(--accent, #4F8EF7);
+      color: #fff;
+    }
+
+    /* ── Transaction list ── */
+    .fn-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .fn-card {
+      background: var(--bg-secondary, #1A1D2E);
+      border: 1px solid var(--border, rgba(255,255,255,.08));
+      border-radius: 12px;
+      padding: 14px 16px;
+      cursor: pointer;
+      transition: border-color .15s, box-shadow .15s, transform .1s;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      position: relative;
+      overflow: hidden;
+    }
+    .fn-card::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 4px;
+      border-radius: 12px 0 0 12px;
+    }
+    .fn-card.fn-card-income::before  { background: #34D399; }
+    .fn-card.fn-card-expense::before { background: #EF4444; }
+
+    .fn-card:hover {
+      border-color: rgba(255,255,255,.2);
+      box-shadow: 0 2px 12px rgba(0,0,0,.2);
+    }
+    .fn-card.fn-card-selected {
+      border-color: var(--accent, #4F8EF7);
+      box-shadow: 0 0 0 1px var(--accent, #4F8EF7), 0 4px 16px rgba(79,142,247,.15);
+    }
+
+    .fn-card-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+      margin-left: 6px;
+    }
+    .fn-card-income  .fn-card-icon { background: rgba(52,211,153,.15); }
+    .fn-card-expense .fn-card-icon { background: rgba(239,68,68,.15);  }
+
+    .fn-card-body {
+      flex: 1;
+      min-width: 0;
+    }
+    .fn-card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 3px;
+    }
+    .fn-card-cat {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary, #F1F5F9);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .fn-card-amount {
+      font-size: 15px;
+      font-weight: 700;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .fn-card-amount.income  { color: #34D399; }
+    .fn-card-amount.expense { color: #EF4444; }
+
+    .fn-card-desc {
+      font-size: 12px;
+      color: var(--text-secondary, #94A3B8);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 4px;
+    }
+    .fn-card-date {
+      font-size: 11px;
+      color: var(--text-muted, #64748B);
+    }
+
+    /* ── Empty / Loading ── */
+    .fn-empty {
+      text-align: center;
+      padding: 60px 20px;
+    }
+    .fn-empty-icon { font-size: 48px; margin-bottom: 12px; opacity: .5; }
+    .fn-empty-title { font-size: 16px; font-weight: 600; color: var(--text-secondary, #94A3B8); margin-bottom: 6px; }
+    .fn-empty-desc  { font-size: 13px; color: var(--text-muted, #64748B); }
+
+    .fn-loading {
+      display: flex;
+      justify-content: center;
+      padding: 48px;
+    }
+
+    /* ── Right detail panel ── */
+    .fn-right {
+      width: 360px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg-secondary, #1A1D2E);
+    }
+    .fn-detail {
+      flex: 1;
+      overflow-y: auto;
+    }
+    .fn-detail::-webkit-scrollbar { width: 4px; }
+    .fn-detail::-webkit-scrollbar-track { background: transparent; }
+    .fn-detail::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 2px; }
+
+    /* ── Detail stripe ── */
+    .fn-detail-stripe {
+      height: 6px;
+      flex-shrink: 0;
+    }
+    .fn-detail-stripe.income  { background: linear-gradient(90deg, #34D399, #059669); }
+    .fn-detail-stripe.expense { background: linear-gradient(90deg, #EF4444, #DC2626); }
+
+    .fn-detail-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      padding: 20px 20px 0;
+      gap: 12px;
+    }
+    .fn-detail-close {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      border: 1px solid var(--border, rgba(255,255,255,.1));
+      background: transparent;
+      color: var(--text-secondary, #94A3B8);
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all .15s;
+      flex-shrink: 0;
+    }
+    .fn-detail-close:hover {
+      background: rgba(239,68,68,.15);
+      border-color: #EF4444;
+      color: #EF4444;
+    }
+
+    .fn-detail-type-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .fn-detail-type-badge.income  { background: rgba(52,211,153,.15);  color: #34D399; }
+    .fn-detail-type-badge.expense { background: rgba(239,68,68,.15);   color: #EF4444; }
+
+    .fn-detail-amount {
+      font-size: 36px;
+      font-weight: 800;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+    .fn-detail-amount.income  { color: #34D399; }
+    .fn-detail-amount.expense { color: #EF4444; }
+
+    .fn-detail-body {
+      padding: 16px 20px;
+    }
+
+    .fn-detail-section {
+      background: var(--bg-primary, #0F1117);
+      border: 1px solid var(--border, rgba(255,255,255,.07));
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+    }
+    .fn-detail-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border, rgba(255,255,255,.05));
+    }
+    .fn-detail-row:last-child { border-bottom: none; }
+    .fn-detail-row-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--text-muted, #64748B);
+      width: 90px;
+      flex-shrink: 0;
+      padding-top: 1px;
+    }
+    .fn-detail-row-val {
+      font-size: 13px;
+      color: var(--text-primary, #F1F5F9);
+      flex: 1;
+    }
+
+    .fn-detail-footer {
+      display: flex;
+      gap: 8px;
+      padding: 16px 20px;
+      border-top: 1px solid var(--border, rgba(255,255,255,.08));
+      flex-shrink: 0;
+    }
+    .fn-detail-footer .btn { flex: 1; }
+
+    /* ── Modal ── */
+    .fn-modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.6);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 20px;
+    }
+    .fn-modal {
+      background: var(--bg-secondary, #1A1D2E);
+      border: 1px solid var(--border, rgba(255,255,255,.1));
+      border-radius: 16px;
+      width: 100%;
+      max-width: 480px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 24px 64px rgba(0,0,0,.5);
+    }
+    .fn-modal::-webkit-scrollbar { width: 4px; }
+    .fn-modal::-webkit-scrollbar-track { background: transparent; }
+    .fn-modal::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 2px; }
+
+    .fn-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 24px 0;
+      position: sticky;
+      top: 0;
+      background: var(--bg-secondary, #1A1D2E);
+      z-index: 1;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border, rgba(255,255,255,.08));
+    }
+    .fn-modal-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text-primary, #F1F5F9);
+      margin: 0;
+    }
+    .fn-modal-close {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      border: 1px solid var(--border, rgba(255,255,255,.1));
+      background: transparent;
+      color: var(--text-secondary, #94A3B8);
+      font-size: 14px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all .15s;
+    }
+    .fn-modal-close:hover { background: rgba(239,68,68,.15); border-color: #EF4444; color: #EF4444; }
+
+    /* Type tabs inside modal */
+    .fn-type-tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .fn-type-tab {
+      padding: 10px;
+      border-radius: 10px;
+      border: 2px solid var(--border, rgba(255,255,255,.1));
+      background: transparent;
+      color: var(--text-secondary, #94A3B8);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .15s;
+      text-align: center;
+    }
+    .fn-type-tab:hover { border-color: rgba(255,255,255,.25); color: var(--text-primary, #F1F5F9); }
+    .fn-type-tab.active[data-type="income"]  { border-color: #34D399; color: #34D399; background: rgba(52,211,153,.1);  }
+    .fn-type-tab.active[data-type="expense"] { border-color: #EF4444; color: #EF4444; background: rgba(239,68,68,.1);   }
+
+    .fn-modal-body  { padding: 20px 24px; }
+    .fn-modal-footer {
+      display: flex;
+      gap: 10px;
+      padding: 16px 24px;
+      border-top: 1px solid var(--border, rgba(255,255,255,.08));
+    }
+    .fn-modal-footer .btn { flex: 1; }
+
+    /* Amount input */
+    .fn-amount-wrap {
+      position: relative;
+    }
+    .fn-amount-prefix {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-secondary, #94A3B8);
+      pointer-events: none;
+    }
+    .fn-amount-input {
+      padding-left: 28px !important;
+    }
+
+    /* Spinner (reuse global if available, else define) */
+    .fn-spinner {
+      width: 32px; height: 32px;
+      border: 3px solid rgba(255,255,255,.1);
+      border-top-color: var(--accent, #4F8EF7);
+      border-radius: 50%;
+      animation: fn-spin .7s linear infinite;
+    }
+    @keyframes fn-spin { to { transform: rotate(360deg); } }
+
+    .fn-field-error {
+      font-size: 12px;
+      color: #EF4444;
+      margin-top: 4px;
+      display: block;
+    }
+  `
+  document.head.appendChild(style)
+}
+
+// ── Main render ─────────────────────────────────────────────────────────────
 export async function render(container) {
+  injectStyles()
+
+  const user = getCurrentUser()
+  const base = getActivePathSegments(user.uid)
+
   container.innerHTML = `
-    <div class="finances-page">
+    <div class="fn-layout">
 
-      <!-- Header -->
-      <div class="page-header">
-        <div>
-          <h1 class="page-title">💰 Фінанси</h1>
-          <p class="page-subtitle" id="balance-label">Завантаження...</p>
+      <!-- ══ Left ══ -->
+      <div class="fn-left" id="fn-left">
+
+        <div class="fn-header">
+          <div>
+            <h1 class="fn-title">💰 Фінанси</h1>
+            <p class="fn-sub" id="fn-subtitle">Завантаження...</p>
+          </div>
+          <button class="btn btn-primary" id="fn-add-btn">+ Нова транзакція</button>
         </div>
-        <button class="btn btn-primary" id="add-transaction-btn">
-          + Нова транзакція
-        </button>
+
+        <div class="fn-left-scroll">
+
+          <!-- Stat cards -->
+          <div class="fn-stats">
+            <div class="fn-stat fn-stat-income">
+              <div class="fn-stat-label">📈 Дохід</div>
+              <div class="fn-stat-val" id="fn-s-income">₴0</div>
+            </div>
+            <div class="fn-stat fn-stat-expense">
+              <div class="fn-stat-label">📉 Витрати</div>
+              <div class="fn-stat-val" id="fn-s-expense">₴0</div>
+            </div>
+            <div class="fn-stat fn-stat-balance">
+              <div class="fn-stat-label">💰 Баланс</div>
+              <div class="fn-stat-val" id="fn-s-balance">₴0</div>
+            </div>
+          </div>
+
+          <!-- Filter pills -->
+          <div class="fn-filters" id="fn-filters">
+            <button class="fn-pill active" data-filter="all">Всі</button>
+            <button class="fn-pill" data-filter="income">📈 Дохід</button>
+            <button class="fn-pill" data-filter="expense">📉 Витрати</button>
+          </div>
+
+          <!-- Transaction list -->
+          <div id="fn-list">
+            <div class="fn-loading"><div class="fn-spinner"></div></div>
+          </div>
+
+        </div>
       </div>
 
-      <!-- Stats -->
-      <div class="finance-stats">
-        <div class="stat-card income">
-          <div class="stat-icon">📈</div>
-          <div class="stat-body">
-            <div class="stat-label">Дохід</div>
-            <div class="stat-value" id="income-value">₴0</div>
-          </div>
-        </div>
-        <div class="stat-card expense">
-          <div class="stat-icon">📉</div>
-          <div class="stat-body">
-            <div class="stat-label">Витрати</div>
-            <div class="stat-value" id="expense-value">₴0</div>
-          </div>
-        </div>
-        <div class="stat-card balance">
-          <div class="stat-icon">💵</div>
-          <div class="stat-body">
-            <div class="stat-label">Баланс</div>
-            <div class="stat-value" id="balance-value">₴0</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Filter -->
-      <div class="finance-filter">
-        <button class="filter-btn active" data-filter="all">Всі</button>
-        <button class="filter-btn" data-filter="income">Дохід</button>
-        <button class="filter-btn" data-filter="expense">Витрати</button>
-      </div>
-
-      <!-- List -->
-      <div id="transactions-list" class="transactions-list">
-        <div class="clients-loading"><div class="spinner"></div></div>
+      <!-- ══ Right: detail panel ══ -->
+      <div class="fn-right" id="fn-right" style="display:none">
+        <div class="fn-detail-stripe" id="fn-detail-stripe"></div>
+        <div class="fn-detail" id="fn-detail"></div>
       </div>
 
     </div>
 
-    <!-- Modal -->
-    <div class="modal-overlay" id="modal" style="display:none">
-      <div class="modal">
-        <div class="modal-header">
-          <h2 class="modal-title" id="modal-title">Нова транзакція</h2>
-          <button class="modal-close" id="modal-close">✕</button>
+    <!-- ══ Modal ══ -->
+    <div class="fn-modal-overlay" id="fn-modal" style="display:none">
+      <div class="fn-modal">
+        <div class="fn-modal-header">
+          <h2 class="fn-modal-title" id="fn-modal-title">Нова транзакція</h2>
+          <button class="fn-modal-close" id="fn-modal-close">✕</button>
         </div>
-        <form class="modal-form" id="transaction-form" novalidate>
-          <div class="modal-body">
+        <form id="fn-form" novalidate>
+          <div class="fn-modal-body">
 
-            <div class="transaction-type-tabs">
-              <button type="button" class="type-tab active" data-type="income">
-                📈 Дохід
-              </button>
-              <button type="button" class="type-tab" data-type="expense">
-                📉 Витрата
-              </button>
+            <!-- Type tabs -->
+            <div class="field" style="margin-bottom:16px">
+              <div class="fn-type-tabs" id="fn-type-tabs">
+                <button type="button" class="fn-type-tab active" data-type="income">📈 Дохід</button>
+                <button type="button" class="fn-type-tab"        data-type="expense">📉 Витрата</button>
+              </div>
             </div>
 
+            <!-- Amount -->
             <div class="field">
               <label>Сума *</label>
-              <div class="amount-input-wrapper">
-                <span class="currency">₴</span>
-                <input id="f-amount" type="number" class="input amount-input" placeholder="0.00" step="0.01" />
+              <div class="fn-amount-wrap">
+                <span class="fn-amount-prefix">₴</span>
+                <input id="fn-f-amount" type="number" class="input fn-amount-input"
+                       placeholder="0.00" step="0.01" min="0" />
               </div>
-              <span class="field-error" id="e-amount"></span>
+              <span class="fn-field-error" id="fn-e-amount"></span>
             </div>
 
+            <!-- Category -->
             <div class="field">
-              <label>Категорія *</label>
-              <select id="f-category" class="input">
-                <option value="">Оберіть категорію</option>
-              </select>
+              <label>Категорія</label>
+              <select id="fn-f-category" class="input"></select>
             </div>
 
+            <!-- Date -->
             <div class="field">
               <label>Дата</label>
-              <input id="f-date" type="date" class="input" />
+              <input id="fn-f-date" type="date" class="input" />
             </div>
 
+            <!-- Description -->
             <div class="field">
               <label>Опис</label>
-              <textarea id="f-desc" class="input" rows="2" placeholder="Опис транзакції..."></textarea>
+              <textarea id="fn-f-desc" class="input" rows="3"
+                        placeholder="Деталі транзакції..." style="resize:vertical"></textarea>
             </div>
 
           </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" id="modal-cancel">Скасувати</button>
-            <button type="submit" class="btn btn-primary" id="modal-submit">Зберегти</button>
+          <div class="fn-modal-footer">
+            <button type="button" class="btn btn-secondary" id="fn-modal-cancel">Скасувати</button>
+            <button type="submit" class="btn btn-primary"   id="fn-modal-submit">Зберегти</button>
           </div>
         </form>
       </div>
     </div>
   `
 
-  injectStyles()
-
-  // ── State ───────────────────────────────────────────────
+  // ── State ────────────────────────────────────────────────────────────────
   let transactions = []
+  let filter       = 'all'
+  let selectedId   = null
   let editingId    = null
-  let currentType  = 'income'
-  let currentFilter = 'all'
-  const user = getCurrentUser()
+  let modalType    = 'income'   // current type tab in modal
 
-  const CATEGORIES = {
-    income: ['Зарплата', 'Фріланс', 'Інвестиції', 'Продаж', 'Інше'],
-    expense: ['Оренда', 'Комунальні', 'Їжа', 'Транспорт', 'Зв\'язок', 'Розваги', 'Інше'],
-  }
+  // ── DOM refs ─────────────────────────────────────────────────────────────
+  const listEl    = container.querySelector('#fn-list')
+  const rightEl   = container.querySelector('#fn-right')
+  const detailEl  = container.querySelector('#fn-detail')
+  const stripeEl  = container.querySelector('#fn-detail-stripe')
+  const modalEl   = container.querySelector('#fn-modal')
+  const formEl    = container.querySelector('#fn-form')
 
-  // ── Load ────────────────────────────────────────────────
+  // ── Load ──────────────────────────────────────────────────────────────────
   async function loadTransactions() {
     try {
-      const q    = query(collection(db, 'users', user.uid, 'transactions'), orderBy('date', 'desc'))
-      const snap = await getDocs(q)
+      let snap
+      try {
+        snap = await getDocs(
+          query(collection(db, ...base, 'transactions'), orderBy('date', 'desc'))
+        )
+      } catch (_) {
+        // fallback if composite index not ready
+        snap = await getDocs(collection(db, ...base, 'transactions'))
+      }
       transactions = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-      renderList(filterTransactions())
-      updateStats()
+      // client-side sort fallback
+      transactions.sort((a, b) => {
+        const da = a.date || ''
+        const db2 = b.date || ''
+        return da < db2 ? 1 : da > db2 ? -1 : 0
+      })
+      renderAll()
     } catch (err) {
-      console.error(err)
-      container.querySelector('#transactions-list').innerHTML = `
-        <div class="empty-state">
-          <div class="empty-icon">⚠️</div>
-          <div class="empty-title">Помилка завантаження</div>
-        </div>
-      `
+      console.error('finances load error', err)
+      listEl.innerHTML = `
+        <div class="fn-empty">
+          <div class="fn-empty-icon">⚠️</div>
+          <div class="fn-empty-title">Помилка завантаження</div>
+          <div class="fn-empty-desc">${err.message}</div>
+        </div>`
     }
   }
 
-  // ── Render list ─────────────────────────────────────────
-  function renderList(list) {
-    const el = container.querySelector('#transactions-list')
+  // ── Render all ───────────────────────────────────────────────────────────
+  function renderAll() {
+    renderStats()
+    renderList()
+    updateSubtitle()
+  }
+
+  function renderStats() {
+    const income  = transactions.filter(t => t.type === 'income').reduce((s, t) => s + (t.amount || 0), 0)
+    const expense = transactions.filter(t => t.type === 'expense').reduce((s, t) => s + (t.amount || 0), 0)
+    const balance = income - expense
+
+    container.querySelector('#fn-s-income').textContent  = fmtAmt(income)
+    container.querySelector('#fn-s-expense').textContent = fmtAmt(expense)
+
+    const balEl = container.querySelector('#fn-s-balance')
+    balEl.textContent = (balance < 0 ? '−' : '') + fmtAmt(balance)
+    balEl.style.color = balance < 0 ? '#EF4444' : balance > 0 ? '#34D399' : ''
+  }
+
+  function updateSubtitle() {
+    const income  = transactions.filter(t => t.type === 'income').length
+    const expense = transactions.filter(t => t.type === 'expense').length
+    container.querySelector('#fn-subtitle').textContent =
+      `${transactions.length} транзакцій · ${income} доходів · ${expense} витрат`
+  }
+
+  function renderList() {
+    const list = filter === 'all'
+      ? transactions
+      : transactions.filter(t => t.type === filter)
+
     if (list.length === 0) {
-      el.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-icon">💸</div>
-          <div class="empty-title">Транзакцій ще немає</div>
-          <div class="empty-desc">Додайте першу транзакцію щоб відстежувати фінанси</div>
-        </div>
-      `
+      listEl.innerHTML = `
+        <div class="fn-empty">
+          <div class="fn-empty-icon">💸</div>
+          <div class="fn-empty-title">Транзакцій немає</div>
+          <div class="fn-empty-desc">Натисніть "+ Нова транзакція" щоб додати</div>
+        </div>`
       return
     }
 
-    el.innerHTML = `
-      <div class="transactions-grid">
-        ${list.map(t => `
-          <div class="transaction-card ${t.type}" data-id="${t.id}">
-            <div class="transaction-icon ${t.type}">
-              ${t.type === 'income' ? '📈' : '📉'}
+    listEl.innerHTML = `<div class="fn-list">${list.map(t => {
+      const cat = getCatMeta(t.type, t.category)
+      const sel = t.id === selectedId
+      return `
+        <div class="fn-card fn-card-${t.type} ${sel ? 'fn-card-selected' : ''}" data-id="${t.id}">
+          <div class="fn-card-icon">${cat.icon}</div>
+          <div class="fn-card-body">
+            <div class="fn-card-top">
+              <span class="fn-card-cat">${cat.label}</span>
+              <span class="fn-card-amount ${t.type}">
+                ${t.type === 'income' ? '+' : '−'}${fmtAmt(t.amount)}
+              </span>
             </div>
-            <div class="transaction-info">
-              <div class="transaction-category">${t.category}</div>
-              <div class="transaction-desc">${t.description || ''}</div>
-              <div class="transaction-date">${formatDate(t.date)}</div>
-            </div>
-            <div class="transaction-amount ${t.type}">
-              ${t.type === 'income' ? '+' : '-'}₴${t.amount.toLocaleString('uk-UA', {minimumFractionDigits: 2})}
-            </div>
-            <div class="transaction-actions">
-              <button class="client-btn edit-btn" data-id="${t.id}">✏️</button>
-              <button class="client-btn delete-btn" data-id="${t.id}">🗑</button>
-            </div>
+            ${t.description ? `<div class="fn-card-desc">${t.description}</div>` : ''}
+            <div class="fn-card-date">📅 ${fmtDate(t.date)}</div>
           </div>
-        `).join('')}
+        </div>`
+    }).join('')}</div>`
+
+    // click to select
+    listEl.querySelectorAll('.fn-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const id = card.dataset.id
+        selectedId = id === selectedId ? null : id
+        if (selectedId) {
+          showDetail(transactions.find(t => t.id === selectedId))
+        } else {
+          closeDetail()
+        }
+        // update selection highlight
+        listEl.querySelectorAll('.fn-card').forEach(c => {
+          c.classList.toggle('fn-card-selected', c.dataset.id === selectedId)
+        })
+      })
+    })
+  }
+
+  // ── Detail panel ─────────────────────────────────────────────────────────
+  function showDetail(t) {
+    if (!t) return
+    rightEl.style.display = 'flex'
+    rightEl.style.flexDirection = 'column'
+    stripeEl.className = `fn-detail-stripe ${t.type}`
+
+    const cat = getCatMeta(t.type, t.category)
+    const typeLabel  = t.type === 'income' ? 'Дохід'   : 'Витрата'
+    const typeIcon   = t.type === 'income' ? '📈'      : '📉'
+
+    detailEl.innerHTML = `
+      <div class="fn-detail-header">
+        <div>
+          <div class="fn-detail-type-badge ${t.type}">${typeIcon} ${typeLabel}</div>
+          <div class="fn-detail-amount ${t.type}">
+            ${t.type === 'income' ? '+' : '−'}${fmtAmt(t.amount)}
+          </div>
+        </div>
+        <button class="fn-detail-close" id="fn-detail-close">✕</button>
+      </div>
+
+      <div class="fn-detail-body">
+        <div class="fn-detail-section">
+          <div class="fn-detail-row">
+            <span class="fn-detail-row-label">Категорія</span>
+            <span class="fn-detail-row-val">${cat.icon} ${cat.label}</span>
+          </div>
+          <div class="fn-detail-row">
+            <span class="fn-detail-row-label">Дата</span>
+            <span class="fn-detail-row-val">📅 ${fmtDate(t.date)}</span>
+          </div>
+          ${t.description ? `
+          <div class="fn-detail-row">
+            <span class="fn-detail-row-label">Опис</span>
+            <span class="fn-detail-row-val">${t.description}</span>
+          </div>` : ''}
+        </div>
+      </div>
+
+      <div class="fn-detail-footer">
+        <button class="btn btn-secondary" id="fn-detail-edit">✏️ Редагувати</button>
+        <button class="btn btn-danger"    id="fn-detail-delete">🗑 Видалити</button>
       </div>
     `
 
-    // Edit
-    el.querySelectorAll('.edit-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation()
-        const transaction = transactions.find(t => t.id === btn.dataset.id)
-        openModal(transaction)
-      })
+    detailEl.querySelector('#fn-detail-close').addEventListener('click', closeDetail)
+
+    detailEl.querySelector('#fn-detail-edit').addEventListener('click', () => {
+      openModal(t)
     })
 
-    // Delete
-    el.querySelectorAll('.delete-btn').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        e.stopPropagation()
-        if (!confirm('Видалити транзакцію?')) return
-        await deleteDoc(doc(db, 'users', user.uid, 'transactions', btn.dataset.id))
-        await loadTransactions()
-      })
+    detailEl.querySelector('#fn-detail-delete').addEventListener('click', async () => {
+      if (!confirm(`Видалити транзакцію "${cat.label} ${fmtAmt(t.amount)}"?`)) return
+      try {
+        await deleteDoc(doc(db, ...base, 'transactions', t.id))
+        transactions = transactions.filter(tx => tx.id !== t.id)
+        closeDetail()
+        renderAll()
+      } catch (err) {
+        alert('Помилка видалення: ' + err.message)
+      }
     })
   }
 
-  // ── Stats ───────────────────────────────────────────────
-  function updateStats() {
-    const income  = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0)
-    const expense = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0)
-    const balance = income - expense
-
-    container.querySelector('#income-value').textContent  = `₴${income.toLocaleString('uk-UA', {minimumFractionDigits: 2})}`
-    container.querySelector('#expense-value').textContent = `₴${expense.toLocaleString('uk-UA', {minimumFractionDigits: 2})}`
-    container.querySelector('#balance-value').textContent = `₴${balance.toLocaleString('uk-UA', {minimumFractionDigits: 2})}`
-    container.querySelector('#balance-label').textContent = `${transactions.length} транзакцій`
+  function closeDetail() {
+    selectedId = null
+    rightEl.style.display = 'none'
+    detailEl.innerHTML = ''
+    listEl.querySelectorAll('.fn-card').forEach(c => c.classList.remove('fn-card-selected'))
   }
 
-  // ── Filter ──────────────────────────────────────────────
-  function filterTransactions() {
-    if (currentFilter === 'all') return transactions
-    return transactions.filter(t => t.type === currentFilter)
-  }
-
-  container.querySelectorAll('.filter-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      container.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'))
-      btn.classList.add('active')
-      currentFilter = btn.dataset.filter
-      renderList(filterTransactions())
-    })
+  // ── Filter pills ──────────────────────────────────────────────────────────
+  container.querySelector('#fn-filters').addEventListener('click', e => {
+    const pill = e.target.closest('.fn-pill')
+    if (!pill) return
+    container.querySelectorAll('.fn-pill').forEach(p => p.classList.remove('active'))
+    pill.classList.add('active')
+    filter = pill.dataset.filter
+    renderList()
   })
 
-  // ── Modal ───────────────────────────────────────────────
-  function openModal(transaction = null) {
-    editingId = transaction?.id || null
-    currentType = transaction?.type || 'income'
+  // ── Modal open/close ──────────────────────────────────────────────────────
+  function openModal(existing = null) {
+    editingId = existing ? existing.id : null
+    container.querySelector('#fn-modal-title').textContent =
+      existing ? 'Редагувати транзакцію' : 'Нова транзакція'
 
-    container.querySelector('#modal-title').textContent = transaction ? 'Редагувати транзакцію' : 'Нова транзакція'
-    container.querySelector('#f-amount').value   = transaction?.amount || ''
-    container.querySelector('#f-date').value     = transaction?.date || new Date().toISOString().split('T')[0]
-    container.querySelector('#f-desc').value     = transaction?.description || ''
-    container.querySelector('#e-amount').textContent = ''
+    // set type
+    modalType = existing ? (existing.type || 'income') : 'income'
+    updateTypeTabs()
+    populateCategorySelect()
 
-    // Type tabs
-    container.querySelectorAll('.type-tab').forEach(tab => {
-      tab.classList.toggle('active', tab.dataset.type === currentType)
-    })
+    // fill fields
+    container.querySelector('#fn-f-amount').value   = existing ? (existing.amount || '') : ''
+    container.querySelector('#fn-f-date').value     = existing ? (existing.date || today()) : today()
+    container.querySelector('#fn-f-desc').value     = existing ? (existing.description || '') : ''
+    container.querySelector('#fn-e-amount').textContent = ''
 
-    updateCategoryOptions()
-    container.querySelector('#f-category').value = transaction?.category || ''
-    container.querySelector('#modal').style.display = 'flex'
-    setTimeout(() => container.querySelector('#f-amount').focus(), 100)
-  }
+    // select category
+    if (existing && existing.category) {
+      const sel = container.querySelector('#fn-f-category')
+      sel.value = existing.category
+    }
 
-  function updateCategoryOptions() {
-    const select = container.querySelector('#f-category')
-    select.innerHTML = '<option value="">Оберіть категорію</option>' +
-      CATEGORIES[currentType].map(c => `<option value="${c}">${c}</option>`).join('')
+    modalEl.style.display = 'flex'
+    container.querySelector('#fn-f-amount').focus()
   }
 
   function closeModal() {
-    container.querySelector('#modal').style.display = 'none'
+    modalEl.style.display = 'none'
     editingId = null
   }
 
-  // Type tabs
-  container.querySelectorAll('.type-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      container.querySelectorAll('.type-tab').forEach(t => t.classList.remove('active'))
-      tab.classList.add('active')
-      currentType = tab.dataset.type
-      updateCategoryOptions()
+  // ── Type tabs in modal ────────────────────────────────────────────────────
+  function updateTypeTabs() {
+    container.querySelectorAll('.fn-type-tab').forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.type === modalType)
     })
+  }
+
+  function populateCategorySelect() {
+    const sel  = container.querySelector('#fn-f-category')
+    const cats = modalType === 'income' ? INCOME_CATS : EXPENSE_CATS
+    sel.innerHTML = cats.map(c => `<option value="${c.id}">${c.icon} ${c.label}</option>`).join('')
+  }
+
+  container.querySelector('#fn-type-tabs').addEventListener('click', e => {
+    const tab = e.target.closest('.fn-type-tab')
+    if (!tab) return
+    modalType = tab.dataset.type
+    updateTypeTabs()
+    populateCategorySelect()
   })
 
-  container.querySelector('#add-transaction-btn').addEventListener('click', () => openModal())
-  container.querySelector('#modal-close').addEventListener('click', closeModal)
-  container.querySelector('#modal-cancel').addEventListener('click', closeModal)
-  container.querySelector('#modal').addEventListener('click', (e) => {
-    if (e.target === container.querySelector('#modal')) closeModal()
+  // ── Modal buttons ─────────────────────────────────────────────────────────
+  container.querySelector('#fn-add-btn').addEventListener('click', () => openModal())
+  container.querySelector('#fn-modal-close').addEventListener('click', closeModal)
+  container.querySelector('#fn-modal-cancel').addEventListener('click', closeModal)
+  modalEl.addEventListener('click', e => {
+    if (e.target === modalEl) closeModal()
   })
 
-  // ── Save ────────────────────────────────────────────────
-  container.querySelector('#transaction-form').addEventListener('submit', async (e) => {
+  // ── Form submit ───────────────────────────────────────────────────────────
+  formEl.addEventListener('submit', async e => {
     e.preventDefault()
 
-    const amount = parseFloat(container.querySelector('#f-amount').value)
-    const category = container.querySelector('#f-category').value
+    const amountRaw = container.querySelector('#fn-f-amount').value.trim()
+    const amount    = parseFloat(amountRaw)
+    const errEl     = container.querySelector('#fn-e-amount')
 
-    if (!amount || amount <= 0) {
-      container.querySelector('#e-amount').textContent = 'Введіть суму'
+    errEl.textContent = ''
+    if (!amountRaw || isNaN(amount) || amount <= 0) {
+      errEl.textContent = 'Введіть коректну суму'
       return
     }
-    if (!category) {
-      alert('Оберіть категорію')
-      return
-    }
 
-    const btn = container.querySelector('#modal-submit')
-    btn.disabled = true
-    btn.innerHTML = '<div class="spinner"></div>'
-
-    const data = {
-      type: currentType,
+    const payload = {
+      type:        modalType,
       amount,
-      category,
-      date: container.querySelector('#f-date').value,
-      description: container.querySelector('#f-desc').value.trim() || null,
+      category:    container.querySelector('#fn-f-category').value,
+      date:        container.querySelector('#fn-f-date').value || today(),
+      description: container.querySelector('#fn-f-desc').value.trim(),
+      updatedAt:   serverTimestamp(),
     }
+
+    const submitBtn = container.querySelector('#fn-modal-submit')
+    submitBtn.disabled = true
+    submitBtn.textContent = 'Збереження...'
 
     try {
       if (editingId) {
-        await updateDoc(doc(db, 'users', user.uid, 'transactions', editingId), {
-          ...data, updatedAt: serverTimestamp()
-        })
+        await updateDoc(doc(db, ...base, 'transactions', editingId), payload)
+        const idx = transactions.findIndex(t => t.id === editingId)
+        if (idx !== -1) transactions[idx] = { ...transactions[idx], ...payload }
+        // refresh detail if still open
+        if (selectedId === editingId) showDetail(transactions[idx])
       } else {
-        await addDoc(collection(db, 'users', user.uid, 'transactions'), {
-          ...data, createdAt: serverTimestamp()
-        })
+        payload.createdAt = serverTimestamp()
+        const ref = await addDoc(collection(db, ...base, 'transactions'), payload)
+        transactions.unshift({ id: ref.id, ...payload })
       }
       closeModal()
-      await loadTransactions()
+      renderAll()
     } catch (err) {
-      console.error(err)
+      alert('Помилка збереження: ' + err.message)
     } finally {
-      btn.disabled = false
-      btn.innerHTML = 'Зберегти'
+      submitBtn.disabled = false
+      submitBtn.textContent = 'Зберегти'
     }
   })
 
-  // ── Init ────────────────────────────────────────────────
+  // ── Initial load ──────────────────────────────────────────────────────────
   await loadTransactions()
-
-  function formatDate(dateStr) {
-    const d = new Date(dateStr)
-    return d.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short', year: 'numeric' })
-  }
-}
-
-// ── Styles ──────────────────────────────────────────────────
-function injectStyles() {
-  if (document.getElementById('finances-styles')) return
-  const style = document.createElement('style')
-  style.id = 'finances-styles'
-  style.textContent = `
-    .finances-page { padding: 32px 36px; max-width: 1100px; }
-
-    .finance-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:24px; }
-    .stat-card { display:flex; align-items:center; gap:14px; background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-md); padding:18px; }
-    .stat-icon { width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:20px; background:var(--bg-tertiary); flex-shrink:0; }
-    .stat-card.income .stat-icon { background:rgba(52,211,153,0.12); }
-    .stat-card.expense .stat-icon { background:rgba(248,113,113,0.12); }
-    .stat-card.balance .stat-icon { background:rgba(79,142,247,0.12); }
-    .stat-label { font-size:12px; color:var(--text-secondary); margin-bottom:4px; }
-    .stat-value { font-family:var(--font-display); font-size:22px; font-weight:700; }
-
-    .finance-filter { display:flex; gap:8px; margin-bottom:20px; }
-    .filter-btn { padding:8px 16px; border-radius:var(--radius-sm); font-size:13px; font-weight:500; color:var(--text-secondary); background:var(--bg-secondary); border:1px solid var(--border); transition:all .2s; }
-    .filter-btn:hover { background:var(--bg-tertiary); }
-    .filter-btn.active { background:var(--accent-blue); color:#fff; border-color:var(--accent-blue); }
-
-    .transactions-grid { display:flex; flex-direction:column; gap:10px; }
-    .transaction-card { display:flex; align-items:center; gap:14px; background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-md); padding:16px 18px; transition:all .2s; }
-    .transaction-card:hover { border-color:rgba(255,255,255,0.12); transform:translateY(-1px); }
-    .transaction-icon { width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
-    .transaction-icon.income { background:rgba(52,211,153,0.12); }
-    .transaction-icon.expense { background:rgba(248,113,113,0.12); }
-    .transaction-info { flex:1; min-width:0; }
-    .transaction-category { font-weight:600; font-size:14px; margin-bottom:2px; }
-    .transaction-desc { font-size:12px; color:var(--text-secondary); margin-bottom:4px; }
-    .transaction-date { font-size:11px; color:var(--text-muted); }
-    .transaction-amount { font-family:var(--font-display); font-size:18px; font-weight:700; margin-right:10px; }
-    .transaction-amount.income { color:#34D399; }
-    .transaction-amount.expense { color:#F87171; }
-    .transaction-actions { display:flex; gap:6px; opacity:0; transition:opacity .2s; }
-    .transaction-card:hover .transaction-actions { opacity:1; }
-
-    .transaction-type-tabs { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px; }
-    .type-tab { padding:10px; border-radius:var(--radius-sm); font-size:14px; font-weight:600; border:1.5px solid var(--border); background:var(--bg-tertiary); transition:all .2s; }
-    .type-tab.active { background:var(--accent-blue); color:#fff; border-color:var(--accent-blue); }
-    .type-tab:hover:not(.active) { border-color:rgba(255,255,255,0.15); }
-
-    .amount-input-wrapper { position:relative; }
-    .currency { position:absolute; left:14px; top:50%; transform:translateY(-50%); font-size:16px; font-weight:600; color:var(--text-secondary); pointer-events:none; }
-    .amount-input { padding-left:36px !important; font-family:var(--font-display); font-size:18px; font-weight:600; }
-  `
-  document.head.appendChild(style)
 }

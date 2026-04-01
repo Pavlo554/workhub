@@ -1,0 +1,38 @@
+{
+  "appId": "com.workhub.app",
+  "productName": "WorkHub",
+  "copyright": "Copyright © 2024",
+  "directories": {
+    "output": "dist"
+  },
+  "files": [
+    "src/**/*",
+    "package.json",
+    "!src/**/*.map",
+    "!**/node_modules/.cache/**"
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ]
+  },
+  "linux": {
+    "target": [
+      {
+        "target": "zip",
+        "arch": ["x64"]
+      }
+    ],
+    "category": "Office"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "WorkHub"
+  }
+}
