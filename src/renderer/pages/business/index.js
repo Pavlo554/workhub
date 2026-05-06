@@ -1,58 +1,55 @@
 // src/renderer/pages/business/index.js
 import { navigate } from '../../../core/router.js'
-import { getCurrentUser, getUserProfile, updateProfileCache } from '../../services/auth.js'
+import { getCurrentUser, getUserProfile, updateProfileCache, getActivePathSegments } from '../../services/auth.js'
 import { getProfessionConfig } from '../../../core/profession-config.js'
 import { db } from '../../services/firebase.js'
-import { doc, getDoc, updateDoc, serverTimestamp, collection, getCountFromServer } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
+import { doc, getDoc, getDocs, updateDoc, serverTimestamp, collection, getCountFromServer } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 import {
   ensureWorkspace, getWorkspace, getMembers, getPendingInvites,
   createInvite, deleteInvite, removeMember, updateMember,
 } from '../../services/workspace.js'
 
-// Всі можливі модулі для аналітики (id → метадані для відображення)
-const ANALYTICS_META = {
-  clients:      { icon: '👥', label: 'Клієнти',   color: '#4F8EF7', col: 'clients' },
-  projects:     { icon: '📁', label: 'Проекти',   color: '#34D399', col: 'projects' },
-  invoices:     { icon: '📄', label: 'Рахунки',   color: '#F59E0B', col: 'invoices' },
-  contracts:    { icon: '📝', label: 'Договори',  color: '#A78BFA', col: 'contracts' },
-  tasks:        { icon: '✓',  label: 'Задачі',    color: '#F472B6', col: 'tasks' },
-  notes:        { icon: '🗒', label: 'Нотатки',   color: '#6EE7B7', col: 'notes' },
-  passwords:    { icon: '🔑', label: 'Паролі',    color: '#94A3B8', col: 'passwords' },
-  appointments: { icon: '🗓', label: 'Розклад',   color: '#FB923C', col: 'appointments' },
-  services:     { icon: '💅', label: 'Послуги',   color: '#E879F9', col: 'services' },
-  'content-plan': { icon: '📱', label: 'Контент', color: '#38BDF8', col: 'content-plan' },
-  accounts:     { icon: '🔗', label: 'Акаунти',   color: '#A3E635', col: 'accounts' },
-}
-// Default analytics = profession modules filtered to ones that have ANALYTICS_META entries
-function getDefaultAnalytics(professionModules) {
-  const defaults = professionModules.filter(id => id in ANALYTICS_META && id !== 'dashboard')
-  return defaults.length > 0 ? defaults : ['clients', 'tasks', 'notes', 'passwords']
-}
+const NICHES = [
+  { id: 'freelancer', icon: '💻', label: 'Фрілансер',        color: '#4F8EF7' },
+  { id: 'accountant', icon: '📊', label: 'Бухгалтер / ФОП',  color: '#34D399' },
+  { id: 'smm',        icon: '📱', label: 'SMM / Маркетолог',  color: '#A78BFA' },
+  { id: 'beauty',     icon: '💅', label: 'Салон краси',       color: '#F472B6' },
+]
 
 const ALL_MODULES = [
-  { id: 'dashboard',    icon: '⊞', label: 'Дашборд' },
-  { id: 'clients',      icon: '👥', label: 'Клієнти' },
-  { id: 'projects',     icon: '📁', label: 'Проекти' },
-  { id: 'invoices',     icon: '📄', label: 'Рахунки' },
-  { id: 'contracts',    icon: '📝', label: 'Договори' },
-  { id: 'tasks',        icon: '✓',  label: 'Задачі' },
-  { id: 'timer',        icon: '⏱',  label: 'Таймер' },
-  { id: 'finances',     icon: '💰', label: 'Фінанси' },
-  { id: 'tax-calendar', icon: '📅', label: 'Податки' },
-  { id: 'appointments', icon: '🗓', label: 'Розклад' },
-  { id: 'services',     icon: '💅', label: 'Послуги' },
-  { id: 'content-plan', icon: '📱', label: 'Контент' },
-  { id: 'accounts',     icon: '🔗', label: 'Акаунти' },
-  { id: 'passwords',    icon: '🔑', label: 'Паролі' },
-  { id: 'notes',        icon: '🗒', label: 'Нотатки' },
+  { id: 'dashboard',        icon: '⊞', label: 'Дашборд' },
+  { id: 'clients',          icon: '👥', label: 'Клієнти' },
+  { id: 'projects',         icon: '📁', label: 'Проекти' },
+  { id: 'invoices',         icon: '📄', label: 'Рахунки' },
+  { id: 'contracts',        icon: '📝', label: 'Договори' },
+  { id: 'tasks',            icon: '✓',  label: 'Задачі' },
+  { id: 'timer',            icon: '⏱',  label: 'Таймер' },
+  { id: 'finances',         icon: '💰', label: 'Фінанси' },
+  { id: 'tax-calendar',     icon: '📅', label: 'Податки' },
+  { id: 'appointments',     icon: '🗓', label: 'Розклад' },
+  { id: 'services',         icon: '💅', label: 'Послуги' },
+  { id: 'content-plan',     icon: '📱', label: 'Контент' },
+  { id: 'accounts',         icon: '🔗', label: 'Акаунти' },
+  { id: 'passwords',        icon: '🔑', label: 'Паролі' },
+  { id: 'notes',            icon: '🗒', label: 'Нотатки' },
+  { id: 'documents',        icon: '📁', label: 'Документи' },
+  { id: 'api-keys',         icon: '🔗', label: 'API & Інтеграції' },
+  { id: 'kanban',           icon: '🗂', label: 'Kanban' },
+  { id: 'templates',        icon: '📋', label: 'Шаблони' },
+  { id: 'warehouse',        icon: '📦', label: 'Склад' },
+  { id: 'portfolio',        icon: '🖼', label: 'Портфоліо' },
+  { id: 'hr',               icon: '👔', label: 'Персонал' },
+  { id: 'client-analytics', icon: '📈', label: 'Аналітика' },
+  { id: 'currency',         icon: '💱', label: 'Валюти' },
+  { id: 'reports',          icon: '📊', label: 'Звіти' },
+  { id: 'support',          icon: '💬', label: 'Підтримка' },
 ]
 
-const NICHES = [
-  { id: 'freelancer', icon: '💻', label: 'Фрілансер',       color: '#4F8EF7' },
-  { id: 'accountant', icon: '📊', label: 'Бухгалтер / ФОП', color: '#34D399' },
-  { id: 'smm',        icon: '📱', label: 'SMM / Маркетолог', color: '#A78BFA' },
-  { id: 'beauty',     icon: '💅', label: 'Салон краси',      color: '#F472B6' },
-]
+// Modules that we load full docs for (to compute rich stats)
+const RICH_COLLECTIONS = ['clients', 'invoices', 'tasks', 'projects', 'contracts', 'finances']
+// Modules that we just count
+const COUNT_COLLECTIONS = ['notes', 'passwords', 'appointments', 'services', 'warehouse',
+                           'kanban', 'templates', 'portfolio', 'hr', 'documents', 'api-keys', 'accounts']
 
 export async function render(container) {
   injectStyles()
@@ -60,71 +57,156 @@ export async function render(container) {
   const user    = getCurrentUser()
   const profile = await getUserProfile(user.uid)
 
-  // Тільки для власників
   if (profile?.accountType !== 'owner' && profile?.accountType !== undefined && !profile?.isWorkspaceOwner) {
     container.innerHTML = `<div class="biz-empty-access"><div>🔒</div><p>Ця сторінка доступна тільки власнику бізнесу</p></div>`
     return
   }
 
-  // Гарантуємо що воркспейс існує в Firestore
   if (!profile?.isWorkspaceOwner) {
     await ensureWorkspace(user.uid, profile)
     updateProfileCache(user.uid, { workspaceId: user.uid, isWorkspaceOwner: true })
   }
 
-  // Якщо активний другий бізнес — завантажуємо його дані
   let activeBizProfile = null
   if (profile?.activeBusiness) {
     try {
       const bizSnap = await getDoc(doc(db, 'users', user.uid, 'businesses', profile.activeBusiness))
-      if (bizSnap.exists()) {
-        activeBizProfile = { id: bizSnap.id, ...bizSnap.data() }
-      }
+      if (bizSnap.exists()) activeBizProfile = { id: bizSnap.id, ...bizSnap.data() }
     } catch { /* ignore */ }
   }
 
-  // Мерджимо: для другого бізнесу беремо name/profession з його документа
   const effectiveProfile = activeBizProfile
-    ? {
-        ...profile,
-        businessName: activeBizProfile.name,
-        profession:   activeBizProfile.profession,
-        _isSecondary: true,
-        _bizId:       activeBizProfile.id,
-      }
+    ? { ...profile, businessName: activeBizProfile.name, profession: activeBizProfile.profession, _isSecondary: true, _bizId: activeBizProfile.id }
     : profile
 
   const workspaceId = profile?.workspaceId || user.uid
 
-  // Skeleton
   container.innerHTML = `<div class="biz-page"><div class="biz-spinner"><div class="spinner"></div></div></div>`
 
-  async function getCount(col) {
+  const basePath = getActivePathSegments(user.uid)
+
+  const loadDocs = async (col) => {
     try {
-      const snap = await getCountFromServer(collection(db, 'users', user.uid, col))
+      const snap = await getDocs(collection(db, ...basePath, col))
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    } catch { return [] }
+  }
+  const getCount = async (col) => {
+    try {
+      const snap = await getCountFromServer(collection(db, ...basePath, col))
       return snap.data().count
     } catch { return 0 }
   }
 
-  // Завантажуємо workspace/members/invites + лічильники всіх модулів паралельно
-  const allColIds = Object.keys(ANALYTICS_META)
-  const [workspace, members, invites, ...counts] = await Promise.all([
-    getWorkspace(workspaceId).catch(() => null),
-    getMembers(workspaceId).catch(() => []),
-    getPendingInvites(workspaceId).catch(() => []),
-    ...allColIds.map(id => getCount(ANALYTICS_META[id].col)),
+  // For secondary businesses — skip workspace/members loading (they're isolated)
+  const isSecondary = !!activeBizProfile
+
+  const [
+    workspace, members, invites,
+    clients, invoices, tasks, projects, contracts, finances,
+    notesCount, passwordsCount, appointmentsCount, servicesCount,
+    warehouseCount, kanbanCount, templatesCount, portfolioCount,
+    hrCount, docsCount, apiKeysCount, accountsCount,
+  ] = await Promise.all([
+    isSecondary ? Promise.resolve(null)  : getWorkspace(workspaceId).catch(() => null),
+    isSecondary ? Promise.resolve([])    : getMembers(workspaceId).catch(() => []),
+    isSecondary ? Promise.resolve([])    : getPendingInvites(workspaceId).catch(() => []),
+    loadDocs('clients'),
+    loadDocs('invoices'),
+    loadDocs('tasks'),
+    loadDocs('projects'),
+    loadDocs('contracts'),
+    loadDocs('finances'),
+    getCount('notes'),
+    getCount('passwords'),
+    getCount('appointments'),
+    getCount('services'),
+    getCount('warehouse'),
+    getCount('kanban'),
+    getCount('templates'),
+    getCount('portfolio'),
+    getCount('hr'),
+    getCount('documents'),
+    getCount('api-keys'),
+    getCount('accounts'),
   ])
 
-  const moduleCounts = Object.fromEntries(allColIds.map((id, i) => [id, counts[i]]))
+  const counts = {
+    notes: notesCount, passwords: passwordsCount, appointments: appointmentsCount,
+    services: servicesCount, warehouse: warehouseCount, kanban: kanbanCount,
+    templates: templatesCount, portfolio: portfolioCount, hr: hrCount,
+    documents: docsCount, 'api-keys': apiKeysCount, accounts: accountsCount,
+  }
+
+  const richData = { clients, invoices, tasks, projects, contracts, finances }
 
   const config = getProfessionConfig(effectiveProfile?.profession)
   const niche  = NICHES.find(n => n.id === effectiveProfile?.profession) || NICHES[0]
 
-  renderPage(container, { profile: effectiveProfile, workspace, members, invites, config, niche, workspaceId, user, moduleCounts, defaultAnalytics: getDefaultAnalytics(config.modules) })
+  renderPage(container, { profile: effectiveProfile, workspace, members, invites, config, niche, workspaceId, user, richData, counts })
 }
 
-function renderPage(container, { profile, workspace, members, invites, config, niche, workspaceId, user, moduleCounts = {}, defaultAnalytics = [] }) {
+// ── Compute derived stats ─────────────────────────────────
+function computeStats(richData) {
+  const now   = new Date()
+  const thisM = now.getMonth()
+  const thisY = now.getFullYear()
+  const inThisMonth = d => d && d.getMonth() === thisM && d.getFullYear() === thisY
+
+  const { clients = [], invoices = [], tasks = [], projects = [], contracts = [], finances = [] } = richData
+
+  const paidThisMonth = invoices
+    .filter(i => i.status === 'paid' && inThisMonth(i.createdAt?.toDate?.() || (i.date ? new Date(i.date) : null)))
+    .reduce((s, i) => s + (i.amount || 0), 0)
+
+  return {
+    clients: {
+      total:        clients.length,
+      active:       clients.filter(c => c.status === 'active').length,
+      inactive:     clients.filter(c => c.status === 'inactive' || c.status === 'archived').length,
+      newThisMonth: clients.filter(c => inThisMonth(c.createdAt?.toDate?.())).length,
+    },
+    invoices: {
+      total:        invoices.length,
+      paidCount:    invoices.filter(i => i.status === 'paid').length,
+      unpaidCount:  invoices.filter(i => i.status !== 'paid').length,
+      paidAmount:   invoices.filter(i => i.status === 'paid').reduce((s, i) => s + (i.amount || 0), 0),
+      unpaidAmount: invoices.filter(i => i.status !== 'paid').reduce((s, i) => s + (i.amount || 0), 0),
+      paidThisMonth,
+    },
+    tasks: {
+      total:      tasks.length,
+      done:       tasks.filter(t => t.status === 'done').length,
+      inProgress: tasks.filter(t => t.status === 'in_progress').length,
+      new:        tasks.filter(t => t.status === 'new' || !t.status).length,
+      doneThisMonth: tasks.filter(t => t.status === 'done' && inThisMonth(t.createdAt?.toDate?.())).length,
+    },
+    projects: {
+      total:    projects.length,
+      active:   projects.filter(p => p.status === 'active' || p.status === 'in_progress').length,
+      done:     projects.filter(p => p.status === 'done' || p.status === 'completed').length,
+      pending:  projects.filter(p => !p.status || p.status === 'new' || p.status === 'pending').length,
+    },
+    contracts: {
+      total:  contracts.length,
+      active: contracts.filter(c => c.status === 'active' || c.status === 'signed').length,
+      draft:  contracts.filter(c => c.status === 'draft' || !c.status).length,
+    },
+    finances: {
+      total:   finances.length,
+      income:  finances.filter(f => f.type === 'income').reduce((s, f) => s + (f.amount || 0), 0),
+      expense: finances.filter(f => f.type === 'expense').reduce((s, f) => s + (f.amount || 0), 0),
+    },
+  }
+}
+
+// ── Render page ───────────────────────────────────────────
+function renderPage(container, ctx) {
+  const { profile, members, invites, config, niche, user, richData, counts } = ctx
   const ownerModules = config.modules
+  const stats = computeStats(richData)
+
+  const fmt = n => n >= 1000000 ? (n / 1000000).toFixed(1) + 'М' : n >= 1000 ? Math.round(n / 1000) + 'к' : n
 
   container.innerHTML = `
     <div class="biz-page">
@@ -144,136 +226,142 @@ function renderPage(container, { profile, workspace, members, invites, config, n
         </div>
         <div class="biz-topbar-actions">
           <button class="btn btn-secondary" id="biz-edit-btn">✏️ Редагувати</button>
-          <button class="btn btn-primary"   id="biz-invite-btn">+ Запросити</button>
+          ${!profile?._isSecondary ? `<button class="btn btn-primary" id="biz-invite-btn">+ Запросити</button>` : `<button class="btn btn-primary" id="biz-invite-btn" style="display:none"></button>`}
         </div>
       </div>
 
-      <!-- ── Статистика ── -->
-      <div class="biz-stats-row">
-        <div class="biz-stat-card">
-          <div class="biz-stat-value">${members.length}</div>
-          <div class="biz-stat-label">Учасників</div>
-        </div>
-        <div class="biz-stat-card">
-          <div class="biz-stat-value">${ownerModules.length}</div>
-          <div class="biz-stat-label">Активних модулів</div>
-        </div>
-        <div class="biz-stat-card">
-          <div class="biz-stat-value">${invites.length}</div>
-          <div class="biz-stat-label">Очікують вступу</div>
-        </div>
-        <div class="biz-stat-card">
-          <div class="biz-stat-value">${(profile?.plan || 'free').toUpperCase()}</div>
-          <div class="biz-stat-label">Поточний план</div>
-        </div>
-      </div>
-
-      <!-- ── Аналітика модулів ── -->
-      <div class="biz-analytics-grid" id="biz-an-grid">
-        ${renderAnalyticsCards(profile?.analyticsModules || defaultAnalytics, moduleCounts)}
-        <div class="biz-an-card biz-an-add" id="biz-an-add-btn" title="Додати модуль">
-          <div class="biz-an-icon">＋</div>
-          <div class="biz-an-label">Додати</div>
-        </div>
-      </div>
-
-      <!-- ── Пікер модулів аналітики ── -->
-      <div class="biz-overlay" id="biz-an-picker" style="display:none">
-        <div class="biz-modal" style="max-width:420px">
-          <div class="biz-modal-head">
-            <h2>📊 Налаштувати аналітику</h2>
-            <button class="biz-modal-close" id="biz-an-picker-close">✕</button>
+      <!-- ── KPI рядок ── -->
+      <div class="biz-kpi-row">
+        <div class="biz-kpi-card biz-kpi--revenue">
+          <div class="biz-kpi-icon">💰</div>
+          <div class="biz-kpi-body">
+            <div class="biz-kpi-label">Дохід цього місяця</div>
+            <div class="biz-kpi-value">₴${stats.invoices.paidThisMonth.toLocaleString('uk-UA')}</div>
+            <div class="biz-kpi-sub">${stats.invoices.paidCount} оплачених рахунків</div>
           </div>
-          <div class="biz-modal-body">
-            <p style="font-size:13px;color:var(--text-muted);margin:0 0 14px">Оберіть модулі для відображення на дашборді бізнесу.</p>
-            <div class="biz-an-picker-grid">
-              ${Object.entries(ANALYTICS_META).map(([id, m]) => `
-                <label class="biz-an-pick-item ${(profile?.analyticsModules || defaultAnalytics).includes(id) ? 'selected' : ''}" data-id="${id}" style="--an-color:${m.color}">
-                  <span class="biz-an-pick-icon">${m.icon}</span>
-                  <span class="biz-an-pick-label">${m.label}</span>
-                  <span class="biz-an-pick-check">✓</span>
-                </label>
-              `).join('')}
-            </div>
+        </div>
+        <div class="biz-kpi-card biz-kpi--clients">
+          <div class="biz-kpi-icon">👥</div>
+          <div class="biz-kpi-body">
+            <div class="biz-kpi-label">Клієнти</div>
+            <div class="biz-kpi-value">${stats.clients.total}</div>
+            <div class="biz-kpi-sub">${stats.clients.active} активних · +${stats.clients.newThisMonth} цього місяця</div>
           </div>
-          <div class="biz-modal-foot">
-            <button class="btn btn-secondary" id="biz-an-picker-cancel">Скасувати</button>
-            <button class="btn btn-primary"   id="biz-an-picker-save">Зберегти</button>
+        </div>
+        <div class="biz-kpi-card biz-kpi--tasks">
+          <div class="biz-kpi-icon">✅</div>
+          <div class="biz-kpi-body">
+            <div class="biz-kpi-label">${ownerModules.includes('tasks') ? 'Задачі' : 'Проекти'}</div>
+            <div class="biz-kpi-value">${ownerModules.includes('tasks') ? `${stats.tasks.done} / ${stats.tasks.total}` : `${stats.projects.active} / ${stats.projects.total}`}</div>
+            <div class="biz-kpi-sub">${ownerModules.includes('tasks') ? `${stats.tasks.inProgress} в роботі · ${stats.tasks.new} нових` : `${stats.projects.done} виконано`}</div>
+          </div>
+        </div>
+        <div class="biz-kpi-card biz-kpi--team">
+          <div class="biz-kpi-icon">🏢</div>
+          <div class="biz-kpi-body">
+            <div class="biz-kpi-label">Команда & план</div>
+            <div class="biz-kpi-value">${members.length + 1} осіб</div>
+            <div class="biz-kpi-sub" style="color:${profile?.plan === 'business' ? '#A78BFA' : profile?.plan === 'pro' ? '#4F8EF7' : '#94A3B8'};font-weight:700">${(profile?.plan || 'free').toUpperCase()} ПЛАН</div>
           </div>
         </div>
       </div>
 
+      <!-- ── Панель керування ── -->
+      <div class="bcp-section">
+        <div class="bcp-section-head">
+          <div class="bcp-section-title">📊 Панель керування</div>
+          <div class="bcp-section-sub">${ownerModules.length} активних модулів</div>
+        </div>
+        <div class="bcp-grid">
+          ${renderControlPanel(ownerModules, stats, counts, richData)}
+        </div>
+      </div>
+
+      <!-- ── Нижня секція ── -->
       <div class="biz-body">
 
-        <!-- ── Ліва колонка: інфо + модулі ── -->
+        <!-- Ліва: інфо + модулі -->
         <div class="biz-col-left">
-
-          <!-- Інформація про бізнес -->
           <div class="biz-card">
             <div class="biz-card-title">📋 Інформація</div>
             <div class="biz-info-list">
-              ${infoRow('👤', 'Власник',   profile?.name || '—')}
-              ${infoRow('📧', 'Email',     profile?.email || '—')}
-              ${infoRow('📞', 'Телефон',   profile?.phone || '—')}
-              ${infoRow('🏙', 'Місто',     profile?.city || '—')}
-              ${infoRow('🌐', 'Сайт',      profile?.website || '—')}
-              ${infoRow('📸', 'Instagram', profile?.instagram ? '@' + profile.instagram : '—')}
-              ${profile?.tgChannel ? infoRow('✈️', 'Telegram', `<a href="https://t.me/${profile.tgChannel.replace(/^@/, '')}" target="_blank" class="biz-link">@${profile.tgChannel.replace(/^@/, '')}</a>`) : infoRow('✈️', 'Telegram', '—')}
+              ${infoRow('👤', 'Власник', profile?.name || '—')}
+              ${infoRow('📧', 'Email',   profile?.email || '—')}
+              ${!profile?._isSecondary ? `
+                ${infoRow('📞', 'Телефон',   profile?.phone || '—')}
+                ${infoRow('🏙', 'Місто',     profile?.city || '—')}
+                ${infoRow('🌐', 'Сайт',      profile?.website || '—')}
+                ${infoRow('📸', 'Instagram', profile?.instagram ? '@' + profile.instagram : '—')}
+                ${profile?.tgChannel ? infoRow('✈️', 'Telegram', `<a href="https://t.me/${profile.tgChannel.replace(/^@/, '')}" target="_blank" class="biz-link">@${profile.tgChannel.replace(/^@/, '')}</a>`) : infoRow('✈️', 'Telegram', '—')}
+              ` : `
+                <div class="biz-secondary-note">
+                  💡 Це окремий бізнес — контактні дані зберігаються в Редагувати
+                </div>
+              `}
             </div>
           </div>
 
-          <!-- Ніша і модулі -->
           <div class="biz-card">
             <div class="biz-card-title">🗂 Активні модулі</div>
             <div class="biz-modules-list">
               ${ownerModules.map(id => {
                 const m = ALL_MODULES.find(x => x.id === id)
                 if (!m) return ''
-                return `
-                  <div class="biz-module-row" data-route="${id}">
-                    <span class="biz-module-icon">${m.icon}</span>
-                    <span class="biz-module-label">${m.label}</span>
-                    <span class="biz-module-arrow">→</span>
-                  </div>
-                `
+                return `<div class="biz-module-row" data-route="${id}">
+                  <span class="biz-module-icon">${m.icon}</span>
+                  <span class="biz-module-label">${m.label}</span>
+                  <span class="biz-module-arrow">→</span>
+                </div>`
               }).join('')}
             </div>
           </div>
-
         </div>
 
-        <!-- ── Права колонка: команда ── -->
+        <!-- Права: команда + telegram -->
         <div class="biz-col-right">
-
           <div class="biz-card">
             <div class="biz-card-header">
               <div class="biz-card-title">👥 Команда</div>
-              <span class="biz-member-count">${members.length + 1} осіб</span>
+              ${!profile?._isSecondary ? `<span class="biz-member-count">${members.length + 1} осіб</span>` : ''}
             </div>
-
-            <!-- Власник -->
-            <div class="biz-member-row biz-member-owner">
-              <div class="biz-member-avatar" style="background:${niche.color}22;border:1.5px solid ${niche.color}44">
-                <span style="color:${niche.color}">${initials(profile?.name)}</span>
-              </div>
-              <div class="biz-member-info">
-                <div class="biz-member-name">${profile?.name || 'Власник'}</div>
-                <div class="biz-member-role">🏢 Власник бізнесу</div>
-              </div>
-              <div class="biz-member-access">
-                <span class="biz-access-badge biz-access-owner">Повний доступ</span>
-              </div>
-            </div>
-
-            <!-- Учасники -->
-            ${members.length === 0
-              ? `<div class="biz-no-members">Немає учасників. Запросіть першого!</div>`
-              : members.map(m => memberRow(m)).join('')
+            ${profile?._isSecondary
+              ? `<div class="biz-secondary-team-note">
+                  <div class="biz-stn-icon">🏢</div>
+                  <div>
+                    <div class="biz-stn-title">Окремий бізнес</div>
+                    <div class="biz-stn-sub">Цей бізнес має власний ізольований простір. Команда управляється через головний акаунт.</div>
+                  </div>
+                </div>
+                <div class="biz-member-row biz-member-owner">
+                  <div class="biz-member-avatar" style="background:${niche.color}22;border:1.5px solid ${niche.color}44">
+                    <span style="color:${niche.color}">${initials(profile?.name)}</span>
+                  </div>
+                  <div class="biz-member-info">
+                    <div class="biz-member-name">${profile?.name || 'Власник'}</div>
+                    <div class="biz-member-role">🏢 Власник бізнесу</div>
+                  </div>
+                  <div class="biz-member-access">
+                    <span class="biz-access-badge biz-access-owner">Повний доступ</span>
+                  </div>
+                </div>`
+              : `<div class="biz-member-row biz-member-owner">
+                  <div class="biz-member-avatar" style="background:${niche.color}22;border:1.5px solid ${niche.color}44">
+                    <span style="color:${niche.color}">${initials(profile?.name)}</span>
+                  </div>
+                  <div class="biz-member-info">
+                    <div class="biz-member-name">${profile?.name || 'Власник'}</div>
+                    <div class="biz-member-role">🏢 Власник бізнесу</div>
+                  </div>
+                  <div class="biz-member-access">
+                    <span class="biz-access-badge biz-access-owner">Повний доступ</span>
+                  </div>
+                </div>
+                ${members.length === 0
+                  ? `<div class="biz-no-members">Немає учасників. Запросіть першого!</div>`
+                  : members.map(m => memberRow(m)).join('')}`
             }
-
           </div>
 
-          <!-- Очікують -->
           ${invites.length > 0 ? `
             <div class="biz-card" style="margin-top:14px">
               <div class="biz-card-title">⏳ Очікують вступу</div>
@@ -291,7 +379,17 @@ function renderPage(container, { profile, workspace, members, invites, config, n
             </div>
           ` : ''}
 
-          <!-- ── Telegram канал ── -->
+          ${members.length === 0 ? `
+            <div class="biz-card biz-tips-card" style="margin-top:14px">
+              <div class="biz-card-title">💡 Поради для старту</div>
+              <div class="biz-tips-list">
+                <div class="biz-tip-row"><span class="biz-tip-num">1</span><div><div class="biz-tip-title">Заповніть інформацію</div><div class="biz-tip-desc">Додайте телефон, сайт та соцмережі</div></div></div>
+                <div class="biz-tip-row"><span class="biz-tip-num">2</span><div><div class="biz-tip-title">Запросіть команду</div><div class="biz-tip-desc">Натисніть «+ Запросити» і поділіться кодом</div></div></div>
+                <div class="biz-tip-row"><span class="biz-tip-num">3</span><div><div class="biz-tip-title">Налаштуйте модулі</div><div class="biz-tip-desc">Увімкніть лише потрібні розділи</div></div></div>
+              </div>
+            </div>
+          ` : ''}
+
           ${profile?.tgChannel ? `
             <div class="biz-card tg-analytics-card" id="tg-analytics-card" style="margin-top:14px">
               <div class="biz-card-header">
@@ -301,15 +399,10 @@ function renderPage(container, { profile, workspace, members, invites, config, n
               <div id="tg-analytics-body">
                 ${profile?.tgBotToken
                   ? `<div class="tg-loading"><div class="spinner"></div></div>`
-                  : `<div class="tg-no-token">
-                      <p>Для аналітики потрібен токен бота Telegram.</p>
-                      <p class="tg-hint">1. Створіть бота через @BotFather<br>2. Додайте бота до каналу як адміна<br>3. Вставте токен нижче і збережіть</p>
-                    </div>`
-                }
+                  : `<div class="tg-no-token"><p>Для аналітики потрібен токен бота Telegram.</p><p class="tg-hint">1. Створіть бота через @BotFather<br>2. Додайте бота до каналу як адміна<br>3. Вставте токен нижче і збережіть</p></div>`}
               </div>
             </div>
           ` : ''}
-
         </div>
       </div>
     </div>
@@ -322,12 +415,10 @@ function renderPage(container, { profile, workspace, members, invites, config, n
           <button class="biz-modal-close" id="biz-edit-close">✕</button>
         </div>
         <div class="biz-modal-body">
-
           <div class="biz-form-row">
             <label class="biz-label">Назва бізнесу *</label>
             <input type="text" class="input" id="edit-biz-name" value="${profile?.businessName || ''}" placeholder="Design Studio">
           </div>
-
           ${!profile?._isSecondary ? `
           <div class="biz-form-row2">
             <div>
@@ -355,22 +446,30 @@ function renderPage(container, { profile, workspace, members, invites, config, n
               <input type="text" class="input" id="edit-biz-tgchannel" value="${profile?.tgChannel || ''}" placeholder="@mychannel">
             </div>
             <div>
-              <label class="biz-label">🤖 Токен бота (для аналітики)</label>
+              <label class="biz-label">🤖 Токен бота</label>
               <input type="text" class="input" id="edit-biz-tgtoken" value="${profile?.tgBotToken || ''}" placeholder="123456:ABC-DEF...">
             </div>
           </div>
           ` : ''}
-
           <label class="biz-label" style="margin-top:16px">Сфера діяльності</label>
           <div class="biz-niche-grid" id="edit-niche-grid">
             ${NICHES.map(n => `
               <div class="biz-niche-card ${profile?.profession === n.id ? 'selected' : ''}" data-niche="${n.id}" style="--nc:${n.color}">
-                <span>${n.icon}</span>
-                <span>${n.label}</span>
-              </div>
-            `).join('')}
+                <span>${n.icon}</span><span>${n.label}</span>
+              </div>`).join('')}
+            <div class="biz-niche-card biz-niche-custom ${!profile?.profession || !NICHES.find(n=>n.id===profile?.profession) ? 'selected' : ''}" data-niche="custom" style="--nc:#A78BFA;grid-column:span 2">
+              <span>✦</span><span>Інша ніша — вибрати модулі вручну</span>
+            </div>
           </div>
-
+          <label class="biz-label" style="margin-top:16px">Активні модулі</label>
+          <div class="biz-modules-edit-grid" id="edit-modules-grid">
+            ${ALL_MODULES.filter(m => m.id !== 'dashboard').map(m => {
+              const active = profile?.selectedModules?.includes(m.id) || config.modules.includes(m.id)
+              return `<label class="biz-mod-toggle ${active ? 'active' : ''}" data-mod="${m.id}">
+                <span>${m.icon}</span><span>${m.label}</span><span class="biz-mod-chk">✓</span>
+              </label>`
+            }).join('')}
+          </div>
         </div>
         <div class="biz-modal-foot">
           <button class="btn btn-secondary" id="biz-edit-cancel">Скасувати</button>
@@ -389,25 +488,22 @@ function renderPage(container, { profile, workspace, members, invites, config, n
         <div class="biz-modal-body">
           <div class="biz-form-row">
             <label class="biz-label">Посада / роль *</label>
-            <input type="text" class="input" id="inv-role" placeholder="Розробник, Дизайнер, Менеджер…" maxlength="40">
+            <input type="text" class="input" id="inv-role" placeholder="Розробник, Дизайнер…" maxlength="40">
           </div>
           <label class="biz-label" style="margin-top:16px">Доступ до розділів</label>
           <div class="biz-modules-check" id="inv-modules">
             ${ownerModules.map(id => ALL_MODULES.find(x => x.id === id)).filter(Boolean).map(m => `
               <label class="biz-check-item">
                 <input type="checkbox" value="${m.id}" checked>
-                <span class="biz-check-box">
-                  <span>${m.icon}</span><span>${m.label}</span>
-                </span>
-              </label>
-            `).join('')}
+                <span class="biz-check-box"><span>${m.icon}</span><span>${m.label}</span></span>
+              </label>`).join('')}
           </div>
           <div id="inv-code-result" style="display:none">
             <div class="biz-code-block">
               <div class="biz-code-label">Код запрошення</div>
               <div class="biz-code-display" id="inv-code-val">------</div>
               <button class="btn btn-secondary" id="inv-copy-btn">📋 Скопіювати</button>
-              <div class="biz-code-hint">Поділіться цим кодом з учасником. Він вводить його в розділі «Приєднатись».</div>
+              <div class="biz-code-hint">Поділіться цим кодом з учасником.</div>
             </div>
           </div>
         </div>
@@ -442,55 +538,181 @@ function renderPage(container, { profile, workspace, members, invites, config, n
     </div>
   `
 
-  bindEvents(container, { profile, workspace, members, invites, config, niche, workspaceId, user })
+  bindEvents(container, ctx)
 }
 
-// ── Analytics cards ───────────────────────────────────────
-function renderAnalyticsCards(ids, moduleCounts) {
-  return ids.map(id => {
-    const m = ANALYTICS_META[id]
-    if (!m) return ''
-    return `
-      <div class="biz-an-card" data-route="${id}" style="--an-color:${m.color}">
-        <div class="biz-an-icon">${m.icon}</div>
-        <div class="biz-an-count">${moduleCounts[id] ?? 0}</div>
-        <div class="biz-an-label">${m.label}</div>
-      </div>
-    `
-  }).join('')
+// ── Control Panel Cards ───────────────────────────────────
+function renderControlPanel(modules, stats, counts, richData) {
+  const SKIP = ['dashboard']
+  return modules
+    .filter(id => !SKIP.includes(id))
+    .map(id => renderModuleCard(id, stats, counts, richData))
+    .join('')
 }
 
-function analyticsCard(icon, label, count, color, route) {
+function renderModuleCard(id, stats, counts, richData) {
+  const meta = ALL_MODULES.find(m => m.id === id)
+  if (!meta) return ''
+
+  const colorMap = {
+    clients: '#4F8EF7', projects: '#34D399', invoices: '#F59E0B', contracts: '#A78BFA',
+    tasks: '#F472B6', timer: '#38BDF8', finances: '#34D399', 'tax-calendar': '#FB923C',
+    appointments: '#E879F9', services: '#F472B6', 'content-plan': '#38BDF8', accounts: '#A3E635',
+    passwords: '#94A3B8', notes: '#6EE7B7', documents: '#4F8EF7', 'api-keys': '#A78BFA',
+    kanban: '#FB923C', templates: '#F59E0B', warehouse: '#94A3B8', portfolio: '#A78BFA',
+    hr: '#34D399', 'client-analytics': '#4F8EF7', currency: '#F59E0B',
+    reports: '#4F8EF7', support: '#38BDF8',
+  }
+  const color = colorMap[id] || '#94A3B8'
+
+  let mainValue = '—'
+  let rows = []
+  let progress = null
+
+  switch (id) {
+    case 'clients': {
+      const s = stats.clients
+      mainValue = s.total
+      rows = [
+        { dot: '#34D399', label: 'Активних',           val: s.active },
+        { dot: '#94A3B8', label: 'Неактивних',          val: s.inactive },
+        { dot: color,     label: 'Нових цього місяця',  val: '+' + s.newThisMonth },
+      ]
+      progress = s.total ? Math.round((s.active / s.total) * 100) : 0
+      break
+    }
+    case 'projects': {
+      const s = stats.projects
+      mainValue = s.total
+      rows = [
+        { dot: '#4F8EF7', label: 'Активних',  val: s.active },
+        { dot: '#34D399', label: 'Виконано',  val: s.done },
+        { dot: '#94A3B8', label: 'Очікують',  val: s.pending },
+      ]
+      progress = s.total ? Math.round(((s.active + s.done) / s.total) * 100) : 0
+      break
+    }
+    case 'invoices': {
+      const s = stats.invoices
+      mainValue = '₴' + (s.paidAmount >= 1000 ? Math.round(s.paidAmount / 1000) + 'к' : s.paidAmount)
+      rows = [
+        { dot: '#34D399', label: 'Оплачено',   val: s.paidCount + ' рах.' },
+        { dot: '#FBBF24', label: 'Очікується', val: s.unpaidCount + ' · ₴' + (s.unpaidAmount >= 1000 ? Math.round(s.unpaidAmount / 1000) + 'к' : s.unpaidAmount) },
+        { dot: color,     label: 'Цього місяця', val: '₴' + (s.paidThisMonth >= 1000 ? Math.round(s.paidThisMonth / 1000) + 'к' : s.paidThisMonth) },
+      ]
+      const total = s.paidAmount + s.unpaidAmount
+      progress = total ? Math.round((s.paidAmount / total) * 100) : 0
+      break
+    }
+    case 'contracts': {
+      const s = stats.contracts
+      mainValue = s.total
+      rows = [
+        { dot: '#34D399', label: 'Активних', val: s.active },
+        { dot: '#94A3B8', label: 'Чернетки', val: s.draft },
+      ]
+      progress = s.total ? Math.round((s.active / s.total) * 100) : 0
+      break
+    }
+    case 'tasks': {
+      const s = stats.tasks
+      mainValue = s.total
+      rows = [
+        { dot: '#34D399', label: 'Виконано',  val: s.done },
+        { dot: '#FBBF24', label: 'В роботі',  val: s.inProgress },
+        { dot: '#94A3B8', label: 'Нових',     val: s.new },
+      ]
+      progress = s.total ? Math.round((s.done / s.total) * 100) : 0
+      break
+    }
+    case 'finances': {
+      const s = stats.finances
+      mainValue = s.total
+      rows = [
+        { dot: '#34D399', label: 'Доходи',  val: '₴' + (s.income >= 1000 ? Math.round(s.income / 1000) + 'к' : s.income) },
+        { dot: '#F87171', label: 'Витрати', val: '₴' + (s.expense >= 1000 ? Math.round(s.expense / 1000) + 'к' : s.expense) },
+      ]
+      break
+    }
+    default: {
+      const cnt = counts[id] ?? 0
+      mainValue = cnt
+      const descMap = {
+        notes:            'нотаток збережено',
+        passwords:        'паролів збережено',
+        appointments:     'записів у розкладі',
+        services:         'послуг у каталозі',
+        warehouse:        'позицій на складі',
+        kanban:           'карток у Kanban',
+        templates:        'шаблонів',
+        portfolio:        'робіт у портфоліо',
+        hr:               'співробітників',
+        documents:        'документів',
+        'api-keys':       'API інтеграцій',
+        accounts:         'соцмереж / акаунтів',
+        'content-plan':   'постів у плані',
+        'client-analytics': 'Аналітика клієнтів',
+        timer:            'Трекер часу',
+        'tax-calendar':   'Податковий календар',
+        currency:         'Курси валют',
+        reports:          'Звіти та метрики',
+        support:          'Центр підтримки',
+      }
+      rows = [{ dot: color, label: descMap[id] || 'записів', val: '' }]
+    }
+  }
+
+  const progressBar = progress !== null
+    ? `<div class="bcp-progress-wrap">
+        <div class="bcp-progress-track">
+          <div class="bcp-progress-fill" style="width:${progress}%;background:${color}"></div>
+        </div>
+        <span class="bcp-progress-pct">${progress}%</span>
+      </div>`
+    : ''
+
   return `
-    <div class="biz-an-card" data-route="${route}" style="--an-color:${color}">
-      <div class="biz-an-icon">${icon}</div>
-      <div class="biz-an-count">${count}</div>
-      <div class="biz-an-label">${label}</div>
+    <div class="bcp-card" data-route="${id}" style="--bcp-color:${color}">
+      <div class="bcp-card-top">
+        <div class="bcp-header">
+          <span class="bcp-icon">${meta.icon}</span>
+          <span class="bcp-title">${meta.label}</span>
+        </div>
+        <div class="bcp-main-value">${mainValue}</div>
+      </div>
+      <div class="bcp-rows">
+        ${rows.map(r => `
+          <div class="bcp-row">
+            <span class="bcp-row-dot" style="background:${r.dot}"></span>
+            <span class="bcp-row-label">${r.label}</span>
+            ${r.val !== '' ? `<span class="bcp-row-val">${r.val}</span>` : ''}
+          </div>`).join('')}
+      </div>
+      ${progressBar}
+      <div class="bcp-footer">
+        <span class="bcp-go">Відкрити →</span>
+      </div>
     </div>
   `
 }
 
-// ── Рядок учасника ────────────────────────────────────────
+// ── Member row ─────────────────────────────────────────────
 function memberRow(m) {
   const mods = (m.modules || []).slice(0, 4).map(id => {
     const meta = ALL_MODULES.find(x => x.id === id)
     return meta ? `<span class="biz-mod-chip" title="${meta.label}">${meta.icon}</span>` : ''
   }).join('')
   const extra = (m.modules || []).length > 4 ? `<span class="biz-mod-more">+${m.modules.length - 4}</span>` : ''
-
   return `
     <div class="biz-member-row" data-uid="${m.id}">
-      <div class="biz-member-avatar">
-        <span>${initials(m.name)}</span>
-      </div>
+      <div class="biz-member-avatar"><span>${initials(m.name)}</span></div>
       <div class="biz-member-info">
         <div class="biz-member-name">${m.name || 'Без імені'}</div>
         <div class="biz-member-role">${m.role || '—'}</div>
       </div>
       <div class="biz-member-mods">${mods}${extra}</div>
       <button class="biz-member-edit-btn" data-uid="${m.id}" title="Редагувати">✏️</button>
-    </div>
-  `
+    </div>`
 }
 
 function infoRow(icon, label, value) {
@@ -499,90 +721,53 @@ function infoRow(icon, label, value) {
       <span class="biz-info-icon">${icon}</span>
       <span class="biz-info-label">${label}</span>
       <span class="biz-info-value">${value}</span>
-    </div>
-  `
+    </div>`
 }
 
-// ── Events ────────────────────────────────────────────────
+// ── Events ─────────────────────────────────────────────────
 function bindEvents(container, ctxIn) {
-  const ctx = ctxIn  // mutable reference so picker can update ctx.profile
-  const { profile, workspace, members, invites, workspaceId, user, niche } = ctx
+  const ctx = ctxIn
+  const { profile, workspace, members, invites, workspaceId, user, niche, config } = ctx
+  const ownerModules = config.modules
 
-  // Клік по модулю → перехід
   container.querySelectorAll('.biz-module-row').forEach(row => {
     row.addEventListener('click', () => navigate(row.dataset.route))
   })
-
-  // Клік по картці аналітики → перехід
-  container.querySelectorAll('.biz-an-card:not(.biz-an-add)').forEach(card => {
+  container.querySelectorAll('.bcp-card').forEach(card => {
     card.addEventListener('click', () => navigate(card.dataset.route))
   })
 
-  // Пікер аналітики
-  const anPicker   = container.querySelector('#biz-an-picker')
-  const anAddBtn   = container.querySelector('#biz-an-add-btn')
-  const anClose    = container.querySelector('#biz-an-picker-close')
-  const anCancel   = container.querySelector('#biz-an-picker-cancel')
-  const anSaveBtn  = container.querySelector('#biz-an-picker-save')
-
-  anAddBtn?.addEventListener('click', () => { anPicker.style.display = 'flex' })
-  anClose?.addEventListener('click',  () => { anPicker.style.display = 'none' })
-  anCancel?.addEventListener('click', () => { anPicker.style.display = 'none' })
-
-  container.querySelectorAll('.biz-an-pick-item').forEach(item => {
-    item.addEventListener('click', () => item.classList.toggle('selected'))
-  })
-
-  anSaveBtn?.addEventListener('click', async () => {
-    const selected = [...container.querySelectorAll('.biz-an-pick-item.selected')].map(el => el.dataset.id)
-    if (!selected.length) { showToast('Оберіть хоча б один модуль'); return }
-
-    anSaveBtn.disabled = true
-    try {
-      await updateDoc(doc(db, 'users', user.uid), { analyticsModules: selected })
-      updateProfileCache(user.uid, { analyticsModules: selected })
-      anPicker.style.display = 'none'
-
-      // Оновлюємо сітку без перезавантаження сторінки
-      const grid = container.querySelector('#biz-an-grid')
-      const addCard = grid.querySelector('.biz-an-add')
-      // Видаляємо старі картки
-      grid.querySelectorAll('.biz-an-card:not(.biz-an-add)').forEach(c => c.remove())
-      // Вставляємо нові перед кнопкою "+"
-      addCard.insertAdjacentHTML('beforebegin', renderAnalyticsCards(selected, ctx.moduleCounts || {}))
-      // Вішаємо обробники на нові картки
-      grid.querySelectorAll('.biz-an-card:not(.biz-an-add)').forEach(card => {
-        card.addEventListener('click', () => navigate(card.dataset.route))
-      })
-      // Оновлюємо ctx для майбутніх ре-рендерів
-      ctx.profile = { ...ctx.profile, analyticsModules: selected }
-      showToast('Збережено ✓')
-    } catch (err) {
-      console.error(err)
-      showToast('Помилка збереження')
-    } finally {
-      anSaveBtn.disabled = false
-    }
-  })
-
-  // ── Редагувати бізнес ───────────────────────────────────
+  // ── Редагувати бізнес ──────────────────────────────────
   container.querySelector('#biz-edit-btn').addEventListener('click', () => {
     container.querySelector('#biz-edit-modal').style.display = 'flex'
   })
-  container.querySelector('#biz-edit-close').addEventListener('click', () => {
-    container.querySelector('#biz-edit-modal').style.display = 'none'
-  })
-  container.querySelector('#biz-edit-cancel').addEventListener('click', () => {
-    container.querySelector('#biz-edit-modal').style.display = 'none'
-  })
+  const closeEdit = () => container.querySelector('#biz-edit-modal').style.display = 'none'
+  container.querySelector('#biz-edit-close').addEventListener('click', closeEdit)
+  container.querySelector('#biz-edit-cancel').addEventListener('click', closeEdit)
 
   let editNiche = profile?.profession || null
   container.querySelectorAll('#edit-niche-grid .biz-niche-card').forEach(card => {
     card.addEventListener('click', () => {
       container.querySelectorAll('#edit-niche-grid .biz-niche-card').forEach(c => c.classList.remove('selected'))
       card.classList.add('selected')
-      editNiche = card.dataset.niche
+      editNiche = card.dataset.niche === 'custom' ? null : card.dataset.niche
+      if (card.dataset.niche !== 'custom') {
+        const defaults = {
+          freelancer: ['clients','projects','invoices','contracts','tasks','timer','passwords','notes'],
+          accountant: ['clients','finances','invoices','contracts','tax-calendar','passwords','notes'],
+          smm:        ['clients','content-plan','accounts','tasks','passwords','notes'],
+          beauty:     ['clients','appointments','services','finances','notes'],
+        }
+        const mods = defaults[card.dataset.niche] || []
+        container.querySelectorAll('#edit-modules-grid .biz-mod-toggle').forEach(el => {
+          el.classList.toggle('active', mods.includes(el.dataset.mod))
+        })
+      }
     })
+  })
+
+  container.querySelectorAll('#edit-modules-grid .biz-mod-toggle').forEach(el => {
+    el.addEventListener('click', () => el.classList.toggle('active'))
   })
 
   container.querySelector('#biz-edit-save').addEventListener('click', async () => {
@@ -592,57 +777,51 @@ function bindEvents(container, ctxIn) {
     const btn = container.querySelector('#biz-edit-save')
     btn.disabled = true
 
+    const activeMods = ['dashboard', ...Array.from(
+      container.querySelectorAll('#edit-modules-grid .biz-mod-toggle.active')
+    ).map(el => el.dataset.mod)]
+
     try {
-      const newProfession = editNiche || profile?.profession
+      const newProfession = editNiche || null
 
       if (profile?._isSecondary && profile?._bizId) {
-        // Редагуємо другий бізнес — зберігаємо в businesses/{bizId}
-        const bizData = { name: businessName, profession: newProfession, updatedAt: serverTimestamp() }
+        const bizData = { name: businessName, profession: newProfession, modules: activeMods, updatedAt: serverTimestamp() }
         await updateDoc(doc(db, 'users', user.uid, 'businesses', profile._bizId), bizData)
-        // Оновлюємо кеш
-        updateProfileCache(user.uid, { activeBusinessName: businessName, activeBusinessProfession: newProfession })
-        const data = { businessName, profession: newProfession }
-        container.querySelector('#biz-edit-modal').style.display = 'none'
+        updateProfileCache(user.uid, { activeBusinessName: businessName, activeBusinessProfession: newProfession, activeBusinessModules: activeMods })
+        closeEdit()
         showToast('Збережено ✓')
-        const newProfile = { ...profile, ...data }
-        const newNiche   = NICHES.find(n => n.id === newProfile.profession) || niche
-        const newConfig  = (await import('../../../core/profession-config.js')).getProfessionConfig(newProfile.profession)
-        renderPage(container, { ...ctx, profile: newProfile, niche: newNiche, config: newConfig, moduleCounts: ctx.moduleCounts })
-        bindEvents(container, { ...ctx, profile: newProfile, niche: newNiche, config: newConfig, moduleCounts: ctx.moduleCounts })
+        const newNiche  = NICHES.find(n => n.id === newProfession) || niche
+        const newConfig = (await import('../../../core/profession-config.js')).getProfessionConfig(newProfession)
+        renderPage(container, { ...ctx, profile: { ...profile, businessName, profession: newProfession }, niche: newNiche, config: newConfig })
         btn.disabled = false
         return
       }
 
       const data = {
-        businessName,
-        phone:      container.querySelector('#edit-biz-phone')?.value.trim()    || null,
-        city:       container.querySelector('#edit-biz-city')?.value.trim()     || null,
-        website:    container.querySelector('#edit-biz-website')?.value.trim()  || null,
-        instagram:  container.querySelector('#edit-biz-instagram')?.value.trim()|| null,
-        tgChannel:  container.querySelector('#edit-biz-tgchannel')?.value.trim()|| null,
-        tgBotToken: container.querySelector('#edit-biz-tgtoken')?.value.trim()  || null,
-        profession: newProfession,
-        accountType:    'owner',
-        onboardingDone: true,
-        updatedAt: serverTimestamp(),
+        businessName, profession: newProfession, selectedModules: activeMods,
+        phone:      container.querySelector('#edit-biz-phone')?.value.trim()     || null,
+        city:       container.querySelector('#edit-biz-city')?.value.trim()      || null,
+        website:    container.querySelector('#edit-biz-website')?.value.trim()   || null,
+        instagram:  container.querySelector('#edit-biz-instagram')?.value.trim() || null,
+        tgChannel:  container.querySelector('#edit-biz-tgchannel')?.value.trim() || null,
+        tgBotToken: container.querySelector('#edit-biz-tgtoken')?.value.trim()   || null,
+        accountType: 'owner', onboardingDone: true, updatedAt: serverTimestamp(),
       }
       await updateDoc(doc(db, 'users', user.uid), data)
       updateProfileCache(user.uid, data)
 
-      // Оновлюємо sidebar
       const { renderNavigation } = await import('../../components/navigation.js')
+      const { getUserProfile: getUp } = await import('../../services/auth.js')
+      const freshProfile = await getUp(user.uid)
       const sidebar = document.getElementById('sidebar')
-      if (sidebar) renderNavigation(sidebar, { ...profile, ...data })
+      if (sidebar) renderNavigation(sidebar, freshProfile)
 
-      container.querySelector('#biz-edit-modal').style.display = 'none'
+      closeEdit()
       showToast('Збережено ✓')
 
-      // Перерендер сторінки з новими даними
-      const newProfile = { ...profile, ...data }
-      const newNiche   = NICHES.find(n => n.id === newProfile.profession) || niche
-      const newConfig  = (await import('../../../core/profession-config.js')).getProfessionConfig(newProfile.profession)
-      renderPage(container, { ...ctx, profile: newProfile, niche: newNiche, config: newConfig, moduleCounts: ctx.moduleCounts })
-      bindEvents(container, { ...ctx, profile: newProfile, niche: newNiche, config: newConfig, moduleCounts: ctx.moduleCounts })
+      const newNiche  = NICHES.find(n => n.id === newProfession) || niche
+      const newConfig = (await import('../../../core/profession-config.js')).getProfessionConfig(newProfession)
+      renderPage(container, { ...ctx, profile: { ...profile, ...data }, niche: newNiche, config: newConfig })
     } catch (err) {
       console.error(err)
       showToast('Помилка збереження')
@@ -651,7 +830,7 @@ function bindEvents(container, ctxIn) {
     }
   })
 
-  // ── Запросити учасника ──────────────────────────────────
+  // ── Запросити учасника ─────────────────────────────────
   container.querySelector('#biz-invite-btn').addEventListener('click', () => {
     container.querySelector('#biz-invite-modal').style.display = 'flex'
     container.querySelector('#inv-role').value = ''
@@ -659,22 +838,16 @@ function bindEvents(container, ctxIn) {
     container.querySelector('#inv-foot').style.display = 'flex'
     container.querySelectorAll('#inv-modules input').forEach(c => c.checked = true)
   })
-  container.querySelector('#biz-invite-close').addEventListener('click', () => {
-    container.querySelector('#biz-invite-modal').style.display = 'none'
-  })
-  container.querySelector('#biz-invite-cancel').addEventListener('click', () => {
-    container.querySelector('#biz-invite-modal').style.display = 'none'
-  })
+  container.querySelector('#biz-invite-close').addEventListener('click', () => { container.querySelector('#biz-invite-modal').style.display = 'none' })
+  container.querySelector('#biz-invite-cancel').addEventListener('click', () => { container.querySelector('#biz-invite-modal').style.display = 'none' })
 
   container.querySelector('#inv-generate').addEventListener('click', async () => {
     const role    = container.querySelector('#inv-role').value.trim()
     const modules = [...container.querySelectorAll('#inv-modules input:checked')].map(c => c.value)
-    if (!role)            { showToast('Введіть посаду'); return }
-    if (!modules.length)  { showToast('Оберіть хоча б один розділ'); return }
-
+    if (!role)           { showToast('Введіть посаду'); return }
+    if (!modules.length) { showToast('Оберіть хоча б один розділ'); return }
     const btn = container.querySelector('#inv-generate')
     btn.disabled = true
-
     try {
       const code = await createInvite(workspaceId, { role, modules })
       container.querySelector('#inv-code-val').textContent = code
@@ -694,7 +867,6 @@ function bindEvents(container, ctxIn) {
     showToast(`Код ${code} скопійовано`)
   })
 
-  // ── Pending invite actions ──────────────────────────────
   container.querySelectorAll('.biz-invite-copy').forEach(btn => {
     btn.addEventListener('click', () => {
       navigator.clipboard?.writeText(btn.dataset.code)
@@ -710,7 +882,7 @@ function bindEvents(container, ctxIn) {
     })
   })
 
-  // ── Редагувати учасника ─────────────────────────────────
+  // ── Учасники ───────────────────────────────────────────
   container.querySelectorAll('.biz-member-edit-btn').forEach(btn => {
     btn.addEventListener('click', () => openMemberModal(btn.dataset.uid))
   })
@@ -718,33 +890,25 @@ function bindEvents(container, ctxIn) {
   function openMemberModal(uid) {
     const member = members.find(m => m.id === uid)
     if (!member) return
-
     container.querySelector('#member-role-input').value = member.role || ''
     container.querySelector('#member-modules-grid').innerHTML = ownerModules
       .map(id => ALL_MODULES.find(x => x.id === id)).filter(Boolean).map(m => `
         <label class="biz-check-item">
           <input type="checkbox" value="${m.id}" ${(member.modules || []).includes(m.id) ? 'checked' : ''}>
           <span class="biz-check-box"><span>${m.icon}</span><span>${m.label}</span></span>
-        </label>
-      `).join('')
-
+        </label>`).join('')
     container.querySelector('#biz-member-modal').dataset.uid = uid
     container.querySelector('#biz-member-modal').style.display = 'flex'
   }
 
-  container.querySelector('#biz-member-close').addEventListener('click', () => {
-    container.querySelector('#biz-member-modal').style.display = 'none'
-  })
-  container.querySelector('#biz-member-cancel').addEventListener('click', () => {
-    container.querySelector('#biz-member-modal').style.display = 'none'
-  })
+  container.querySelector('#biz-member-close').addEventListener('click',  () => { container.querySelector('#biz-member-modal').style.display = 'none' })
+  container.querySelector('#biz-member-cancel').addEventListener('click', () => { container.querySelector('#biz-member-modal').style.display = 'none' })
 
   container.querySelector('#biz-member-save').addEventListener('click', async () => {
     const uid     = container.querySelector('#biz-member-modal').dataset.uid
     const role    = container.querySelector('#member-role-input').value.trim()
     const modules = [...container.querySelectorAll('#member-modules-grid input:checked')].map(c => c.value)
     if (!role || !modules.length) return
-
     const btn = container.querySelector('#biz-member-save')
     btn.disabled = true
     try {
@@ -770,32 +934,20 @@ function bindEvents(container, ctxIn) {
     navigate('business')
   })
 
-  // ── Telegram аналітика ──────────────────────────────────
+  // ── Telegram ───────────────────────────────────────────
   if (profile?.tgChannel && profile?.tgBotToken) {
     loadTgAnalytics(container, profile)
   }
-
-  const tgRefreshBtn = container.querySelector('#tg-refresh-btn')
-  if (tgRefreshBtn) {
-    tgRefreshBtn.addEventListener('click', () => loadTgAnalytics(container, profile))
-  }
+  container.querySelector('#tg-refresh-btn')?.addEventListener('click', () => loadTgAnalytics(container, profile))
 }
 
 async function loadTgAnalytics(container, profile) {
   const body = container.querySelector('#tg-analytics-body')
   if (!body) return
-
   body.innerHTML = `<div class="tg-loading"><div class="spinner"></div></div>`
-
   const result = await window.electron.tg.fetchChannel(profile.tgBotToken, profile.tgChannel)
-
-  if (result.error) {
-    body.innerHTML = `<div class="tg-error">⚠️ ${result.error}</div>`
-    return
-  }
-
+  if (result.error) { body.innerHTML = `<div class="tg-error">⚠️ ${result.error}</div>`; return }
   const fmt = n => n >= 1000 ? (n / 1000).toFixed(1) + 'K' : n
-
   body.innerHTML = `
     <div class="tg-stats-row">
       <div class="tg-stat">
@@ -807,11 +959,10 @@ async function loadTgAnalytics(container, profile) {
       <div class="tg-channel-name">${result.title || ''}</div>
       ${result.description ? `<div class="tg-channel-desc">${result.description}</div>` : ''}
       ${result.link ? `<a href="${result.link}" target="_blank" class="tg-open-link">Відкрити канал →</a>` : ''}
-    </div>
-  `
+    </div>`
 }
 
-// ── Helpers ───────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────
 function initials(name = '') {
   return name.split(' ').slice(0, 2).map(w => w[0]?.toUpperCase() || '').join('') || 'B'
 }
@@ -824,104 +975,109 @@ function showToast(msg) {
   setTimeout(() => t.remove(), 2800)
 }
 
-// ── Styles ────────────────────────────────────────────────
+// ── Styles ─────────────────────────────────────────────────
 function injectStyles() {
-  if (document.getElementById('business-styles')) return
+  document.getElementById('business-styles')?.remove()
   const s = document.createElement('style')
   s.id = 'business-styles'
   s.textContent = `
-    .biz-page    { padding: 28px 36px; max-width: 1100px; }
+    .biz-page    { padding: 28px 36px; max-width: 1600px; }
     .biz-spinner { display: flex; justify-content: center; padding: 80px; }
     .biz-empty-access { text-align:center; padding: 80px; font-size: 18px; color: var(--text-muted); }
 
     /* Topbar */
-    .biz-topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
-    .biz-topbar-left { display: flex; align-items: center; gap: 16px; }
-    .biz-logo {
-      width: 56px; height: 56px; border-radius: 14px; flex-shrink: 0;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 20px; font-weight: 800;
-    }
+    .biz-topbar       { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
+    .biz-topbar-left  { display: flex; align-items: center; gap: 16px; }
+    .biz-logo         { width: 56px; height: 56px; border-radius: 14px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 800; }
     .biz-company-name { font-family: var(--font-display); font-size: 24px; font-weight: 800; margin-bottom: 6px; }
-    .biz-niche-badge {
-      display: inline-flex; align-items: center; gap: 5px;
-      font-size: 12px; font-weight: 700; padding: 3px 10px;
-      border-radius: var(--radius-full); border: 1px solid;
-    }
+    .biz-niche-badge  { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: var(--radius-full); border: 1px solid; }
     .biz-topbar-actions { display: flex; gap: 10px; }
 
-    /* Stats */
-    .biz-stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
-    .biz-stat-card {
-      background: var(--bg-secondary); border: 1px solid var(--border);
-      border-radius: var(--radius-lg); padding: 18px 20px;
-      text-align: center;
+    /* KPI row */
+    .biz-kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 28px; }
+    @media (max-width: 900px) { .biz-kpi-row { grid-template-columns: repeat(2, 1fr); } }
+    .biz-kpi-card {
+      background: var(--bg-secondary); border: 1.5px solid var(--border);
+      border-radius: var(--radius-xl); padding: 18px 20px;
+      display: flex; align-items: flex-start; gap: 14px; transition: border-color .2s;
     }
-    .biz-stat-value { font-family: var(--font-display); font-size: 28px; font-weight: 800; margin-bottom: 4px; }
-    .biz-stat-label { font-size: 12px; color: var(--text-secondary); }
+    .biz-kpi-card:hover { border-color: rgba(255,255,255,.12); }
+    .biz-kpi-icon  { font-size: 28px; flex-shrink: 0; }
+    .biz-kpi-body  { flex: 1; min-width: 0; }
+    .biz-kpi-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin-bottom: 5px; }
+    .biz-kpi-value { font-family: var(--font-display); font-size: 26px; font-weight: 800; line-height: 1.1; margin-bottom: 5px; }
+    .biz-kpi-sub   { font-size: 11px; color: var(--text-muted); font-weight: 500; }
+    .biz-kpi--revenue { border-left: 3px solid #34D399; }
+    .biz-kpi--clients { border-left: 3px solid #4F8EF7; }
+    .biz-kpi--tasks   { border-left: 3px solid #F472B6; }
+    .biz-kpi--team    { border-left: 3px solid #A78BFA; }
 
-    /* Analytics grid */
-    .biz-analytics-grid {
+    /* Control Panel section */
+    .bcp-section      { margin-bottom: 28px; }
+    .bcp-section-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .bcp-section-title { font-family: var(--font-display); font-size: 17px; font-weight: 800; }
+    .bcp-section-sub   { font-size: 12px; color: var(--text-muted); background: var(--bg-tertiary); padding: 3px 10px; border-radius: var(--radius-full); }
+
+    .bcp-grid {
       display: grid;
-      grid-template-columns: repeat(7, 1fr);
-      gap: 10px;
-      margin-bottom: 24px;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
     }
-    @media (max-width: 900px) { .biz-analytics-grid { grid-template-columns: repeat(4, 1fr); } }
-    .biz-an-card {
-      background: var(--bg-secondary); border: 1px solid var(--border);
-      border-radius: var(--radius-lg); padding: 16px 10px;
-      text-align: center; cursor: pointer;
-      transition: all .18s; position: relative; overflow: hidden;
-    }
-    .biz-an-card::before {
-      content: ''; position: absolute; inset: 0;
-      background: var(--an-color); opacity: 0; transition: opacity .18s;
-    }
-    .biz-an-card:hover::before { opacity: .07; }
-    .biz-an-card:hover { border-color: var(--an-color); transform: translateY(-2px); }
-    .biz-an-icon  { font-size: 22px; margin-bottom: 8px; }
-    .biz-an-count { font-family: var(--font-display); font-size: 26px; font-weight: 800; color: var(--an-color); line-height: 1; margin-bottom: 4px; }
-    .biz-an-label { font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
-    .biz-an-add { border-style: dashed; border-color: var(--border) !important; }
-    .biz-an-add .biz-an-icon { font-size: 20px; color: var(--text-muted); }
-    .biz-an-add:hover { border-color: var(--accent-blue) !important; }
-    .biz-an-add:hover .biz-an-icon { color: var(--accent-blue); }
 
-    /* Analytics picker */
-    .biz-an-picker-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .biz-an-pick-item {
-      display: flex; align-items: center; gap: 10px;
-      background: var(--bg-tertiary); border: 1.5px solid var(--border);
-      border-radius: var(--radius-md); padding: 10px 12px;
-      cursor: pointer; transition: all .15s; position: relative;
+    /* Module card */
+    .bcp-card {
+      background: var(--bg-secondary);
+      border: 1.5px solid var(--border);
+      border-top: 3px solid var(--bcp-color);
+      border-radius: var(--radius-xl);
+      padding: 16px 18px;
+      cursor: pointer;
+      transition: all .18s;
+      display: flex; flex-direction: column; gap: 10px;
     }
-    .biz-an-pick-item:hover { border-color: var(--an-color); }
-    .biz-an-pick-item.selected { border-color: var(--an-color); background: color-mix(in srgb, var(--an-color) 10%, transparent); }
-    .biz-an-pick-icon  { font-size: 18px; }
-    .biz-an-pick-label { flex: 1; font-size: 13px; font-weight: 600; }
-    .biz-an-pick-check {
-      font-size: 11px; font-weight: 800; color: var(--an-color);
-      opacity: 0; transition: opacity .15s;
+    .bcp-card:hover {
+      border-color: var(--bcp-color);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(0,0,0,.3);
     }
-    .biz-an-pick-item.selected .biz-an-pick-check { opacity: 1; }
+    .bcp-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+    .bcp-header   { display: flex; align-items: center; gap: 7px; }
+    .bcp-icon     { font-size: 18px; flex-shrink: 0; }
+    .bcp-title    { font-size: 13px; font-weight: 700; color: var(--text-secondary); }
+    .bcp-main-value {
+      font-family: var(--font-display); font-size: 24px; font-weight: 800;
+      color: var(--bcp-color); line-height: 1; text-align: right; flex-shrink: 0;
+    }
 
-    /* Body layout */
+    .bcp-rows   { display: flex; flex-direction: column; gap: 5px; flex: 1; }
+    .bcp-row    { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+    .bcp-row-dot   { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .bcp-row-label { color: var(--text-muted); flex: 1; }
+    .bcp-row-val   { font-weight: 700; color: var(--text-primary); flex-shrink: 0; }
+
+    .bcp-progress-wrap  { display: flex; align-items: center; gap: 8px; }
+    .bcp-progress-track { flex: 1; height: 4px; background: var(--bg-tertiary); border-radius: 2px; overflow: hidden; }
+    .bcp-progress-fill  { height: 100%; border-radius: 2px; transition: width .6s; }
+    .bcp-progress-pct   { font-size: 10px; color: var(--text-muted); font-weight: 700; width: 30px; text-align: right; flex-shrink: 0; }
+
+    .bcp-footer { margin-top: 2px; }
+    .bcp-go     { font-size: 11px; font-weight: 700; color: var(--bcp-color); opacity: 0; transition: opacity .15s; }
+    .bcp-card:hover .bcp-go { opacity: 1; }
+
+    /* Bottom layout */
     .biz-body { display: grid; grid-template-columns: 300px 1fr; gap: 16px; }
-    @media (max-width: 800px) { .biz-body { grid-template-columns: 1fr; } }
+    @media (min-width: 1400px) { .biz-body { grid-template-columns: 360px 1fr; } }
+    @media (max-width: 800px)  { .biz-body { grid-template-columns: 1fr; } }
 
     /* Card */
-    .biz-card {
-      background: var(--bg-secondary); border: 1px solid var(--border);
-      border-radius: var(--radius-xl); padding: 20px; margin-bottom: 14px;
-    }
+    .biz-card         { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-xl); padding: 20px; margin-bottom: 14px; }
     .biz-card:last-child { margin-bottom: 0; }
-    .biz-card-title  { font-family: var(--font-display); font-size: 15px; font-weight: 700; margin-bottom: 16px; }
-    .biz-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .biz-card-title   { font-family: var(--font-display); font-size: 15px; font-weight: 700; margin-bottom: 16px; }
+    .biz-card-header  { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
     .biz-member-count { font-size: 12px; color: var(--text-muted); }
 
-    /* Info list */
-    .biz-info-list  { display: flex; flex-direction: column; gap: 0; }
+    /* Info */
+    .biz-info-list  { display: flex; flex-direction: column; }
     .biz-info-row   { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); }
     .biz-info-row:last-child { border-bottom: none; }
     .biz-info-icon  { font-size: 15px; width: 22px; text-align: center; flex-shrink: 0; }
@@ -930,10 +1086,7 @@ function injectStyles() {
 
     /* Modules list */
     .biz-modules-list { display: flex; flex-direction: column; gap: 2px; }
-    .biz-module-row {
-      display: flex; align-items: center; gap: 10px; padding: 9px 10px;
-      border-radius: var(--radius-md); cursor: pointer; transition: background .15s;
-    }
+    .biz-module-row   { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: var(--radius-md); cursor: pointer; transition: background .15s; }
     .biz-module-row:hover { background: var(--bg-tertiary); }
     .biz-module-icon  { font-size: 16px; width: 22px; text-align: center; }
     .biz-module-label { flex: 1; font-size: 13px; font-weight: 500; }
@@ -941,58 +1094,35 @@ function injectStyles() {
     .biz-module-row:hover .biz-module-arrow { opacity: 1; }
 
     /* Members */
-    .biz-member-row {
-      display: flex; align-items: center; gap: 12px;
-      padding: 12px 0; border-bottom: 1px solid var(--border);
-    }
+    .biz-member-row    { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
     .biz-member-row:last-child { border-bottom: none; }
-    .biz-member-owner { border-bottom: 2px solid var(--border); margin-bottom: 4px; padding-bottom: 14px; }
-    .biz-member-avatar {
-      width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
-      background: var(--bg-tertiary); display: flex; align-items: center;
-      justify-content: center; font-size: 14px; font-weight: 700;
-    }
-    .biz-member-info  { flex: 1; min-width: 0; }
-    .biz-member-name  { font-size: 14px; font-weight: 600; }
-    .biz-member-role  { font-size: 11px; color: var(--text-secondary); margin-top: 1px; }
-    .biz-member-mods  { display: flex; gap: 4px; align-items: center; }
-    .biz-mod-chip     { font-size: 15px; opacity: .75; }
-    .biz-mod-more     { font-size: 11px; color: var(--text-muted); }
-    .biz-member-edit-btn {
-      background: none; border: 1px solid var(--border); border-radius: 6px;
-      padding: 4px 7px; cursor: pointer; font-size: 12px;
-      opacity: 0; transition: opacity .2s;
-    }
+    .biz-member-owner  { border-bottom: 2px solid var(--border); margin-bottom: 4px; padding-bottom: 14px; }
+    .biz-member-avatar { width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0; background: var(--bg-tertiary); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; }
+    .biz-member-info   { flex: 1; min-width: 0; }
+    .biz-member-name   { font-size: 14px; font-weight: 600; }
+    .biz-member-role   { font-size: 11px; color: var(--text-secondary); margin-top: 1px; }
+    .biz-member-mods   { display: flex; gap: 4px; align-items: center; }
+    .biz-mod-chip      { font-size: 15px; opacity: .75; }
+    .biz-mod-more      { font-size: 11px; color: var(--text-muted); }
+    .biz-member-edit-btn { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 4px 7px; cursor: pointer; font-size: 12px; opacity: 0; transition: opacity .2s; }
     .biz-member-row:hover .biz-member-edit-btn { opacity: 1; }
-    .biz-access-badge { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: var(--radius-full); }
-    .biz-access-owner { background: rgba(79,142,247,.15); color: var(--accent-blue); }
-    .biz-no-members   { font-size: 13px; color: var(--text-muted); text-align: center; padding: 20px 0; }
+    .biz-access-badge  { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: var(--radius-full); }
+    .biz-access-owner  { background: rgba(79,142,247,.15); color: var(--accent-blue); }
+    .biz-no-members    { font-size: 13px; color: var(--text-muted); text-align: center; padding: 20px 0; }
 
     /* Pending invites */
-    .biz-invite-row {
-      display: flex; align-items: center; gap: 10px;
-      padding: 10px 0; border-bottom: 1px solid var(--border);
-    }
+    .biz-invite-row    { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
     .biz-invite-row:last-child { border-bottom: none; }
-    .biz-invite-code { font-family: var(--font-mono, monospace); font-size: 14px; font-weight: 800; letter-spacing: 2px; color: var(--accent-blue); width: 72px; flex-shrink: 0; }
-    .biz-invite-info { flex: 1; }
-    .biz-invite-role { font-size: 13px; font-weight: 600; }
-    .biz-invite-mods { font-size: 11px; color: var(--text-muted); }
-    .biz-invite-copy, .biz-invite-del {
-      background: none; border: 1px solid var(--border); border-radius: 6px;
-      padding: 4px 8px; cursor: pointer; font-size: 12px; transition: all .2s;
-    }
+    .biz-invite-code   { font-family: var(--font-mono, monospace); font-size: 14px; font-weight: 800; letter-spacing: 2px; color: var(--accent-blue); width: 72px; flex-shrink: 0; }
+    .biz-invite-info   { flex: 1; }
+    .biz-invite-role   { font-size: 13px; font-weight: 600; }
+    .biz-invite-mods   { font-size: 11px; color: var(--text-muted); }
+    .biz-invite-copy, .biz-invite-del { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 12px; transition: all .2s; }
     .biz-invite-del:hover { border-color: #F87171; color: #F87171; }
 
     /* Modals */
     .biz-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.65); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 24px; }
-    .biz-modal {
-      background: var(--bg-secondary); border: 1px solid var(--border);
-      border-radius: var(--radius-xl); width: 100%; max-width: 560px;
-      max-height: 88vh; display: flex; flex-direction: column;
-      box-shadow: var(--shadow-xl);
-      animation: biz-in .2s cubic-bezier(.34,1.2,.64,1);
-    }
+    .biz-modal   { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-xl); width: 100%; max-width: 560px; max-height: 88vh; display: flex; flex-direction: column; box-shadow: var(--shadow-xl); animation: biz-in .2s cubic-bezier(.34,1.2,.64,1); }
     @keyframes biz-in { from{opacity:0;transform:scale(.94)} to{opacity:1;transform:scale(1)} }
     .biz-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 22px 24px 0; flex-shrink: 0; }
     .biz-modal-head h2 { font-family: var(--font-display); font-size: 20px; font-weight: 700; }
@@ -1005,77 +1135,86 @@ function injectStyles() {
     .biz-form-row { margin-bottom: 16px; }
     .biz-form-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
 
-    /* Niche selector in modal */
+    /* Niche selector */
     .biz-niche-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
-    .biz-niche-card {
-      display: flex; align-items: center; gap: 8px;
-      background: var(--bg-tertiary); border: 2px solid var(--border);
-      border-radius: var(--radius-md); padding: 10px 12px;
-      cursor: pointer; font-size: 13px; font-weight: 600; transition: all .15s;
-    }
+    .biz-niche-card { display: flex; align-items: center; gap: 8px; background: var(--bg-tertiary); border: 2px solid var(--border); border-radius: var(--radius-md); padding: 10px 12px; cursor: pointer; font-size: 13px; font-weight: 600; transition: all .15s; }
     .biz-niche-card:hover  { border-color: var(--nc); }
     .biz-niche-card.selected { border-color: var(--nc); background: color-mix(in srgb, var(--nc) 12%, transparent); color: var(--nc); }
+    .biz-niche-custom { font-size: 12px; color: var(--text-muted); border-style: dashed; }
+    .biz-niche-custom.selected { border-style: solid; color: var(--nc); }
 
-    /* Module checkboxes */
+    /* Module edit grid */
+    .biz-modules-edit-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; }
+    .biz-mod-toggle { display: flex; align-items: center; gap: 5px; padding: 7px 8px; border-radius: 8px; border: 1.5px solid var(--border); background: var(--bg-tertiary); cursor: pointer; font-size: 12px; font-weight: 500; transition: all .12s; user-select: none; }
+    .biz-mod-toggle:hover { border-color: rgba(255,255,255,.2); }
+    .biz-mod-toggle.active { border-color: #4F8EF7; background: rgba(79,142,247,.1); color: #4F8EF7; }
+    .biz-mod-chk { margin-left: auto; font-size: 10px; font-weight: 800; opacity: 0; }
+    .biz-mod-toggle.active .biz-mod-chk { opacity: 1; }
+
+    /* Checkboxes */
     .biz-modules-check { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 16px; }
     .biz-check-item input { display: none; }
-    .biz-check-box {
-      display: flex; align-items: center; gap: 6px;
-      background: var(--bg-tertiary); border: 1.5px solid var(--border);
-      border-radius: var(--radius-md); padding: 7px 10px;
-      font-size: 12px; font-weight: 500; cursor: pointer; transition: all .15s;
-    }
+    .biz-check-box { display: flex; align-items: center; gap: 6px; background: var(--bg-tertiary); border: 1.5px solid var(--border); border-radius: var(--radius-md); padding: 7px 10px; font-size: 12px; font-weight: 500; cursor: pointer; transition: all .15s; }
     .biz-check-item input:checked + .biz-check-box { background: rgba(79,142,247,.1); border-color: var(--accent-blue); color: var(--accent-blue); }
 
     /* Invite code */
-    .biz-code-block { background: var(--bg-tertiary); border-radius: var(--radius-lg); padding: 20px; text-align: center; margin-top: 16px; }
+    .biz-code-block   { background: var(--bg-tertiary); border-radius: var(--radius-lg); padding: 20px; text-align: center; margin-top: 16px; }
     .biz-code-label   { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px; }
     .biz-code-display { font-family: var(--font-mono, monospace); font-size: 40px; font-weight: 800; letter-spacing: 8px; color: var(--accent-blue); margin-bottom: 12px; }
     .biz-code-hint    { font-size: 12px; color: var(--text-muted); line-height: 1.5; margin-top: 10px; }
 
-    /* Toast */
-    .biz-toast {
-      position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
-      background: var(--bg-secondary); border: 1px solid var(--border);
-      border-radius: var(--radius-full); padding: 10px 20px;
-      font-size: 13px; font-weight: 600; z-index: 9999;
-      animation: biz-toast .25s ease;
+    /* Secondary business notes */
+    .biz-secondary-note {
+      font-size: 12px; color: var(--text-muted); padding: 10px 12px;
+      background: rgba(167,139,250,.08); border: 1px solid rgba(167,139,250,.2);
+      border-radius: var(--radius-md); margin-top: 4px; line-height: 1.5;
     }
+    .biz-secondary-team-note {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 12px 14px; margin-bottom: 14px;
+      background: rgba(79,142,247,.06); border: 1px solid rgba(79,142,247,.15);
+      border-radius: var(--radius-md);
+    }
+    .biz-stn-icon  { font-size: 22px; flex-shrink: 0; }
+    .biz-stn-title { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+    .biz-stn-sub   { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+
+    /* Tips */
+    .biz-tips-list { display: flex; flex-direction: column; }
+    .biz-tip-row   { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+    .biz-tip-row:last-child { border-bottom: none; }
+    .biz-tip-num   { width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0; background: rgba(79,142,247,.15); color: var(--accent-blue); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; }
+    .biz-tip-title { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+    .biz-tip-desc  { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+
+    /* Toast */
+    .biz-toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-full); padding: 10px 20px; font-size: 13px; font-weight: 600; z-index: 9999; animation: biz-toast .25s ease; }
     @keyframes biz-toast { from{opacity:0;transform:translateX(-50%) translateY(8px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
 
-    .btn-ghost { background: transparent; border: 1px solid transparent; color: var(--text-muted); }
+    /* Misc */
+    .btn-ghost     { background: transparent; border: 1px solid transparent; color: var(--text-muted); }
     .btn-ghost:hover { border-color: #F87171; color: #F87171; }
     .biz-remove-btn { margin-right: auto; }
-    .biz-link { color: var(--accent-blue); text-decoration: none; }
+    .biz-link       { color: var(--accent-blue); text-decoration: none; }
     .biz-link:hover { text-decoration: underline; }
 
     /* Telegram analytics */
     .tg-analytics-card { border-color: rgba(37,172,219,.3); }
-    .tg-refresh-btn {
-      background: none; border: 1px solid var(--border); border-radius: 8px;
-      padding: 4px 9px; cursor: pointer; font-size: 16px; color: var(--text-muted);
-      transition: all .2s;
-    }
+    .tg-refresh-btn    { background: none; border: 1px solid var(--border); border-radius: 8px; padding: 4px 9px; cursor: pointer; font-size: 16px; color: var(--text-muted); transition: all .2s; }
     .tg-refresh-btn:hover { background: rgba(37,172,219,.1); color: #29b6d6; border-color: #29b6d6; }
     .tg-loading { display: flex; justify-content: center; padding: 24px; }
     .tg-error   { color: #F87171; font-size: 13px; padding: 8px 0; }
     .tg-no-token { font-size: 13px; color: var(--text-secondary); }
     .tg-no-token p { margin: 0 0 8px; }
-    .tg-hint { font-size: 12px; color: var(--text-muted); line-height: 1.7; background: var(--bg-tertiary); border-radius: var(--radius-md); padding: 10px 12px; }
+    .tg-hint    { font-size: 12px; color: var(--text-muted); line-height: 1.7; background: var(--bg-tertiary); border-radius: var(--radius-md); padding: 10px 12px; }
     .tg-stats-row { display: flex; gap: 12px; margin-bottom: 14px; }
-    .tg-stat {
-      background: rgba(37,172,219,.08); border: 1px solid rgba(37,172,219,.2);
-      border-radius: var(--radius-lg); padding: 14px 20px; text-align: center; flex: 1;
-    }
+    .tg-stat    { background: rgba(37,172,219,.08); border: 1px solid rgba(37,172,219,.2); border-radius: var(--radius-lg); padding: 14px 20px; text-align: center; flex: 1; }
     .tg-stat-val { font-family: var(--font-display); font-size: 28px; font-weight: 800; color: #29b6d6; }
     .tg-stat-lbl { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
-    .tg-channel-info  { padding-top: 10px; }
-    .tg-channel-name  { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
-    .tg-channel-desc  { font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 10px; }
-    .tg-open-link {
-      display: inline-block; font-size: 13px; font-weight: 600;
-      color: #29b6d6; text-decoration: none;
-    }
+    .tg-channel-info { padding-top: 10px; }
+    .tg-channel-name { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+    .tg-channel-desc { font-size: 13px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 10px; }
+    .tg-open-link    { display: inline-block; font-size: 13px; font-weight: 600; color: #29b6d6; text-decoration: none; }
     .tg-open-link:hover { text-decoration: underline; }
   `
   document.head.appendChild(s)

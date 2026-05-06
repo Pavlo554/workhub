@@ -15,4 +15,11 @@ contextBridge.exposeInMainWorld('electron', {
   tg: {
     fetchChannel: (token, username) => ipcRenderer.invoke('tg:fetchChannel', { token, username }),
   },
+
+  docs: {
+    save:   (fileName, buffer, uid) => ipcRenderer.invoke('docs:save',   { fileName, buffer, uid }),
+    open:   (localPath)             => ipcRenderer.invoke('docs:open',   { localPath }),
+    show:   (localPath)             => ipcRenderer.invoke('docs:show',   { localPath }),
+    delete: (localPath)             => ipcRenderer.invoke('docs:delete', { localPath }),
+  },
 })

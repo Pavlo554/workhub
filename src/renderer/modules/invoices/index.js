@@ -2,9 +2,10 @@
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getUserProfile, getActivePathSegments } from '../../services/auth.js'
 import { checkPlanLimit } from '../../services/plan-guard.js'
+import { generateInvoicePDF } from './invoice-pdf.js'
 import {
   collection, addDoc, getDocs, deleteDoc, doc, updateDoc,
-  query, orderBy, serverTimestamp
+  query, orderBy, where, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
 const PAY_METHODS = {
@@ -372,8 +373,10 @@ export async function render(container) {
       btn.addEventListener('click', async e => {
         e.stopPropagation()
         if (!confirm('Видалити рахунок?')) return
+        const inv = invoices.find(i => i.id === btn.dataset.id)
         if (selectedInvId === btn.dataset.id) closeInvDetail()
         await deleteDoc(doc(db, ...base, 'invoices', btn.dataset.id))
+        if (inv?.status === 'paid') await removeInvoiceFinanceRecord(base, btn.dataset.id)
         await loadAll()
       })
     )
@@ -436,6 +439,7 @@ export async function render(container) {
         </div>
         <div class="invd-footer">
           <button class="btn btn-secondary" id="invd-edit">✏️ Редагувати</button>
+          <button class="btn btn-secondary" id="invd-pdf">📄 PDF</button>
           <button class="btn invd-del-btn" id="invd-delete">🗑 Видалити</button>
         </div>
       </div>
@@ -443,19 +447,23 @@ export async function render(container) {
 
     detEl.querySelector('#invd-close').addEventListener('click', closeInvDetail)
     detEl.querySelector('#invd-edit').addEventListener('click', () => openInvModal(inv))
+    detEl.querySelector('#invd-pdf').addEventListener('click', () => generateInvoicePDF(inv, profile))
     detEl.querySelector('#invd-delete')?.addEventListener('click', async () => {
       if (!confirm('Видалити рахунок?')) return
       await deleteDoc(doc(db, ...base, 'invoices', inv.id))
+      if (inv.status === 'paid') await removeInvoiceFinanceRecord(base, inv.id)
       closeInvDetail()
       await loadAll()
     })
     detEl.querySelector('#invd-mark-paid')?.addEventListener('click', async () => {
       await updateDoc(doc(db, ...base, 'invoices', inv.id), { status: 'paid', updatedAt: serverTimestamp() })
+      await syncInvoiceToFinances(base, inv, 'paid', inv.status)
       await loadAll()
       openInvDetail(id)
     })
     detEl.querySelector('#invd-mark-unpaid')?.addEventListener('click', async () => {
       await updateDoc(doc(db, ...base, 'invoices', inv.id), { status: 'unpaid', updatedAt: serverTimestamp() })
+      await syncInvoiceToFinances(base, inv, 'unpaid', inv.status)
       await loadAll()
       openInvDetail(id)
     })
@@ -598,9 +606,16 @@ export async function render(container) {
 
     try {
       if (editInvId) {
+        const prevInv = invoices.find(i => i.id === editInvId)
         await updateDoc(doc(db, ...base, 'invoices', editInvId), { ...data, updatedAt: serverTimestamp() })
+        if (prevInv) {
+          await syncInvoiceToFinances(base, { ...prevInv, ...data, id: editInvId }, data.status, prevInv.status)
+        }
       } else {
-        await addDoc(collection(db, ...base, 'invoices'), { ...data, createdAt: serverTimestamp() })
+        const ref = await addDoc(collection(db, ...base, 'invoices'), { ...data, createdAt: serverTimestamp() })
+        if (data.status === 'paid') {
+          await syncInvoiceToFinances(base, { ...data, id: ref.id }, 'paid', 'unpaid')
+        }
       }
       closeInvModal()
       await loadAll()
@@ -674,6 +689,49 @@ export async function render(container) {
     return new Date(d).toLocaleDateString('uk-UA', { day: 'numeric', month: 'short', year: 'numeric' })
   }
 }
+
+// ── Finance sync helpers ───────────────────────────────────────────────────
+
+async function syncInvoiceToFinances(base, inv, newStatus, oldStatus) {
+  if (newStatus === oldStatus) return
+  if (newStatus === 'paid') {
+    // Avoid duplicate: check if finance record already exists
+    try {
+      const snap = await getDocs(query(
+        collection(db, ...base, 'transactions'),
+        where('invoiceId', '==', inv.id)
+      ))
+      if (!snap.empty) return
+      await addDoc(collection(db, ...base, 'transactions'), {
+        type:        'income',
+        category:    'project',
+        amount:      Number(inv.amount),
+        date:        inv.date || new Date().toISOString().slice(0, 10),
+        description: `${inv.client} — ${inv.description}`.slice(0, 200),
+        source:      'invoice',
+        invoiceId:   inv.id,
+        createdAt:   serverTimestamp(),
+        updatedAt:   serverTimestamp(),
+      })
+    } catch (err) { console.error('syncInvoiceToFinances create:', err) }
+  } else if (oldStatus === 'paid') {
+    await removeInvoiceFinanceRecord(base, inv.id)
+  }
+}
+
+async function removeInvoiceFinanceRecord(base, invoiceId) {
+  try {
+    const snap = await getDocs(query(
+      collection(db, ...base, 'transactions'),
+      where('invoiceId', '==', invoiceId)
+    ))
+    for (const d of snap.docs) {
+      await deleteDoc(doc(db, ...base, 'transactions', d.id))
+    }
+  } catch (err) { console.error('removeInvoiceFinanceRecord:', err) }
+}
+
+// ── Styles ─────────────────────────────────────────────────────────────────
 
 function injectStyles() {
   if (document.getElementById('invoices-styles')) return

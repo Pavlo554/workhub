@@ -9,7 +9,15 @@
       "Bash(echo \"Exit: $?\")",
       "Bash(npm run:*)",
       "Bash(where docker:*)",
-      "Bash(docker --version)"
+      "Bash(docker --version)",
+      "Bash(tasklist)",
+      "Bash(tasklist /FI \"IMAGENAME eq electron.exe\")",
+      "Bash(tasklist.exe)",
+      "Bash(taskkill.exe /F /IM WorkHub.exe)",
+      "Bash(cmd.exe /c \"taskkill /F /IM WorkHub.exe\")",
+      "Bash(python3 -c ' *)",
+      "Bash(powershell -command \"\\(Get-Item 'c:/Users/lezzer/Desktop/workhub/assets/icon.png'\\).Length\")",
+      "Bash(python3)"
     ]
   }
 }

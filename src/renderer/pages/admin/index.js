@@ -3,21 +3,47 @@ import { db } from '../../services/firebase.js'
 import { getCurrentUser, getUserProfile, updateProfileCache } from '../../services/auth.js'
 import { navigate } from '../../../core/router.js'
 import {
-  collection, collectionGroup, getDocs, doc,
-  updateDoc, serverTimestamp, query, orderBy, where, limit
+  collection, collectionGroup, getDocs, getDoc, doc, setDoc,
+  updateDoc, deleteDoc, serverTimestamp, query, orderBy, where, limit, addDoc, arrayUnion
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
 const PLAN_META = {
-  free:     { label: 'FREE',     color: '#94A3B8' },
-  pro:      { label: 'PRO',      color: '#4F8EF7' },
-  business: { label: 'BUSINESS', color: '#A78BFA' },
+  free:     { label: 'FREE',     color: '#94A3B8', price: 0 },
+  pro:      { label: 'PRO',      color: '#4F8EF7', price: 299 },
+  business: { label: 'BUSINESS', color: '#A78BFA', price: 799 },
+}
+const TABS = [
+  { id: 'overview',       icon: '📊', label: 'Огляд' },
+  { id: 'analytics',      icon: '📈', label: 'Аналітика' },
+  { id: 'users',          icon: '👥', label: 'Користувачі' },
+  { id: 'payments',       icon: '💳', label: 'Платежі' },
+  { id: 'support',        icon: '🎫', label: 'Підтримка' },
+  { id: 'notifications',  icon: '📰', label: 'Новини' },
+]
+
+const TICKET_TYPE_META = {
+  bug:     { icon: '🐛', label: 'Bug Report', color: '#F87171', bg: 'rgba(248,113,113,.12)' },
+  feature: { icon: '💡', label: 'Пропозиція', color: '#A78BFA', bg: 'rgba(167,139,250,.12)' },
+  support: { icon: '💬', label: 'Підтримка',  color: '#4F8EF7', bg: 'rgba(79,142,247,.12)'  },
+}
+const TICKET_STATUS_META = {
+  new:         { icon: '🆕', label: 'Нова',      color: '#94A3B8' },
+  open:        { icon: '🔵', label: 'Відкрита',  color: '#4F8EF7' },
+  in_progress: { icon: '🔄', label: 'В роботі',  color: '#FBBF24' },
+  resolved:    { icon: '✅', label: 'Вирішено',  color: '#34D399' },
+  closed:      { icon: '🔒', label: 'Закрита',   color: '#475569' },
+}
+const TICKET_PRIORITY_META = {
+  low:      { label: 'Низький',   color: '#94A3B8' },
+  medium:   { label: 'Середній', color: '#FBBF24' },
+  high:     { label: 'Високий',  color: '#FB923C' },
+  critical: { label: 'Критич.',  color: '#F87171' },
 }
 
 export async function render(container) {
   const user    = getCurrentUser()
   const profile = await getUserProfile(user.uid)
 
-  // ── Захист: тільки адміни ─────────────────────────────────
   if (!profile?.isAdmin) {
     container.innerHTML = `
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;gap:16px">
@@ -25,686 +51,1343 @@ export async function render(container) {
         <div style="font-size:18px;font-weight:700">Доступ заборонено</div>
         <div style="font-size:14px;color:var(--text-muted)">У вас немає прав адміністратора</div>
         <button class="btn btn-secondary" id="back-btn">← Назад</button>
-      </div>
-    `
+      </div>`
     container.querySelector('#back-btn').addEventListener('click', () => navigate('dashboard'))
     return
   }
 
   injectStyles()
 
+  let activeTab  = 'overview'
+  let allUsers   = []
+  let allPayments = []
+  let allAnnouncements = []
+  let allTickets  = []
+  let payFilter   = 'pending'
+  let ticketTypeFilter   = 'all'
+  let ticketStatusFilter = 'all'
+
   container.innerHTML = `
-    <div class="admin-page">
+    <div class="adm-page">
 
-      <div class="admin-header">
+      <div class="adm-header">
         <div>
-          <h1 class="admin-title">🛡 Адмін панель</h1>
-          <p class="admin-subtitle">WorkHub · Управління користувачами та платежами</p>
+          <h1 class="adm-title">🛡 Адмін панель</h1>
+          <p class="adm-subtitle">WorkHub · Управління системою</p>
         </div>
-        <div class="admin-header-right">
-          <span class="admin-badge">Admin: ${profile.name || user.email}</span>
+        <div class="adm-header-right">
+          <button class="adm-refresh-btn" id="adm-refresh">↻ Оновити</button>
+          <span class="adm-badge">👤 ${profile.name || user.email}</span>
         </div>
       </div>
 
-      <!-- Tabs -->
-      <div class="admin-tabs" id="admin-tabs">
-        <button class="admin-tab active" data-tab="overview">📊 Огляд</button>
-        <button class="admin-tab" data-tab="users">👥 Користувачі</button>
-        <button class="admin-tab" data-tab="payments">💳 Платежі</button>
+      <div class="adm-tabs" id="adm-tabs">
+        ${TABS.map(t => `
+          <button class="adm-tab ${t.id === 'overview' ? 'active' : ''}" data-tab="${t.id}">
+            <span>${t.icon}</span> ${t.label}
+          </button>
+        `).join('')}
       </div>
 
-      <!-- Tab content -->
-      <div id="tab-overview" class="tab-panel">
-        <div class="overview-grid" id="overview-stats">
-          ${[1,2,3,4].map(() => `<div class="stat-card-admin"><div class="skel skel-block" style="height:90px"></div></div>`).join('')}
+      <!-- ── OVERVIEW ── -->
+      <div id="tab-overview" class="adm-panel">
+        <div class="adm-stats-row" id="adm-stats">
+          ${[0,1,2,3,4,5].map(() => `<div class="adm-skel"></div>`).join('')}
         </div>
-        <div class="overview-bottom">
-          <div class="recent-card" id="recent-users-card">
-            <div class="recent-header"><h3>🕐 Нові реєстрації</h3></div>
-            <div class="recent-list" id="recent-users-list">
-              <div class="loading-row"><div class="spinner"></div></div>
-            </div>
+        <div class="adm-overview-grid">
+          <div class="adm-card" id="recent-regs-card">
+            <div class="adm-card-title">🕐 Нові реєстрації</div>
+            <div id="recent-regs-list"><div class="adm-loading"></div></div>
           </div>
-          <div class="recent-card" id="plan-breakdown-card">
-            <div class="recent-header"><h3>📈 Розподіл по планах</h3></div>
+          <div class="adm-card">
+            <div class="adm-card-title">📊 По планах</div>
             <div id="plan-breakdown"></div>
           </div>
+          <div class="adm-card" id="adm-activity-card">
+            <div class="adm-card-title">📅 Активність (7 днів)</div>
+            <div class="adm-activity-bars" id="adm-activity-bars"></div>
+          </div>
         </div>
       </div>
 
-      <div id="tab-users" class="tab-panel" style="display:none">
-        <div class="users-toolbar">
-          <div class="search-bar" style="flex:1;max-width:400px">
-            <span class="search-icon">🔍</span>
-            <input type="text" class="search-input" id="users-search" placeholder="Пошук за іменем або email..." />
+      <!-- ── ANALYTICS ── -->
+      <div id="tab-analytics" class="adm-panel" style="display:none">
+        <div class="adm-an-grid">
+          <div class="adm-card adm-card-wide">
+            <div class="adm-card-title">📅 Реєстрації за останні 30 днів</div>
+            <div class="adm-chart-wrap" id="reg-chart"></div>
           </div>
-          <div class="users-filter-wrap">
-            <select class="input" id="plan-filter" style="width:140px">
-              <option value="all">Всі плани</option>
-              <option value="free">FREE</option>
-              <option value="pro">PRO</option>
-              <option value="business">BUSINESS</option>
-            </select>
+          <div class="adm-card">
+            <div class="adm-card-title">💰 Дохід по планах</div>
+            <div id="revenue-breakdown"></div>
           </div>
-          <span class="users-count-label" id="users-count-label"></span>
-        </div>
-        <div id="users-table-wrap">
-          <div class="loading-row"><div class="spinner"></div></div>
+          <div class="adm-card">
+            <div class="adm-card-title">🔄 Конверсія free → paid</div>
+            <div id="conversion-stats"></div>
+          </div>
+          <div class="adm-card">
+            <div class="adm-card-title">🌍 Ніші користувачів</div>
+            <div id="niche-breakdown"></div>
+          </div>
         </div>
       </div>
 
-      <div id="tab-payments" class="tab-panel" style="display:none">
-        <div class="payments-toolbar">
-          <div class="pay-filter-tabs" id="pay-filter-tabs">
-            <button class="filter-tab active" data-status="pending">⏳ Очікують</button>
-            <button class="filter-tab" data-status="approved">✓ Підтверджені</button>
-            <button class="filter-tab" data-status="rejected">✗ Відхилені</button>
+      <!-- ── USERS ── -->
+      <div id="tab-users" class="adm-panel" style="display:none">
+        <div class="adm-toolbar">
+          <div class="adm-search">
+            <span>🔍</span>
+            <input type="text" id="users-search" placeholder="Пошук за іменем, email або бізнесом…">
           </div>
+          <select id="plan-filter" class="adm-select">
+            <option value="all">Всі плани</option>
+            <option value="free">FREE</option>
+            <option value="pro">PRO</option>
+            <option value="business">BUSINESS</option>
+          </select>
+          <select id="status-filter" class="adm-select">
+            <option value="all">Всі статуси</option>
+            <option value="active">Активні</option>
+            <option value="banned">Забановані</option>
+          </select>
+          <button class="adm-btn adm-btn-ghost" id="export-csv-btn">⬇ CSV</button>
+          <span class="adm-count-label" id="users-count-label"></span>
         </div>
-        <div id="payments-list">
-          <div class="loading-row"><div class="spinner"></div></div>
+        <div id="users-table-wrap"><div class="adm-loading-big"></div></div>
+      </div>
+
+      <!-- ── PAYMENTS ── -->
+      <div id="tab-payments" class="adm-panel" style="display:none">
+        <div class="adm-toolbar">
+          <div class="adm-filter-pills" id="pay-filter-tabs">
+            <button class="adm-pill active" data-status="pending">⏳ Очікують</button>
+            <button class="adm-pill" data-status="approved">✓ Підтверджені</button>
+            <button class="adm-pill" data-status="rejected">✗ Відхилені</button>
+          </div>
+          <span class="adm-count-label" id="pay-count-label"></span>
+        </div>
+        <div id="payments-list"><div class="adm-loading-big"></div></div>
+      </div>
+
+      <!-- ── SUPPORT ── -->
+      <div id="tab-support" class="adm-panel" style="display:none">
+        <div class="adm-toolbar">
+          <div class="adm-filter-pills" id="ticket-type-pills">
+            <button class="adm-pill active" data-type="all">Всі</button>
+            <button class="adm-pill" data-type="bug">🐛 Bug</button>
+            <button class="adm-pill" data-type="feature">💡 Ідея</button>
+            <button class="adm-pill" data-type="support">💬 Підтримка</button>
+          </div>
+          <div class="adm-filter-pills" id="ticket-status-pills">
+            <button class="adm-pill active" data-status="all">Всі статуси</button>
+            <button class="adm-pill" data-status="new">🆕 Нові</button>
+            <button class="adm-pill" data-status="open">🔵 Відкриті</button>
+            <button class="adm-pill" data-status="in_progress">🔄 В роботі</button>
+            <button class="adm-pill" data-status="resolved">✅ Вирішені</button>
+          </div>
+          <span class="adm-count-label" id="ticket-count-label"></span>
+        </div>
+        <div id="tickets-list"><div class="adm-loading-big"></div></div>
+      </div>
+
+      <!-- ── NOTIFICATIONS ── -->
+      <div id="tab-notifications" class="adm-panel" style="display:none">
+        <div class="adm-notif-layout">
+
+          <div class="adm-card adm-notif-form-card">
+            <div class="adm-card-title">📤 Нове повідомлення</div>
+            <div class="adm-field">
+              <label>Тип</label>
+              <div class="adm-type-row" id="notif-type-row">
+                <button class="adm-type-btn active" data-type="info">ℹ️ Інфо</button>
+                <button class="adm-type-btn" data-type="success">✅ Успіх</button>
+                <button class="adm-type-btn" data-type="warning">⚠️ Увага</button>
+                <button class="adm-type-btn" data-type="error">🚨 Важливо</button>
+              </div>
+            </div>
+            <div class="adm-field">
+              <label>Заголовок</label>
+              <input type="text" class="adm-input" id="notif-title" placeholder="Заголовок повідомлення">
+            </div>
+            <div class="adm-field">
+              <label>Текст</label>
+              <textarea class="adm-input adm-textarea" id="notif-body" placeholder="Текст повідомлення…" rows="4"></textarea>
+            </div>
+            <div class="adm-field">
+              <label>Отримувачі</label>
+              <select class="adm-input adm-select" id="notif-target">
+                <option value="all">Всі користувачі</option>
+                <option value="free">Тільки FREE план</option>
+                <option value="pro">Тільки PRO план</option>
+                <option value="business">Тільки BUSINESS план</option>
+                <option value="paid">Всі платні (PRO + BUSINESS)</option>
+              </select>
+            </div>
+            <button class="adm-btn adm-btn-primary" id="send-notif-btn">📤 Надіслати</button>
+          </div>
+
+          <div class="adm-card adm-notif-list-card">
+            <div class="adm-card-title">📋 Попередні повідомлення</div>
+            <div id="notif-history"><div class="adm-loading"></div></div>
+          </div>
+
         </div>
       </div>
 
     </div>
   `
 
-  // ── State ─────────────────────────────────────────────────
-  let allUsers    = []
-  let allPayments = []
-  let activeTab   = 'overview'
-  let payFilter   = 'pending'
-
-  // ── Tabs ──────────────────────────────────────────────────
-  container.querySelector('#admin-tabs').addEventListener('click', (e) => {
-    const tab = e.target.closest('.admin-tab')
-    if (!tab) return
-    container.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'))
-    tab.classList.add('active')
-    activeTab = tab.dataset.tab
-    container.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none')
+  // ── Tab switching ─────────────────────────────────────────
+  container.querySelector('#adm-tabs').addEventListener('click', e => {
+    const btn = e.target.closest('.adm-tab')
+    if (!btn) return
+    activeTab = btn.dataset.tab
+    container.querySelectorAll('.adm-tab').forEach(b => b.classList.remove('active'))
+    btn.classList.add('active')
+    container.querySelectorAll('.adm-panel').forEach(p => p.style.display = 'none')
     container.querySelector(`#tab-${activeTab}`).style.display = 'block'
   })
 
-  container.querySelector('#pay-filter-tabs').addEventListener('click', (e) => {
-    const tab = e.target.closest('.filter-tab')
-    if (!tab) return
-    container.querySelectorAll('#pay-filter-tabs .filter-tab').forEach(t => t.classList.remove('active'))
-    tab.classList.add('active')
-    payFilter = tab.dataset.status
+  // ── Ticket filter pills ───────────────────────────────────
+  container.querySelector('#ticket-type-pills').addEventListener('click', e => {
+    const btn = e.target.closest('.adm-pill')
+    if (!btn) return
+    container.querySelectorAll('#ticket-type-pills .adm-pill').forEach(b => b.classList.remove('active'))
+    btn.classList.add('active')
+    ticketTypeFilter = btn.dataset.type
+    renderTickets()
+  })
+  container.querySelector('#ticket-status-pills').addEventListener('click', e => {
+    const btn = e.target.closest('.adm-pill')
+    if (!btn) return
+    container.querySelectorAll('#ticket-status-pills .adm-pill').forEach(b => b.classList.remove('active'))
+    btn.classList.add('active')
+    ticketStatusFilter = btn.dataset.status
+    renderTickets()
+  })
+
+  // ── Payment filter pills ───────────────────────────────────
+  container.querySelector('#pay-filter-tabs').addEventListener('click', e => {
+    const btn = e.target.closest('.adm-pill')
+    if (!btn) return
+    container.querySelectorAll('#pay-filter-tabs .adm-pill').forEach(b => b.classList.remove('active'))
+    btn.classList.add('active')
+    payFilter = btn.dataset.status
     renderPayments()
   })
 
-  // ── Load data (parallel) ──────────────────────────────────
-  const [users, payments] = await Promise.all([
-    loadAllUsers(),
-    loadAllPayments(),
-  ])
-  allUsers    = users
-  allPayments = payments
+  // ── Search/filter ─────────────────────────────────────────
+  container.querySelector('#users-search').addEventListener('input', renderUsersTable)
+  container.querySelector('#plan-filter').addEventListener('change', renderUsersTable)
+  container.querySelector('#status-filter').addEventListener('change', renderUsersTable)
+  container.querySelector('#export-csv-btn').addEventListener('click', exportCSV)
+  container.querySelector('#adm-refresh').addEventListener('click', loadAndRender)
 
-  renderOverview()
-  renderUsersTable()
-  renderPayments()
+  // ── Notifications ─────────────────────────────────────────
+  let notifType = 'info'
+  container.querySelector('#notif-type-row').addEventListener('click', e => {
+    const btn = e.target.closest('.adm-type-btn')
+    if (!btn) return
+    container.querySelectorAll('.adm-type-btn').forEach(b => b.classList.remove('active'))
+    btn.classList.add('active')
+    notifType = btn.dataset.type
+  })
 
-  // ── Search & filter ───────────────────────────────────────
-  container.querySelector('#users-search').addEventListener('input', () => renderUsersTable())
-  container.querySelector('#plan-filter').addEventListener('change', () => renderUsersTable())
+  container.querySelector('#send-notif-btn').addEventListener('click', async () => {
+    const title  = container.querySelector('#notif-title').value.trim()
+    const body   = container.querySelector('#notif-body').value.trim()
+    const target = container.querySelector('#notif-target').value
+    if (!title || !body) { showToast('Заповніть заголовок і текст', 'error'); return }
+
+    const btn = container.querySelector('#send-notif-btn')
+    btn.disabled = true; btn.textContent = '...'
+
+    try {
+      await addDoc(collection(db, 'announcements'), {
+        title, body, type: notifType, target,
+        createdAt: serverTimestamp(),
+        createdBy: user.uid,
+        createdByName: profile.name || user.email,
+      })
+      container.querySelector('#notif-title').value = ''
+      container.querySelector('#notif-body').value  = ''
+      showToast('Повідомлення надіслано ✓')
+      await loadAnnouncements()
+      renderAnnouncements()
+    } catch (err) {
+      console.error(err); showToast('Помилка надсилання', 'error')
+    } finally {
+      btn.disabled = false; btn.textContent = '📤 Надіслати'
+    }
+  })
+
+  // ── Load ──────────────────────────────────────────────────
+  async function loadAndRender() {
+    const [users, payments, announcements, tickets] = await Promise.all([
+      loadAllUsers(), loadAllPayments(), loadAnnouncements(), loadAllTickets()
+    ])
+    allUsers         = users
+    allPayments      = payments
+    allAnnouncements = announcements
+    allTickets       = tickets
+    renderOverview()
+    renderAnalytics()
+    renderUsersTable()
+    renderPayments()
+    renderTickets()
+    renderAnnouncements()
+  }
+
+  await loadAndRender()
 
   // ═══════════════════════════════════════════════════════════
   // LOADERS
   // ═══════════════════════════════════════════════════════════
-
   async function loadAllUsers() {
     try {
       const snap = await getDocs(query(collection(db, 'users'), orderBy('createdAt', 'desc')))
       return snap.docs.map(d => ({ id: d.id, ...d.data() }))
-    } catch (err) {
-      console.error('Admin: loadAllUsers', err)
-      return []
-    }
+    } catch (err) { console.error(err); return [] }
   }
 
   async function loadAllPayments() {
     try {
-      const snap = await getDocs(
-        query(collectionGroup(db, 'pendingPayments'), limit(200))
-      )
+      const snap = await getDocs(query(collectionGroup(db, 'pendingPayments'), limit(300)))
       return snap.docs
         .map(d => ({ id: d.id, userId: d.ref.parent.parent.id, ...d.data() }))
         .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
-    } catch (err) {
-      console.error('Admin: loadAllPayments', err)
-      return []
-    }
+    } catch (err) { console.error(err); return [] }
+  }
+
+  async function loadAllTickets() {
+    try {
+      const snap = await getDocs(query(collection(db, 'tickets'), orderBy('createdAt', 'desc'), limit(300)))
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    } catch (err) { console.error(err); return [] }
+  }
+
+  async function loadAnnouncements() {
+    try {
+      const snap = await getDocs(query(collection(db, 'announcements'), orderBy('createdAt', 'desc'), limit(50)))
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    } catch (err) { console.error(err); return [] }
   }
 
   // ═══════════════════════════════════════════════════════════
   // OVERVIEW
   // ═══════════════════════════════════════════════════════════
-
   function renderOverview() {
     const total    = allUsers.length
     const byPlan   = { free: 0, pro: 0, business: 0 }
     allUsers.forEach(u => { byPlan[u.plan || 'free']++ })
 
-    const pendingCount = allPayments.filter(p => p.status === 'pending').length
-    const proRevenue   = byPlan.pro * 299 + byPlan.business * 799
+    const paid        = byPlan.pro + byPlan.business
+    const revenue     = byPlan.pro * 299 + byPlan.business * 799
+    const pendingCnt  = allPayments.filter(p => p.status === 'pending').length
+    const banned      = allUsers.filter(u => u.isBanned).length
+    const conversion  = total > 0 ? ((paid / total) * 100).toFixed(1) : '0'
 
-    container.querySelector('#overview-stats').innerHTML = `
-      <div class="stat-card-admin">
-        <div class="stat-admin-icon">👥</div>
-        <div class="stat-admin-value">${total}</div>
-        <div class="stat-admin-label">Всього користувачів</div>
-      </div>
-      <div class="stat-card-admin card-blue">
-        <div class="stat-admin-icon">⭐</div>
-        <div class="stat-admin-value">${byPlan.pro + byPlan.business}</div>
-        <div class="stat-admin-label">Платних підписок</div>
-      </div>
-      <div class="stat-card-admin card-green">
-        <div class="stat-admin-icon">💰</div>
-        <div class="stat-admin-value">₴${proRevenue.toLocaleString('uk-UA')}</div>
-        <div class="stat-admin-label">Місячний дохід (орієнт.)</div>
-      </div>
-      <div class="stat-card-admin card-orange">
-        <div class="stat-admin-icon">⏳</div>
-        <div class="stat-admin-value">${pendingCount}</div>
-        <div class="stat-admin-label">Платежів на перевірці</div>
-      </div>
-    `
+    // New today
+    const todayStart = new Date(); todayStart.setHours(0,0,0,0)
+    const newToday = allUsers.filter(u => {
+      const d = u.createdAt?.toDate?.()
+      return d && d >= todayStart
+    }).length
 
-    // Recent users (last 5)
-    const recent = allUsers.slice(0, 5)
-    container.querySelector('#recent-users-list').innerHTML = recent.length === 0
-      ? '<div class="empty-row">Немає реєстрацій</div>'
-      : recent.map(u => `
-        <div class="recent-row">
-          <div class="recent-avatar">${(u.name || u.email || '?')[0].toUpperCase()}</div>
-          <div class="recent-info">
-            <div class="recent-name">${u.name || '—'}</div>
-            <div class="recent-email">${u.email || u.id}</div>
-          </div>
-          <span class="plan-pill" style="color:${(PLAN_META[u.plan]||PLAN_META.free).color};background:${(PLAN_META[u.plan]||PLAN_META.free).color}18">
-            ${(PLAN_META[u.plan]||PLAN_META.free).label}
-          </span>
+    const stats = [
+      { icon: '👥', value: total,      label: 'Всього юзерів',      color: '' },
+      { icon: '🆕', value: newToday,   label: 'Нових сьогодні',     color: 'blue' },
+      { icon: '⭐', value: paid,        label: 'Платних підписок',   color: 'purple' },
+      { icon: '💰', value: `₴${revenue.toLocaleString()}`, label: 'Місячний дохід', color: 'green' },
+      { icon: '⏳', value: pendingCnt,  label: 'Платежів на перевірці', color: 'orange' },
+      { icon: '📈', value: `${conversion}%`, label: 'Конверсія free→paid', color: '' },
+    ]
+
+    container.querySelector('#adm-stats').innerHTML = stats.map(s => `
+      <div class="adm-stat-card ${s.color ? 'adm-stat-' + s.color : ''}">
+        <div class="adm-stat-icon">${s.icon}</div>
+        <div class="adm-stat-val">${s.value}</div>
+        <div class="adm-stat-lbl">${s.label}</div>
+      </div>
+    `).join('')
+
+    // Recent registrations
+    const recent = allUsers.slice(0, 6)
+    container.querySelector('#recent-regs-list').innerHTML = recent.map(u => `
+      <div class="adm-user-row" style="cursor:pointer" data-uid="${u.id}">
+        <div class="adm-avatar">${(u.name || u.email || '?')[0].toUpperCase()}</div>
+        <div class="adm-user-info">
+          <div class="adm-user-name">${u.name || '—'}</div>
+          <div class="adm-user-email">${u.email || u.id}</div>
         </div>
-      `).join('')
+        <span class="adm-plan-pill" style="color:${(PLAN_META[u.plan]||PLAN_META.free).color};background:${(PLAN_META[u.plan]||PLAN_META.free).color}18">
+          ${(PLAN_META[u.plan]||PLAN_META.free).label}
+        </span>
+      </div>
+    `).join('')
+
+    container.querySelectorAll('#recent-regs-list .adm-user-row').forEach(row => {
+      row.addEventListener('click', () => openUserDetail(row.dataset.uid))
+    })
 
     // Plan breakdown bars
     container.querySelector('#plan-breakdown').innerHTML = Object.entries(byPlan).map(([plan, count]) => {
       const pct = total > 0 ? Math.round((count / total) * 100) : 0
-      const m   = PLAN_META[plan] || PLAN_META.free
+      const m   = PLAN_META[plan]
       return `
-        <div class="breakdown-row">
-          <span class="breakdown-label">${m.label}</span>
-          <div class="breakdown-bar-wrap">
-            <div class="breakdown-bar" style="width:${pct}%;background:${m.color}"></div>
+        <div class="adm-break-row">
+          <span class="adm-break-label" style="color:${m.color}">${m.label}</span>
+          <div class="adm-break-bar-wrap">
+            <div class="adm-break-bar" style="width:${pct}%;background:${m.color}"></div>
           </div>
-          <span class="breakdown-count">${count} (${pct}%)</span>
-        </div>
-      `
+          <span class="adm-break-count">${count} <span style="color:var(--text-muted)">(${pct}%)</span></span>
+        </div>`
     }).join('')
+
+    // Activity bars (registrations by day, last 7 days)
+    const days = []
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i); d.setHours(0,0,0,0)
+      const next = new Date(d); next.setDate(d.getDate() + 1)
+      const count = allUsers.filter(u => {
+        const created = u.createdAt?.toDate?.()
+        return created && created >= d && created < next
+      }).length
+      days.push({ label: d.toLocaleDateString('uk-UA', { weekday: 'short' }), count })
+    }
+    const maxDay = Math.max(...days.map(d => d.count), 1)
+    container.querySelector('#adm-activity-bars').innerHTML = days.map(d => `
+      <div class="adm-act-col">
+        <div class="adm-act-bar-wrap">
+          <div class="adm-act-bar" style="height:${Math.round((d.count / maxDay) * 100)}%"></div>
+        </div>
+        <div class="adm-act-count">${d.count}</div>
+        <div class="adm-act-label">${d.label}</div>
+      </div>
+    `).join('')
   }
 
   // ═══════════════════════════════════════════════════════════
-  // USERS
+  // ANALYTICS
   // ═══════════════════════════════════════════════════════════
+  function renderAnalytics() {
+    // Registrations last 30 days
+    const days = []
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i); d.setHours(0,0,0,0)
+      const next = new Date(d); next.setDate(d.getDate() + 1)
+      const count = allUsers.filter(u => {
+        const created = u.createdAt?.toDate?.()
+        return created && created >= d && created < next
+      }).length
+      days.push({ label: i % 5 === 0 ? d.toLocaleDateString('uk-UA', { day: 'numeric', month: 'short' }) : '', count })
+    }
+    const maxDay = Math.max(...days.map(d => d.count), 1)
+    container.querySelector('#reg-chart').innerHTML = `
+      <div class="adm-reg-chart">
+        ${days.map(d => `
+          <div class="adm-reg-col" title="${d.count} реєстрацій">
+            <div class="adm-reg-bar" style="height:${Math.round((d.count / maxDay) * 80) + 2}px"></div>
+            <div class="adm-reg-label">${d.label}</div>
+          </div>
+        `).join('')}
+      </div>`
 
+    // Revenue breakdown
+    const byPlan = { free: 0, pro: 0, business: 0 }
+    allUsers.forEach(u => { byPlan[u.plan || 'free']++ })
+    const totalRev = byPlan.pro * 299 + byPlan.business * 799
+    container.querySelector('#revenue-breakdown').innerHTML = `
+      <div class="adm-rev-total">₴${totalRev.toLocaleString('uk-UA')}<span style="font-size:13px;color:var(--text-muted)">/міс</span></div>
+      ${Object.entries(byPlan).filter(([p]) => p !== 'free').map(([plan, count]) => {
+        const rev = count * PLAN_META[plan].price
+        const pct = totalRev > 0 ? Math.round((rev / totalRev) * 100) : 0
+        return `
+          <div class="adm-break-row">
+            <span class="adm-break-label" style="color:${PLAN_META[plan].color}">${PLAN_META[plan].label}</span>
+            <div class="adm-break-bar-wrap">
+              <div class="adm-break-bar" style="width:${pct}%;background:${PLAN_META[plan].color}"></div>
+            </div>
+            <span class="adm-break-count">₴${rev.toLocaleString()}</span>
+          </div>`
+      }).join('')}`
+
+    // Conversion
+    const total = allUsers.length
+    const paid  = byPlan.pro + byPlan.business
+    const conv  = total > 0 ? ((paid / total) * 100).toFixed(1) : '0'
+    container.querySelector('#conversion-stats').innerHTML = `
+      <div class="adm-conv-ring">
+        <svg viewBox="0 0 100 100" class="adm-ring-svg">
+          <circle cx="50" cy="50" r="38" fill="none" stroke="var(--bg-tertiary)" stroke-width="10"/>
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#4F8EF7" stroke-width="10"
+            stroke-dasharray="${(parseFloat(conv) / 100 * 238).toFixed(1)} 238"
+            stroke-dashoffset="59.5" stroke-linecap="round"/>
+        </svg>
+        <div class="adm-ring-val">${conv}%</div>
+      </div>
+      <div class="adm-conv-row"><span>FREE</span><strong>${byPlan.free}</strong></div>
+      <div class="adm-conv-row"><span>Платні</span><strong style="color:#4F8EF7">${paid}</strong></div>
+      <div class="adm-conv-row"><span>Конверсія</span><strong style="color:#34D399">${conv}%</strong></div>`
+
+    // Niches
+    const niches = {}
+    allUsers.forEach(u => { const n = u.profession || 'other'; niches[n] = (niches[n] || 0) + 1 })
+    const nicheMap = { freelancer: '💻 Фрілансер', accountant: '📊 Бухгалтер', smm: '📱 SMM', beauty: '💅 Салон', other: '❓ Інша' }
+    const nicheTotal = Object.values(niches).reduce((a, b) => a + b, 0) || 1
+    container.querySelector('#niche-breakdown').innerHTML = Object.entries(niches)
+      .sort((a, b) => b[1] - a[1])
+      .map(([n, count]) => {
+        const pct = Math.round((count / nicheTotal) * 100)
+        return `
+          <div class="adm-break-row">
+            <span class="adm-break-label" style="font-size:12px">${nicheMap[n] || n}</span>
+            <div class="adm-break-bar-wrap">
+              <div class="adm-break-bar" style="width:${pct}%;background:#4F8EF7"></div>
+            </div>
+            <span class="adm-break-count">${count}</span>
+          </div>`
+      }).join('')
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // USERS TABLE
+  // ═══════════════════════════════════════════════════════════
   function renderUsersTable() {
-    const q          = container.querySelector('#users-search').value.toLowerCase().trim()
-    const planFilter = container.querySelector('#plan-filter').value
+    const q      = container.querySelector('#users-search').value.toLowerCase().trim()
+    const planF  = container.querySelector('#plan-filter').value
+    const statF  = container.querySelector('#status-filter').value
 
     let list = allUsers
-    if (q) list = list.filter(u =>
-      u.name?.toLowerCase().includes(q) ||
-      u.email?.toLowerCase().includes(q) ||
-      u.businessName?.toLowerCase().includes(q)
-    )
-    if (planFilter !== 'all') list = list.filter(u => (u.plan || 'free') === planFilter)
+    if (q) list = list.filter(u => u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q) || u.businessName?.toLowerCase().includes(q))
+    if (planF !== 'all') list = list.filter(u => (u.plan || 'free') === planF)
+    if (statF === 'active') list = list.filter(u => !u.isBanned)
+    if (statF === 'banned') list = list.filter(u => u.isBanned)
 
-    container.querySelector('#users-count-label').textContent = `${list.length} з ${allUsers.length}`
+    container.querySelector('#users-count-label').textContent = `${list.length} / ${allUsers.length}`
 
-    if (list.length === 0) {
-      container.querySelector('#users-table-wrap').innerHTML =
-        '<div class="empty-row" style="padding:48px;text-align:center">Користувачів не знайдено</div>'
+    if (!list.length) {
+      container.querySelector('#users-table-wrap').innerHTML = '<div class="adm-empty">Користувачів не знайдено</div>'
       return
     }
 
     container.querySelector('#users-table-wrap').innerHTML = `
-      <table class="admin-table">
-        <thead>
-          <tr>
-            <th>Користувач</th>
-            <th>Бізнес</th>
-            <th>Професія</th>
-            <th>План</th>
-            <th>Підписка до</th>
-            <th>Реєстрація</th>
-            <th>Дії</th>
-          </tr>
-        </thead>
+      <table class="adm-table">
+        <thead><tr>
+          <th>Користувач</th><th>Бізнес / ніша</th><th>План</th>
+          <th>Підписка до</th><th>Реєстрація</th><th>Дії</th>
+        </tr></thead>
         <tbody>
           ${list.map(u => {
-            const plan  = u.plan || 'free'
-            const pm    = PLAN_META[plan] || PLAN_META.free
-            const regDate = u.createdAt?.toDate ? u.createdAt.toDate().toLocaleDateString('uk-UA') : '—'
-            const subEnd  = u.subscriptionEnd
-              ? new Date(u.subscriptionEnd).toLocaleDateString('uk-UA')
-              : '—'
+            const pm     = PLAN_META[u.plan || 'free'] || PLAN_META.free
+            const regD   = u.createdAt?.toDate?.()?.toLocaleDateString('uk-UA') || '—'
+            const subEnd = u.subscriptionEnd ? new Date(u.subscriptionEnd).toLocaleDateString('uk-UA') : '—'
+            const banned = u.isBanned
             return `
-              <tr data-uid="${u.id}">
+              <tr class="${banned ? 'adm-row-banned' : ''}" data-uid="${u.id}" style="cursor:pointer">
                 <td>
-                  <div class="user-cell">
-                    <div class="user-cell-avatar">${(u.name || '?')[0].toUpperCase()}</div>
+                  <div class="adm-user-cell">
+                    <div class="adm-avatar ${banned ? 'adm-avatar-banned' : ''}">${(u.name || '?')[0].toUpperCase()}</div>
                     <div>
-                      <div class="user-cell-name">${u.name || '—'}</div>
-                      <div class="user-cell-email">${u.email || u.id}</div>
+                      <div class="adm-user-name">${u.name || '—'} ${u.isAdmin ? '<span class="adm-admin-badge">Admin</span>' : ''} ${banned ? '<span class="adm-banned-badge">Banned</span>' : ''}</div>
+                      <div class="adm-user-email">${u.email || u.id}</div>
                     </div>
                   </div>
                 </td>
-                <td>${u.businessName || '—'}</td>
-                <td>${profLabel(u.profession)}</td>
                 <td>
-                  <span class="plan-pill" style="color:${pm.color};background:${pm.color}18">${pm.label}</span>
+                  <div style="font-size:13px">${u.businessName || '—'}</div>
+                  <div style="font-size:11px;color:var(--text-muted)">${profLabel(u.profession)}</div>
                 </td>
-                <td>${subEnd}</td>
-                <td>${regDate}</td>
+                <td><span class="adm-plan-pill" style="color:${pm.color};background:${pm.color}18">${pm.label}</span></td>
+                <td style="font-size:13px">${subEnd}</td>
+                <td style="font-size:13px">${regD}</td>
                 <td>
-                  <div class="action-btns">
-                    <button class="action-btn btn-change-plan" data-uid="${u.id}" data-plan="${plan}" title="Змінити план">✏️ План</button>
+                  <div class="adm-action-btns" onclick="event.stopPropagation()">
+                    <button class="adm-action-btn" data-uid="${u.id}" data-plan="${u.plan||'free'}" data-action="plan">✏️ План</button>
                     ${!u.isAdmin
-                      ? `<button class="action-btn btn-make-admin" data-uid="${u.id}" title="Зробити адміном">🛡</button>`
-                      : `<span class="admin-label">🛡 Admin</span>`
+                      ? `<button class="adm-action-btn adm-btn-admin" data-uid="${u.id}" data-action="admin">🛡</button>`
+                      : ''
                     }
+                    <button class="adm-action-btn ${banned ? 'adm-btn-unban' : 'adm-btn-ban'}" data-uid="${u.id}" data-banned="${banned}" data-action="ban">
+                      ${banned ? '✓ Розбан' : '🚫'}
+                    </button>
                   </div>
                 </td>
-              </tr>
-            `
+              </tr>`
           }).join('')}
         </tbody>
-      </table>
-    `
+      </table>`
 
-    // Change plan
-    container.querySelectorAll('.btn-change-plan').forEach(btn => {
-      btn.addEventListener('click', () => openChangePlanModal(btn.dataset.uid, btn.dataset.plan))
+    // Row click → detail
+    container.querySelectorAll('#users-table-wrap tbody tr').forEach(row => {
+      row.addEventListener('click', () => openUserDetail(row.dataset.uid))
     })
 
-    // Make admin
-    container.querySelectorAll('.btn-make-admin').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        if (!confirm('Зробити цього користувача адміністратором?')) return
-        await updateDoc(doc(db, 'users', btn.dataset.uid), { isAdmin: true })
-        const u = allUsers.find(u => u.id === btn.dataset.uid)
-        if (u) u.isAdmin = true
-        renderUsersTable()
+    // Action buttons
+    container.querySelectorAll('.adm-action-btn').forEach(btn => {
+      btn.addEventListener('click', async e => {
+        e.stopPropagation()
+        const action = btn.dataset.action
+        if (action === 'plan')  openChangePlanModal(btn.dataset.uid, btn.dataset.plan)
+        if (action === 'admin') await makeAdmin(btn.dataset.uid)
+        if (action === 'ban')   await toggleBan(btn.dataset.uid, btn.dataset.banned === 'true')
       })
     })
   }
 
-  // ── Change plan modal ─────────────────────────────────────
-  function openChangePlanModal(uid, currentPlan) {
-    const user = allUsers.find(u => u.id === uid)
-    if (!user) return
+  // ── User detail modal ─────────────────────────────────────
+  async function openUserDetail(uid) {
+    const u = allUsers.find(u => u.id === uid)
+    if (!u) return
+
+    // Load businesses
+    let businesses = []
+    try {
+      const snap = await getDocs(collection(db, 'users', uid, 'businesses'))
+      businesses = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    } catch {}
+
+    const pm = PLAN_META[u.plan || 'free'] || PLAN_META.free
+    const regD = u.createdAt?.toDate?.()?.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' }) || '—'
+    const modules = u.selectedModules || []
 
     const modal = document.createElement('div')
-    modal.className = 'modal-overlay'
+    modal.className = 'adm-overlay'
     modal.innerHTML = `
-      <div class="modal" style="max-width:400px">
-        <div class="modal-header">
-          <h2 class="modal-title">Змінити план</h2>
-          <button class="modal-close" id="cp-close">✕</button>
+      <div class="adm-modal adm-modal-lg">
+        <div class="adm-modal-head">
+          <h2>👤 Картка користувача</h2>
+          <button class="adm-modal-close" id="ud-close">✕</button>
         </div>
-        <div class="modal-body">
-          <div style="margin-bottom:16px">
-            <div style="font-weight:600;margin-bottom:4px">${user.name || user.email}</div>
-            <div style="font-size:13px;color:var(--text-secondary)">Поточний план: <strong>${currentPlan.toUpperCase()}</strong></div>
+        <div class="adm-modal-body adm-detail-body">
+
+          <!-- Left: profile -->
+          <div class="adm-detail-left">
+            <div class="adm-detail-avatar">${(u.name || '?')[0].toUpperCase()}</div>
+            <div class="adm-detail-name">${u.name || '—'}</div>
+            <div class="adm-detail-email">${u.email || u.id}</div>
+            <span class="adm-plan-pill adm-plan-pill-lg" style="color:${pm.color};background:${pm.color}18">${pm.label}</span>
+            ${u.isBanned ? '<div class="adm-banned-badge" style="margin-top:8px">🚫 Забанований</div>' : ''}
+
+            <div class="adm-detail-meta">
+              ${metaRow('📞', 'Телефон', u.phone)}
+              ${metaRow('🏙', 'Місто', u.city)}
+              ${metaRow('💼', 'Бізнес', u.businessName)}
+              ${metaRow('🎯', 'Ніша', profLabel(u.profession))}
+              ${metaRow('📅', 'Зареєстрований', regD)}
+              ${metaRow('🔑', 'UID', `<span style="font-family:monospace;font-size:10px">${u.id}</span>`)}
+            </div>
+
+            <div class="adm-detail-actions">
+              <button class="adm-btn adm-btn-primary" data-uid="${uid}" data-plan="${u.plan||'free'}" id="ud-change-plan">✏️ Змінити план</button>
+              <button class="adm-btn ${u.isBanned ? 'adm-btn-success' : 'adm-btn-danger'}" id="ud-ban-btn">
+                ${u.isBanned ? '✓ Розбанити' : '🚫 Забанити'}
+              </button>
+              ${!u.isAdmin ? `<button class="adm-btn adm-btn-ghost" id="ud-admin-btn">🛡 Зробити адміном</button>` : '<div class="adm-admin-badge" style="margin-top:8px">🛡 Адміністратор</div>'}
+            </div>
           </div>
 
-          <div class="field">
-            <label>Новий план</label>
-            <select class="input" id="cp-plan">
-              <option value="free"     ${currentPlan==='free'     ? 'selected' : ''}>FREE — безкоштовно</option>
-              <option value="pro"      ${currentPlan==='pro'      ? 'selected' : ''}>PRO — ₴299/міс</option>
-              <option value="business" ${currentPlan==='business' ? 'selected' : ''}>BUSINESS — ₴799/міс</option>
-            </select>
+          <!-- Right: businesses + modules -->
+          <div class="adm-detail-right">
+            <h3 class="adm-detail-section">🏢 Бізнеси (${businesses.length + 1})</h3>
+            <div class="adm-biz-list">
+              <div class="adm-biz-item adm-biz-main">
+                <span class="adm-biz-icon">🏠</span>
+                <div>
+                  <div class="adm-biz-name">${u.businessName || 'Основний бізнес'}</div>
+                  <div class="adm-biz-niche">${profLabel(u.profession)}</div>
+                </div>
+                <span class="adm-biz-badge">Основний</span>
+              </div>
+              ${businesses.map(b => `
+                <div class="adm-biz-item">
+                  <span class="adm-biz-icon">${nicheIcon(b.profession)}</span>
+                  <div>
+                    <div class="adm-biz-name">${b.name || '—'}</div>
+                    <div class="adm-biz-niche">${profLabel(b.profession)}</div>
+                  </div>
+                </div>`).join('')}
+            </div>
+
+            <h3 class="adm-detail-section" style="margin-top:20px">🧩 Активні модулі (${modules.length})</h3>
+            <div class="adm-modules-wrap">
+              ${modules.length ? modules.map(id => {
+                const icons = { dashboard:'⊞',clients:'👥',projects:'📁',invoices:'📄',contracts:'📝',tasks:'✓',timer:'⏱',finances:'💰','tax-calendar':'📅',appointments:'🗓',services:'💅','content-plan':'📱',accounts:'🔗',passwords:'🔑',notes:'🗒',documents:'📁','api-keys':'🔗' }
+                const labels = { dashboard:'Дашборд',clients:'Клієнти',projects:'Проекти',invoices:'Рахунки',contracts:'Договори',tasks:'Задачі',timer:'Таймер',finances:'Фінанси','tax-calendar':'Податки',appointments:'Розклад',services:'Послуги','content-plan':'Контент',accounts:'Акаунти',passwords:'Паролі',notes:'Нотатки',documents:'Документи','api-keys':'API' }
+                return `<span class="adm-mod-chip">${icons[id]||'□'} ${labels[id]||id}</span>`
+              }).join('') : '<span style="color:var(--text-muted);font-size:13px">Немає модулів</span>'}
+            </div>
+
+            ${u.subscriptionEnd ? `
+              <h3 class="adm-detail-section" style="margin-top:20px">💳 Підписка</h3>
+              <div class="adm-detail-meta">
+                ${metaRow('📅', 'Діє до', new Date(u.subscriptionEnd).toLocaleDateString('uk-UA'))}
+                ${metaRow('🔄', 'Статус', u.subscriptionStatus === 'active' ? '<span style="color:#34D399">Активна</span>' : '<span style="color:#94A3B8">Неактивна</span>')}
+              </div>` : ''}
           </div>
 
-          <div class="field">
-            <label>Підписка до (дата)</label>
-            <input type="date" class="input" id="cp-end"
-              value="${user.subscriptionEnd ? user.subscriptionEnd.split('T')[0] : nextMonth()}" />
-          </div>
+        </div>
+      </div>`
 
-          <div class="field">
-            <label>Причина / коментар</label>
-            <input type="text" class="input" id="cp-reason" placeholder="Вручну, промо, тест..." />
+    document.body.appendChild(modal)
+    modal.querySelector('#ud-close').addEventListener('click', () => modal.remove())
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove() })
+    modal.querySelector('#ud-change-plan')?.addEventListener('click', () => { modal.remove(); openChangePlanModal(uid, u.plan || 'free') })
+    modal.querySelector('#ud-ban-btn')?.addEventListener('click', async () => { modal.remove(); await toggleBan(uid, u.isBanned) })
+    modal.querySelector('#ud-admin-btn')?.addEventListener('click', async () => { modal.remove(); await makeAdmin(uid) })
+  }
+
+  function metaRow(icon, label, val) {
+    if (!val) return ''
+    return `<div class="adm-meta-row"><span>${icon}</span><span class="adm-meta-label">${label}</span><span class="adm-meta-val">${val}</span></div>`
+  }
+
+  // ── Make admin ────────────────────────────────────────────
+  async function makeAdmin(uid) {
+    if (!confirm('Зробити цього користувача адміністратором?')) return
+    try {
+      await updateDoc(doc(db, 'users', uid), { isAdmin: true })
+      const u = allUsers.find(u => u.id === uid); if (u) u.isAdmin = true
+      renderUsersTable(); showToast('Права адміна надано ✓')
+    } catch (err) { console.error(err); showToast('Помилка', 'error') }
+  }
+
+  // ── Ban / unban ───────────────────────────────────────────
+  async function toggleBan(uid, isBanned) {
+    const action = isBanned ? 'розбанити' : 'забанити'
+    if (!confirm(`Ви впевнені що хочете ${action} цього користувача?`)) return
+    try {
+      await updateDoc(doc(db, 'users', uid), { isBanned: !isBanned, updatedAt: serverTimestamp() })
+      const u = allUsers.find(u => u.id === uid); if (u) u.isBanned = !isBanned
+      renderUsersTable(); renderOverview()
+      showToast(isBanned ? 'Користувача розбановано ✓' : 'Користувача забановано 🚫')
+    } catch (err) { console.error(err); showToast('Помилка', 'error') }
+  }
+
+  // ── Change plan modal ─────────────────────────────────────
+  function openChangePlanModal(uid, currentPlan) {
+    const u = allUsers.find(u => u.id === uid); if (!u) return
+
+    const modal = document.createElement('div')
+    modal.className = 'adm-overlay'
+    modal.innerHTML = `
+      <div class="adm-modal" style="max-width:420px">
+        <div class="adm-modal-head">
+          <h2>✏️ Змінити план</h2>
+          <button class="adm-modal-close" id="cp-close">✕</button>
+        </div>
+        <div class="adm-modal-body" style="gap:14px">
+          <div class="adm-user-cell" style="padding:12px;background:var(--bg-tertiary);border-radius:var(--radius-md)">
+            <div class="adm-avatar">${(u.name || '?')[0].toUpperCase()}</div>
+            <div>
+              <div class="adm-user-name">${u.name || '—'}</div>
+              <div class="adm-user-email">${u.email || u.id}</div>
+            </div>
+          </div>
+          <div class="adm-plan-picker">
+            ${Object.entries(PLAN_META).map(([plan, m]) => `
+              <button class="adm-plan-pick ${currentPlan === plan ? 'active' : ''}" data-plan="${plan}" style="--pc:${m.color}">
+                <div class="adm-plan-pick-name" style="color:${m.color}">${m.label}</div>
+                <div class="adm-plan-pick-price">₴${m.price}/міс</div>
+              </button>`).join('')}
+          </div>
+          <div class="adm-field">
+            <label>Підписка до</label>
+            <input type="date" class="adm-input" id="cp-end" value="${u.subscriptionEnd ? u.subscriptionEnd.split('T')[0] : nextMonth()}">
+          </div>
+          <div class="adm-field">
+            <label>Коментар (необов'язково)</label>
+            <input type="text" class="adm-input" id="cp-reason" placeholder="Вручну, промо, тест...">
           </div>
         </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" id="cp-cancel">Скасувати</button>
-          <button class="btn btn-primary" id="cp-save">Зберегти</button>
+        <div class="adm-modal-foot">
+          <button class="adm-btn adm-btn-ghost" id="cp-cancel">Скасувати</button>
+          <button class="adm-btn adm-btn-primary" id="cp-save">Зберегти</button>
         </div>
-      </div>
-    `
+      </div>`
+
     document.body.appendChild(modal)
     modal.querySelector('#cp-close').addEventListener('click',  () => modal.remove())
     modal.querySelector('#cp-cancel').addEventListener('click', () => modal.remove())
-    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove() })
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove() })
+
+    let selectedPlan = currentPlan
+    modal.querySelectorAll('.adm-plan-pick').forEach(btn => {
+      btn.addEventListener('click', () => {
+        modal.querySelectorAll('.adm-plan-pick').forEach(b => b.classList.remove('active'))
+        btn.classList.add('active')
+        selectedPlan = btn.dataset.plan
+      })
+    })
 
     modal.querySelector('#cp-save').addEventListener('click', async () => {
-      const newPlan = modal.querySelector('#cp-plan').value
       const endDate = modal.querySelector('#cp-end').value
       const btn     = modal.querySelector('#cp-save')
-      btn.disabled  = true
-      btn.textContent = '...'
-
+      btn.disabled  = true; btn.textContent = '...'
       try {
-        const updateData = {
-          plan:               newPlan,
-          subscriptionEnd:    endDate ? new Date(endDate).toISOString() : null,
-          subscriptionStatus: newPlan === 'free' ? 'inactive' : 'active',
-          updatedAt:          serverTimestamp(),
-          adminNote:          modal.querySelector('#cp-reason').value.trim() || null,
+        const upd = {
+          plan: selectedPlan, subscriptionEnd: endDate ? new Date(endDate).toISOString() : null,
+          subscriptionStatus: selectedPlan === 'free' ? 'inactive' : 'active',
+          updatedAt: serverTimestamp(), adminNote: modal.querySelector('#cp-reason').value.trim() || null,
         }
-        await updateDoc(doc(db, 'users', uid), updateData)
-
-        // Оновлюємо локальний список
+        await updateDoc(doc(db, 'users', uid), upd)
         const idx = allUsers.findIndex(u => u.id === uid)
-        if (idx !== -1) Object.assign(allUsers[idx], updateData)
-
-        // Якщо це поточний юзер — оновлюємо кеш
-        if (uid === user.uid) updateProfileCache(uid, updateData)
-
-        modal.remove()
-        renderUsersTable()
-        renderOverview()
-        showToast(`План ${user.name || uid} змінено на ${newPlan.toUpperCase()}`)
-      } catch (err) {
-        console.error(err)
-        btn.disabled = false
-        btn.textContent = 'Зберегти'
-      }
+        if (idx !== -1) Object.assign(allUsers[idx], upd)
+        if (uid === user.uid) updateProfileCache(uid, upd)
+        modal.remove(); renderUsersTable(); renderOverview(); renderAnalytics()
+        showToast(`План змінено на ${selectedPlan.toUpperCase()} ✓`)
+      } catch (err) { console.error(err); btn.disabled = false; btn.textContent = 'Зберегти' }
     })
   }
 
   // ═══════════════════════════════════════════════════════════
   // PAYMENTS
   // ═══════════════════════════════════════════════════════════
-
   function renderPayments() {
     const filtered = allPayments.filter(p => p.status === payFilter)
-    const el       = container.querySelector('#payments-list')
+    const el = container.querySelector('#payments-list')
+    container.querySelector('#pay-count-label').textContent = `${filtered.length} записів`
 
-    if (filtered.length === 0) {
-      el.innerHTML = `<div class="empty-row" style="padding:48px;text-align:center">
-        ${payFilter === 'pending' ? 'Немає платежів на перевірці' : 'Немає записів'}
-      </div>`
+    if (!filtered.length) {
+      el.innerHTML = `<div class="adm-empty">${payFilter === 'pending' ? 'Немає платежів на перевірці' : 'Немає записів'}</div>`
       return
     }
 
     el.innerHTML = `
-      <table class="admin-table">
-        <thead>
-          <tr>
-            <th>Користувач</th>
-            <th>План</th>
-            <th>Сума</th>
-            <th>Валюта</th>
-            <th>Крипто сума</th>
-            <th>Дата</th>
-            <th>ID платежу</th>
-            ${payFilter === 'pending' ? '<th>Дії</th>' : '<th>Статус</th>'}
-          </tr>
-        </thead>
+      <table class="adm-table">
+        <thead><tr>
+          <th>Користувач</th><th>План</th><th>Сума</th><th>Крипто</th><th>Дата</th><th>ID платежу</th>
+          <th>${payFilter === 'pending' ? 'Дії' : 'Статус'}</th>
+        </tr></thead>
         <tbody>
           ${filtered.map(p => {
             const u    = allUsers.find(u => u.id === p.userId)
-            const date = p.createdAt?.toDate ? p.createdAt.toDate().toLocaleDateString('uk-UA') : '—'
+            const date = p.createdAt?.toDate?.()?.toLocaleDateString('uk-UA') || '—'
+            const pm   = PLAN_META[p.planId||'pro'] || PLAN_META.pro
             return `
               <tr>
                 <td>
-                  <div class="user-cell">
-                    <div class="user-cell-avatar" style="width:30px;height:30px;font-size:12px">
-                      ${(u?.name || '?')[0].toUpperCase()}
-                    </div>
+                  <div class="adm-user-cell">
+                    <div class="adm-avatar" style="width:30px;height:30px;font-size:12px">${(u?.name||'?')[0].toUpperCase()}</div>
                     <div>
-                      <div class="user-cell-name" style="font-size:13px">${u?.name || '—'}</div>
-                      <div class="user-cell-email">${u?.email || p.userId.slice(0,8)}</div>
+                      <div class="adm-user-name">${u?.name||'—'}</div>
+                      <div class="adm-user-email">${u?.email||p.userId.slice(0,12)}</div>
                     </div>
                   </div>
                 </td>
-                <td><span class="plan-pill" style="color:${PLAN_META[p.planId||'pro'].color};background:${PLAN_META[p.planId||'pro'].color}18">${(p.planId||'pro').toUpperCase()}</span></td>
+                <td><span class="adm-plan-pill" style="color:${pm.color};background:${pm.color}18">${pm.label}</span></td>
                 <td><strong>₴${p.amount}</strong></td>
-                <td>${p.currency || '—'}</td>
-                <td style="font-family:monospace;font-size:12px">${p.cryptoAmount || '—'}</td>
+                <td style="font-family:monospace;font-size:12px;color:var(--text-muted)">${p.cryptoAmount ? `${p.cryptoAmount} ${p.currency||''}` : '—'}</td>
                 <td>${date}</td>
-                <td style="font-family:monospace;font-size:11px;color:var(--text-muted)">${p.paymentId?.slice(0,16) || p.id.slice(0,16)}...</td>
+                <td style="font-family:monospace;font-size:11px;color:var(--text-muted)">${(p.paymentId||p.id).slice(0,16)}…</td>
                 <td>
                   ${payFilter === 'pending'
-                    ? `<div class="action-btns">
-                        <button class="action-btn btn-approve" data-pid="${p.id}" data-uid="${p.userId}" data-plan="${p.planId}" title="Підтвердити">✓ Підтвердити</button>
-                        <button class="action-btn btn-reject"  data-pid="${p.id}" data-uid="${p.userId}" title="Відхилити">✗</button>
+                    ? `<div class="adm-action-btns">
+                        <button class="adm-action-btn adm-btn-approve" data-pid="${p.id}" data-uid="${p.userId}" data-plan="${p.planId||'pro'}">✓ Підтвердити</button>
+                        <button class="adm-action-btn adm-btn-rej"     data-pid="${p.id}" data-uid="${p.userId}">✗</button>
                        </div>`
-                    : `<span class="status-chip status-${p.status}">${p.status === 'approved' ? '✓ Підтверджено' : '✗ Відхилено'}</span>`
+                    : `<span class="adm-status-chip adm-status-${p.status}">${p.status==='approved'?'✓ Підтверджено':'✗ Відхилено'}</span>`
                   }
                 </td>
-              </tr>
-            `
+              </tr>`
           }).join('')}
         </tbody>
-      </table>
-    `
+      </table>`
 
-    // Approve payment
-    el.querySelectorAll('.btn-approve').forEach(btn => {
+    el.querySelectorAll('.adm-btn-approve').forEach(btn => {
       btn.addEventListener('click', async () => {
         if (!confirm('Підтвердити платіж і активувати підписку?')) return
-        btn.disabled = true
-        btn.textContent = '...'
+        btn.disabled = true; btn.textContent = '...'
         try {
-          const endDate = new Date()
-          endDate.setMonth(endDate.getMonth() + 1)
-
+          const endDate = new Date(); endDate.setMonth(endDate.getMonth() + 1)
           await Promise.all([
-            // Оновлюємо план юзера
-            updateDoc(doc(db, 'users', btn.dataset.uid), {
-              plan:               btn.dataset.plan || 'pro',
-              subscriptionEnd:    endDate.toISOString(),
-              subscriptionStatus: 'active',
-              updatedAt:          serverTimestamp(),
-            }),
-            // Оновлюємо статус платежу
-            updateDoc(doc(db, 'users', btn.dataset.uid, 'pendingPayments', btn.dataset.pid), {
-              status:     'approved',
-              approvedAt: serverTimestamp(),
-              approvedBy: user.uid,
-            }),
+            updateDoc(doc(db, 'users', btn.dataset.uid), { plan: btn.dataset.plan||'pro', subscriptionEnd: endDate.toISOString(), subscriptionStatus: 'active', updatedAt: serverTimestamp() }),
+            updateDoc(doc(db, 'users', btn.dataset.uid, 'pendingPayments', btn.dataset.pid), { status: 'approved', approvedAt: serverTimestamp(), approvedBy: user.uid }),
           ])
-
-          // Оновлюємо локально
-          const p = allPayments.find(p => p.id === btn.dataset.pid)
-          if (p) p.status = 'approved'
-          const u = allUsers.find(u => u.id === btn.dataset.uid)
-          if (u) { u.plan = btn.dataset.plan || 'pro'; u.subscriptionStatus = 'active' }
-
-          renderPayments()
-          renderOverview()
-          showToast('Підписку активовано!')
-        } catch (err) {
-          console.error(err)
-          btn.disabled = false
-          btn.textContent = '✓ Підтвердити'
-        }
+          const p = allPayments.find(p => p.id === btn.dataset.pid); if (p) p.status = 'approved'
+          const u = allUsers.find(u => u.id === btn.dataset.uid); if (u) { u.plan = btn.dataset.plan||'pro'; u.subscriptionStatus = 'active' }
+          renderPayments(); renderOverview(); renderAnalytics()
+          showToast('Підписку активовано ✓')
+        } catch (err) { console.error(err); btn.disabled = false; btn.textContent = '✓ Підтвердити' }
       })
     })
 
-    // Reject payment
-    el.querySelectorAll('.btn-reject').forEach(btn => {
+    el.querySelectorAll('.adm-btn-rej').forEach(btn => {
       btn.addEventListener('click', async () => {
         if (!confirm('Відхилити цей платіж?')) return
         try {
-          await updateDoc(doc(db, 'users', btn.dataset.uid, 'pendingPayments', btn.dataset.pid), {
-            status:     'rejected',
-            rejectedAt: serverTimestamp(),
-            rejectedBy: user.uid,
-          })
-          const p = allPayments.find(p => p.id === btn.dataset.pid)
-          if (p) p.status = 'rejected'
-          renderPayments()
-          renderOverview()
-        } catch (err) {
-          console.error(err)
-        }
+          await updateDoc(doc(db, 'users', btn.dataset.uid, 'pendingPayments', btn.dataset.pid), { status: 'rejected', rejectedAt: serverTimestamp(), rejectedBy: user.uid })
+          const p = allPayments.find(p => p.id === btn.dataset.pid); if (p) p.status = 'rejected'
+          renderPayments(); renderOverview()
+        } catch (err) { console.error(err) }
       })
     })
   }
 
-  // ── Toast ─────────────────────────────────────────────────
-  function showToast(msg) {
-    const t = document.createElement('div')
-    t.className = 'admin-toast'
-    t.textContent = msg
-    document.body.appendChild(t)
-    setTimeout(() => t.classList.add('show'), 10)
-    setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300) }, 2500)
+  // ═══════════════════════════════════════════════════════════
+  // SUPPORT TICKETS
+  // ═══════════════════════════════════════════════════════════
+  function renderTickets() {
+    let list = allTickets
+    if (ticketTypeFilter   !== 'all') list = list.filter(t => t.type   === ticketTypeFilter)
+    if (ticketStatusFilter !== 'all') list = list.filter(t => t.status === ticketStatusFilter)
+
+    const el = container.querySelector('#tickets-list')
+    container.querySelector('#ticket-count-label').textContent = `${list.length} заявок`
+
+    if (!list.length) {
+      el.innerHTML = '<div class="adm-empty">Заявок не знайдено</div>'
+      return
+    }
+
+    el.innerHTML = `
+      <table class="adm-table">
+        <thead><tr>
+          <th>Тип</th><th>Заголовок</th><th>Від</th>
+          <th>Пріоритет</th><th>Статус</th><th>Дата</th><th>Відп.</th>
+        </tr></thead>
+        <tbody>
+          ${list.map(t => {
+            const tm = TICKET_TYPE_META[t.type]         || TICKET_TYPE_META.support
+            const sm = TICKET_STATUS_META[t.status]     || TICKET_STATUS_META.new
+            const pm = TICKET_PRIORITY_META[t.priority] || TICKET_PRIORITY_META.medium
+            const date = t.createdAt?.toDate?.()?.toLocaleDateString('uk-UA') || '—'
+            const replyCnt = t.replies?.length || 0
+            const isNew = t.status === 'new'
+            return `
+              <tr style="cursor:pointer${isNew ? ';font-weight:600' : ''}" data-tid="${t.id}">
+                <td><span class="adm-plan-pill" style="color:${tm.color};background:${tm.bg}">${tm.icon} ${tm.label}</span></td>
+                <td style="max-width:260px">
+                  <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t.title)}</div>
+                  ${isNew ? '<span style="font-size:10px;color:#4F8EF7;font-weight:800">● НОВА</span>' : ''}
+                </td>
+                <td>
+                  <div style="font-size:13px">${esc(t.userName || '—')}</div>
+                  <div style="font-size:11px;color:var(--text-muted)">${esc(t.userEmail || '')}</div>
+                </td>
+                <td style="color:${pm.color};font-size:12px;font-weight:700">● ${pm.label}</td>
+                <td style="color:${sm.color};font-size:12px;font-weight:700">${sm.icon} ${sm.label}</td>
+                <td style="font-size:12px">${date}</td>
+                <td style="font-size:12px;color:var(--text-muted)">${replyCnt > 0 ? `💬 ${replyCnt}` : '—'}</td>
+              </tr>`
+          }).join('')}
+        </tbody>
+      </table>`
+
+    el.querySelectorAll('tbody tr').forEach(row => {
+      row.addEventListener('click', () => openTicketDetailAdmin(row.dataset.tid))
+    })
+  }
+
+  function openTicketDetailAdmin(ticketId) {
+    const t = allTickets.find(t => t.id === ticketId)
+    if (!t) return
+    const tm = TICKET_TYPE_META[t.type]         || TICKET_TYPE_META.support
+    const sm = TICKET_STATUS_META[t.status]     || TICKET_STATUS_META.new
+    const pm = TICKET_PRIORITY_META[t.priority] || TICKET_PRIORITY_META.medium
+    const date = t.createdAt?.toDate?.()?.toLocaleString('uk-UA') || '—'
+
+    const modal = document.createElement('div')
+    modal.className = 'adm-overlay'
+    modal.innerHTML = `
+      <div class="adm-modal adm-modal-lg" style="max-width:700px">
+        <div class="adm-modal-head" style="flex-wrap:wrap;gap:8px">
+          <span class="adm-plan-pill" style="color:${tm.color};background:${tm.bg};font-size:12px">${tm.icon} ${tm.label}</span>
+          <h2 style="font-family:var(--font-display);font-size:17px;font-weight:800;flex:1;min-width:0">${esc(t.title)}</h2>
+          <button class="adm-modal-close" id="tad-close">✕</button>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 24px;border-bottom:1px solid var(--border);flex-wrap:wrap">
+          <span style="color:${sm.color};font-size:12px;font-weight:700">${sm.icon} ${sm.label}</span>
+          <span style="color:${pm.color};font-size:12px;font-weight:700">● ${pm.label}</span>
+          <span style="font-size:12px;color:var(--text-muted)">${esc(t.userName||'—')} · ${esc(t.userEmail||'')}</span>
+          <span style="font-size:12px;color:var(--text-muted)">${date}</span>
+          <div style="margin-left:auto;display:flex;gap:6px" id="tad-status-btns">
+            ${Object.entries(TICKET_STATUS_META).map(([id, m]) => `
+              <button class="adm-action-btn ${t.status === id ? 'adm-btn-approve' : ''}" data-set-status="${id}" style="font-size:11px">${m.icon} ${m.label}</button>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="adm-modal-body" style="max-height:420px;overflow-y:auto;gap:12px;padding:16px 24px" id="tad-thread">
+          <!-- Original -->
+          <div style="background:var(--bg-tertiary);border-radius:var(--radius-lg);padding:14px">
+            <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--text-muted)">${esc(t.userName||'Користувач')}</div>
+            <div style="font-size:14px;line-height:1.55;white-space:pre-wrap;word-break:break-word">${esc(t.description)}</div>
+          </div>
+          ${(t.replies || []).map(r => `
+            <div style="background:${r.fromAdmin ? 'rgba(79,142,247,.08)' : 'var(--bg-tertiary)'};border:1px solid ${r.fromAdmin ? 'rgba(79,142,247,.2)' : 'var(--border)'};border-radius:var(--radius-lg);padding:14px;${r.fromAdmin ? 'margin-left:24px' : 'margin-right:24px'}">
+              <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:${r.fromAdmin ? 'var(--accent-blue)' : 'var(--text-muted)'}">
+                ${r.fromAdmin ? '🛡 ' : ''}${esc(r.authorName || (r.fromAdmin ? 'Адмін' : 'Користувач'))}
+                ${r.fromAdmin ? '<span style="font-size:10px;background:rgba(79,142,247,.15);color:var(--accent-blue);padding:1px 6px;border-radius:99px;margin-left:4px">Адмін</span>' : ''}
+              </div>
+              <div style="font-size:14px;line-height:1.55;white-space:pre-wrap;word-break:break-word">${esc(r.text)}</div>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:6px">${r.createdAt?.toDate?.()?.toLocaleString('uk-UA') || '—'}</div>
+            </div>
+          `).join('')}
+        </div>
+
+        <div class="adm-modal-foot" style="flex-direction:column;gap:10px;align-items:stretch">
+          <textarea class="adm-input adm-textarea" id="tad-reply" placeholder="Написати відповідь користувачеві…" rows="3" style="min-height:70px"></textarea>
+          <div style="display:flex;gap:10px;justify-content:flex-end">
+            <button class="adm-btn adm-btn-ghost" id="tad-cancel">Закрити</button>
+            <button class="adm-btn adm-btn-primary" id="tad-send">💬 Надіслати відповідь</button>
+          </div>
+        </div>
+      </div>`
+
+    document.body.appendChild(modal)
+    modal.querySelector('#tad-close').addEventListener('click',  () => modal.remove())
+    modal.querySelector('#tad-cancel').addEventListener('click', () => modal.remove())
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove() })
+
+    // Status change
+    modal.querySelector('#tad-status-btns').addEventListener('click', async e => {
+      const btn = e.target.closest('[data-set-status]')
+      if (!btn) return
+      const newStatus = btn.dataset.setStatus
+      try {
+        await updateDoc(doc(db, 'tickets', ticketId), { status: newStatus, updatedAt: serverTimestamp() })
+        const idx = allTickets.findIndex(t => t.id === ticketId)
+        if (idx !== -1) allTickets[idx].status = newStatus
+        modal.remove()
+        renderTickets()
+        showToast(`Статус змінено: ${TICKET_STATUS_META[newStatus]?.label}`)
+      } catch (err) { console.error(err) }
+    })
+
+    // Send reply
+    modal.querySelector('#tad-send').addEventListener('click', async () => {
+      const text = modal.querySelector('#tad-reply').value.trim()
+      if (!text) { modal.querySelector('#tad-reply').focus(); return }
+      const btn = modal.querySelector('#tad-send')
+      btn.disabled = true; btn.textContent = '...'
+      try {
+        const reply = {
+          text,
+          fromAdmin: true,
+          authorName: profile.name || user.email,
+          createdAt: new Date(),
+        }
+        const newStatus = t.status === 'new' || t.status === 'open' ? 'in_progress' : t.status
+        await updateDoc(doc(db, 'tickets', ticketId), {
+          replies: arrayUnion(reply),
+          status: newStatus,
+          updatedAt: serverTimestamp(),
+        })
+        const idx = allTickets.findIndex(t => t.id === ticketId)
+        if (idx !== -1) {
+          allTickets[idx].replies = [...(allTickets[idx].replies || []), reply]
+          allTickets[idx].status  = newStatus
+        }
+        modal.remove()
+        renderTickets()
+        showToast('Відповідь надіслано ✓')
+      } catch (err) { console.error(err); btn.disabled = false; btn.textContent = '💬 Надіслати відповідь' }
+    })
+  }
+
+  function esc(s = '') {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ANNOUNCEMENTS
+  // ═══════════════════════════════════════════════════════════
+  function renderAnnouncements() {
+    const el = container.querySelector('#notif-history')
+    if (!allAnnouncements.length) {
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:16px 0">Повідомлень ще немає</div>'
+      return
+    }
+    const typeIcon = { info: 'ℹ️', success: '✅', warning: '⚠️', error: '🚨' }
+    const targetLabel = { all: 'Всі', free: 'FREE', pro: 'PRO', business: 'BUSINESS', paid: 'Платні' }
+    el.innerHTML = allAnnouncements.map(n => {
+      const date = n.createdAt?.toDate?.()?.toLocaleDateString('uk-UA') || '—'
+      return `
+        <div class="adm-notif-item adm-notif-${n.type||'info'}">
+          <div class="adm-notif-item-head">
+            <span class="adm-notif-type-icon">${typeIcon[n.type]||'ℹ️'}</span>
+            <span class="adm-notif-item-title">${n.title}</span>
+            <span class="adm-notif-target">${targetLabel[n.target]||n.target}</span>
+            <span class="adm-notif-date">${date}</span>
+            <button class="adm-notif-del" data-id="${n.id}" title="Видалити">✕</button>
+          </div>
+          <div class="adm-notif-item-body">${n.body}</div>
+          <div class="adm-notif-by">Відправив: ${n.createdByName || '—'}</div>
+        </div>`
+    }).join('')
+
+    el.querySelectorAll('.adm-notif-del').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        try {
+          await deleteDoc(doc(db, 'announcements', btn.dataset.id))
+          allAnnouncements = allAnnouncements.filter(n => n.id !== btn.dataset.id)
+          renderAnnouncements()
+        } catch (err) { console.error(err) }
+      })
+    })
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // EXPORT CSV
+  // ═══════════════════════════════════════════════════════════
+  function exportCSV() {
+    const headers = ['UID', 'Ім\'я', 'Email', 'Бізнес', 'Ніша', 'План', 'Підписка до', 'Зареєстрований', 'Забанований']
+    const rows = allUsers.map(u => [
+      u.id, u.name||'', u.email||'', u.businessName||'', u.profession||'',
+      u.plan||'free', u.subscriptionEnd ? new Date(u.subscriptionEnd).toLocaleDateString('uk-UA') : '',
+      u.createdAt?.toDate?.()?.toLocaleDateString('uk-UA') || '',
+      u.isBanned ? 'Так' : 'Ні',
+    ])
+    const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n')
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href = url; a.download = `workhub-users-${new Date().toISOString().slice(0,10)}.csv`
+    a.click(); URL.revokeObjectURL(url)
+    showToast('CSV експортовано ✓')
   }
 
   // ── Helpers ───────────────────────────────────────────────
   function profLabel(id) {
-    const map = { freelancer: '💻 Фрілансер', accountant: '📊 Бухгалтер', smm: '📱 SMM', beauty: '💅 Салон' }
-    return map[id] || '—'
+    return { freelancer:'💻 Фрілансер', accountant:'📊 Бухгалтер', smm:'📱 SMM', beauty:'💅 Салон' }[id] || '—'
   }
-
+  function nicheIcon(id) {
+    return { freelancer:'💻', accountant:'📊', smm:'📱', beauty:'💅' }[id] || '🏢'
+  }
   function nextMonth() {
-    const d = new Date()
-    d.setMonth(d.getMonth() + 1)
-    return d.toISOString().split('T')[0]
+    const d = new Date(); d.setMonth(d.getMonth() + 1); return d.toISOString().split('T')[0]
+  }
+  function showToast(msg, type = 'success') {
+    document.getElementById('adm-toast')?.remove()
+    const el = document.createElement('div')
+    el.id = 'adm-toast'
+    el.className = `adm-toast adm-toast-${type}`
+    el.textContent = msg
+    document.body.appendChild(el)
+    requestAnimationFrame(() => el.classList.add('show'))
+    setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300) }, 2800)
   }
 }
 
 // ── Styles ────────────────────────────────────────────────
 function injectStyles() {
-  if (document.getElementById('admin-styles')) return
-  const style = document.createElement('style')
-  style.id = 'admin-styles'
-  style.textContent = `
-    .admin-page    { padding: 32px 36px; max-width: 1300px; }
-    .admin-header  { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:24px; }
-    .admin-title   { font-family:var(--font-display); font-size:26px; font-weight:700; letter-spacing:-0.02em; margin-bottom:4px; }
-    .admin-subtitle{ font-size:13px; color:var(--text-secondary); }
-    .admin-badge   { font-size:12px; font-weight:600; padding:6px 14px; background:rgba(239,68,68,0.12); color:#F87171; border-radius:var(--radius-full); border:1px solid rgba(239,68,68,0.2); }
+  document.getElementById('admin-styles')?.remove()
+  const s = document.createElement('style')
+  s.id = 'admin-styles'
+  s.textContent = `
+    .adm-page    { padding: 28px 36px; max-width: 1300px; }
+    .adm-header  { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:22px; gap:16px; }
+    .adm-title   { font-family:var(--font-display); font-size:26px; font-weight:800; margin-bottom:4px; }
+    .adm-subtitle{ font-size:13px; color:var(--text-muted); }
+    .adm-header-right { display:flex; gap:10px; align-items:center; }
+    .adm-badge   { font-size:12px; font-weight:600; padding:5px 14px; background:rgba(239,68,68,.12); color:#F87171; border-radius:var(--radius-full); border:1px solid rgba(239,68,68,.2); }
+    .adm-refresh-btn { font-size:13px; font-weight:600; padding:5px 14px; background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-md); cursor:pointer; transition:all .15s; color:var(--text-secondary); }
+    .adm-refresh-btn:hover { border-color:var(--accent-blue); color:var(--accent-blue); }
 
     /* Tabs */
-    .admin-tabs    { display:flex; gap:4px; margin-bottom:24px; background:var(--bg-secondary); padding:4px; border-radius:var(--radius-md); border:1px solid var(--border); width:fit-content; }
-    .admin-tab     { padding:8px 20px; border-radius:var(--radius-sm); font-size:13px; font-weight:600; color:var(--text-secondary); cursor:pointer; transition:all .2s; }
-    .admin-tab:hover  { color:var(--text-primary); }
-    .admin-tab.active { background:var(--bg-primary); color:var(--text-primary); box-shadow:0 1px 4px rgba(0,0,0,.3); }
+    .adm-tabs  { display:flex; gap:4px; margin-bottom:22px; background:var(--bg-secondary); padding:4px; border-radius:var(--radius-md); border:1px solid var(--border); width:fit-content; }
+    .adm-tab   { display:flex; align-items:center; gap:6px; padding:7px 18px; border-radius:var(--radius-sm); font-size:13px; font-weight:600; color:var(--text-muted); cursor:pointer; border:none; background:none; transition:all .15s; white-space:nowrap; }
+    .adm-tab:hover  { color:var(--text-primary); }
+    .adm-tab.active { background:var(--bg-primary); color:var(--text-primary); box-shadow:0 1px 4px rgba(0,0,0,.3); }
 
-    /* Overview */
-    .overview-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; }
-    .stat-card-admin { background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px; }
-    .stat-card-admin.card-blue   { border-color:rgba(79,142,247,0.3); }
-    .stat-card-admin.card-green  { border-color:rgba(52,211,153,0.3); }
-    .stat-card-admin.card-orange { border-color:rgba(245,158,11,0.3); }
-    .stat-admin-icon  { font-size:24px; margin-bottom:10px; }
-    .stat-admin-value { font-family:var(--font-display); font-size:30px; font-weight:800; margin-bottom:4px; }
-    .stat-admin-label { font-size:12px; color:var(--text-secondary); }
-
-    .overview-bottom { display:grid; grid-template-columns:1.2fr 1fr; gap:16px; }
-    .recent-card     { background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px; }
-    .recent-header   { margin-bottom:16px; }
-    .recent-header h3{ font-family:var(--font-display); font-size:16px; font-weight:700; }
-    .recent-row      { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--border); }
-    .recent-row:last-child { border-bottom:none; }
-    .recent-avatar   { width:36px; height:36px; border-radius:50%; background:linear-gradient(135deg,#667eea,#4F8EF7); color:#fff; font-size:14px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-    .recent-info     { flex:1; min-width:0; }
-    .recent-name     { font-size:14px; font-weight:600; }
-    .recent-email    { font-size:12px; color:var(--text-muted); }
-
-    .breakdown-row   { display:flex; align-items:center; gap:12px; padding:10px 0; }
-    .breakdown-label { font-size:13px; font-weight:700; width:70px; flex-shrink:0; }
-    .breakdown-bar-wrap { flex:1; height:8px; background:var(--bg-tertiary); border-radius:4px; overflow:hidden; }
-    .breakdown-bar   { height:100%; border-radius:4px; transition:width .5s ease; }
-    .breakdown-count { font-size:12px; color:var(--text-secondary); width:80px; text-align:right; flex-shrink:0; }
-
-    /* Users toolbar */
-    .users-toolbar   { display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
-    .users-filter-wrap { display:flex; align-items:center; gap:8px; }
-    .users-count-label { font-size:13px; color:var(--text-secondary); }
-
-    /* Payments toolbar */
-    .payments-toolbar { margin-bottom:16px; }
-    .pay-filter-tabs  { display:flex; gap:8px; }
-    .filter-tab       { padding:7px 16px; border-radius:var(--radius-full); font-size:13px; font-weight:600; color:var(--text-secondary); background:var(--bg-secondary); border:1px solid var(--border); cursor:pointer; transition:all .2s; }
-    .filter-tab:hover { border-color:var(--accent-blue); color:var(--text-primary); }
-    .filter-tab.active{ background:var(--accent-blue); border-color:var(--accent-blue); color:#fff; }
-
-    /* Table */
-    .admin-table     { width:100%; border-collapse:collapse; background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; }
-    .admin-table th  { text-align:left; padding:12px 16px; font-size:11px; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em; background:var(--bg-tertiary); border-bottom:1px solid var(--border); }
-    .admin-table td  { padding:12px 16px; border-bottom:1px solid var(--border); font-size:13px; vertical-align:middle; }
-    .admin-table tr:last-child td { border-bottom:none; }
-    .admin-table tr:hover td { background:rgba(255,255,255,0.02); }
-
-    .user-cell       { display:flex; align-items:center; gap:10px; }
-    .user-cell-avatar{ width:36px; height:36px; border-radius:50%; background:linear-gradient(135deg,#667eea,#764ba2); color:#fff; font-size:14px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-    .user-cell-name  { font-weight:600; font-size:13px; }
-    .user-cell-email { font-size:11px; color:var(--text-muted); }
-
-    .plan-pill       { font-size:11px; font-weight:700; padding:3px 10px; border-radius:var(--radius-full); }
-    .action-btns     { display:flex; gap:6px; align-items:center; }
-    .action-btn      { font-size:12px; font-weight:600; padding:5px 10px; border-radius:6px; cursor:pointer; transition:all .2s; border:1px solid var(--border); background:var(--bg-tertiary); white-space:nowrap; }
-    .action-btn:hover{ border-color:var(--accent-blue); color:var(--accent-blue); }
-    .btn-approve:hover { border-color:#34D399; color:#34D399; background:rgba(52,211,153,0.08); }
-    .btn-reject:hover  { border-color:#EF4444; color:#EF4444; background:rgba(239,68,68,0.08); }
-    .admin-label     { font-size:12px; color:#F59E0B; font-weight:600; }
-
-    .status-chip     { font-size:11px; font-weight:700; padding:3px 10px; border-radius:var(--radius-full); }
-    .status-approved { background:rgba(52,211,153,0.12); color:#34D399; }
-    .status-rejected { background:rgba(239,68,68,0.12); color:#EF4444; }
-
-    .empty-row       { color:var(--text-muted); font-size:14px; }
-    .loading-row     { display:flex; justify-content:center; padding:48px; }
-
-    /* Skeleton */
-    .skel          { background:var(--bg-tertiary); border-radius:var(--radius-md); animation:skel-pulse 1.4s ease-in-out infinite; }
-    .skel-block    { display:block; border-radius:var(--radius-lg); }
+    /* Stats row */
+    .adm-stats-row  { display:grid; grid-template-columns:repeat(6,1fr); gap:12px; margin-bottom:20px; }
+    .adm-stat-card  { background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-lg); padding:18px 16px; }
+    .adm-stat-blue   { border-color:rgba(79,142,247,.3); }
+    .adm-stat-purple { border-color:rgba(167,139,250,.3); }
+    .adm-stat-green  { border-color:rgba(52,211,153,.3); }
+    .adm-stat-orange { border-color:rgba(245,158,11,.3); }
+    .adm-stat-icon   { font-size:20px; margin-bottom:8px; }
+    .adm-stat-val    { font-family:var(--font-display); font-size:26px; font-weight:800; margin-bottom:3px; line-height:1; }
+    .adm-stat-lbl    { font-size:11px; color:var(--text-muted); }
+    .adm-skel        { height:90px; background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-lg); animation:skel-pulse 1.4s ease infinite; }
     @keyframes skel-pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
-    /* Nav admin button */
-    .nav-item-admin { margin-bottom:4px; }
-    .nav-item-admin .nav-item-icon { color:#F87171; }
+    /* Overview grid */
+    .adm-overview-grid { display:grid; grid-template-columns:1.2fr 1fr 1fr; gap:14px; }
+    .adm-card { background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-xl); padding:20px; }
+    .adm-card-wide { grid-column: 1/-1; }
+    .adm-card-title { font-family:var(--font-display); font-size:15px; font-weight:700; margin-bottom:16px; }
+
+    /* Activity bars */
+    .adm-activity-bars { display:flex; align-items:flex-end; gap:6px; height:80px; }
+    .adm-act-col  { display:flex; flex-direction:column; align-items:center; gap:2px; flex:1; }
+    .adm-act-bar-wrap { flex:1; width:100%; display:flex; align-items:flex-end; }
+    .adm-act-bar  { width:100%; min-height:3px; background:var(--accent-blue); border-radius:3px 3px 0 0; opacity:.8; }
+    .adm-act-count{ font-size:10px; font-weight:700; color:var(--text-muted); }
+    .adm-act-label{ font-size:9px; color:var(--text-muted); text-transform:capitalize; }
+
+    /* Breakdown */
+    .adm-break-row   { display:flex; align-items:center; gap:10px; padding:7px 0; }
+    .adm-break-label { font-size:12px; font-weight:700; width:80px; flex-shrink:0; }
+    .adm-break-bar-wrap { flex:1; height:6px; background:var(--bg-tertiary); border-radius:3px; overflow:hidden; }
+    .adm-break-bar   { height:100%; border-radius:3px; transition:width .5s; }
+    .adm-break-count { font-size:12px; color:var(--text-secondary); width:70px; text-align:right; flex-shrink:0; }
+
+    /* Analytics */
+    .adm-an-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    .adm-chart-wrap { overflow-x:auto; }
+    .adm-reg-chart { display:flex; align-items:flex-end; gap:3px; height:100px; padding-bottom:18px; min-width:500px; }
+    .adm-reg-col   { display:flex; flex-direction:column; align-items:center; flex:1; min-width:14px; }
+    .adm-reg-bar   { width:100%; background:linear-gradient(180deg,#4F8EF7,#667eea); border-radius:3px 3px 0 0; min-height:3px; transition:height .3s; }
+    .adm-reg-label { font-size:9px; color:var(--text-muted); margin-top:4px; white-space:nowrap; }
+    .adm-rev-total { font-family:var(--font-display); font-size:32px; font-weight:800; margin-bottom:14px; }
+    .adm-conv-ring { position:relative; width:100px; height:100px; margin:8px auto 12px; }
+    .adm-ring-svg  { width:100%; height:100%; transform:rotate(-90deg); }
+    .adm-ring-val  { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-size:18px; font-weight:800; }
+    .adm-conv-row  { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--border); font-size:13px; }
+    .adm-conv-row:last-child { border:none; }
+
+    /* Toolbar */
+    .adm-toolbar     { display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+    .adm-search      { display:flex; align-items:center; gap:8px; background:var(--bg-secondary); border:1.5px solid var(--border); border-radius:var(--radius-md); padding:9px 14px; flex:1; max-width:400px; transition:border-color .15s; }
+    .adm-search:focus-within { border-color:var(--accent-blue); }
+    .adm-search input { flex:1; background:none; font-size:14px; color:var(--text-primary); outline:none; }
+    .adm-search input::placeholder { color:var(--text-muted); }
+    .adm-select      { padding:8px 12px; background:var(--bg-secondary); border:1.5px solid var(--border); border-radius:var(--radius-md); font-size:13px; color:var(--text-primary); cursor:pointer; }
+    .adm-count-label { font-size:13px; color:var(--text-muted); white-space:nowrap; }
+    .adm-filter-pills { display:flex; gap:6px; }
+    .adm-pill { padding:6px 16px; border-radius:var(--radius-full); font-size:13px; font-weight:600; color:var(--text-secondary); background:var(--bg-secondary); border:1px solid var(--border); cursor:pointer; transition:all .15s; }
+    .adm-pill:hover  { border-color:var(--accent-blue); color:var(--text-primary); }
+    .adm-pill.active { background:var(--accent-blue); border-color:var(--accent-blue); color:#fff; }
+
+    /* Table */
+    .adm-table     { width:100%; border-collapse:collapse; background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-xl); overflow:hidden; }
+    .adm-table th  { text-align:left; padding:11px 14px; font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.05em; background:var(--bg-tertiary); border-bottom:1px solid var(--border); }
+    .adm-table td  { padding:11px 14px; border-bottom:1px solid var(--border); font-size:13px; vertical-align:middle; }
+    .adm-table tr:last-child td { border-bottom:none; }
+    .adm-table tr:hover td { background:rgba(255,255,255,.02); }
+    .adm-row-banned td { opacity:.6; }
+
+    .adm-user-cell   { display:flex; align-items:center; gap:10px; }
+    .adm-avatar      { width:36px; height:36px; border-radius:50%; background:linear-gradient(135deg,#667eea,#764ba2); color:#fff; font-size:14px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .adm-avatar-banned { filter:grayscale(1); opacity:.7; }
+    .adm-user-name   { font-weight:600; font-size:13px; }
+    .adm-user-email  { font-size:11px; color:var(--text-muted); }
+    .adm-user-row    { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--border); }
+    .adm-user-row:last-child { border-bottom:none; }
+    .adm-user-info   { flex:1; min-width:0; }
+    .adm-plan-pill   { font-size:11px; font-weight:700; padding:3px 10px; border-radius:var(--radius-full); white-space:nowrap; }
+    .adm-plan-pill-lg { font-size:13px; padding:5px 14px; }
+    .adm-admin-badge { display:inline-flex; font-size:10px; font-weight:800; padding:2px 7px; background:rgba(245,158,11,.15); color:#F59E0B; border-radius:var(--radius-full); margin-left:6px; }
+    .adm-banned-badge { display:inline-flex; font-size:10px; font-weight:800; padding:2px 7px; background:rgba(239,68,68,.15); color:#F87171; border-radius:var(--radius-full); margin-left:6px; }
+    .adm-action-btns { display:flex; gap:5px; align-items:center; }
+    .adm-action-btn  { font-size:11px; font-weight:600; padding:4px 9px; border-radius:var(--radius-sm); cursor:pointer; transition:all .15s; border:1px solid var(--border); background:var(--bg-tertiary); white-space:nowrap; }
+    .adm-action-btn:hover { border-color:var(--accent-blue); color:var(--accent-blue); }
+    .adm-btn-approve:hover,.adm-btn-approve { color:#34D399; border-color:rgba(52,211,153,.4); }
+    .adm-btn-rej:hover     { color:#F87171; border-color:rgba(239,68,68,.4); background:rgba(239,68,68,.06); }
+    .adm-btn-ban:hover     { color:#F87171; border-color:rgba(239,68,68,.4); background:rgba(239,68,68,.06); }
+    .adm-btn-unban:hover   { color:#34D399; border-color:rgba(52,211,153,.4); }
+    .adm-btn-admin:hover   { color:#F59E0B; border-color:rgba(245,158,11,.4); }
+    .adm-status-chip { font-size:11px; font-weight:700; padding:3px 10px; border-radius:var(--radius-full); }
+    .adm-status-approved { background:rgba(52,211,153,.12); color:#34D399; }
+    .adm-status-rejected { background:rgba(239,68,68,.12); color:#F87171; }
+
+    /* Buttons */
+    .adm-btn { display:inline-flex; align-items:center; gap:6px; padding:9px 18px; border-radius:var(--radius-md); font-size:13px; font-weight:700; cursor:pointer; border:none; transition:all .15s; }
+    .adm-btn-primary { background:linear-gradient(135deg,#667eea,#4F8EF7); color:#fff; }
+    .adm-btn-primary:hover { transform:translateY(-1px); box-shadow:0 4px 14px rgba(79,142,247,.4); }
+    .adm-btn-primary:disabled { opacity:.6; transform:none; box-shadow:none; }
+    .adm-btn-ghost { background:var(--bg-tertiary); border:1.5px solid var(--border); color:var(--text-primary); }
+    .adm-btn-ghost:hover { border-color:var(--accent-blue); }
+    .adm-btn-danger { background:rgba(239,68,68,.15); color:#F87171; border:1.5px solid rgba(239,68,68,.3); }
+    .adm-btn-danger:hover { background:rgba(239,68,68,.25); }
+    .adm-btn-success { background:rgba(52,211,153,.15); color:#34D399; border:1.5px solid rgba(52,211,153,.3); }
+    .adm-btn-success:hover { background:rgba(52,211,153,.25); }
+
+    /* Modals */
+    .adm-overlay { position:fixed; inset:0; background:rgba(0,0,0,.65); backdrop-filter:blur(6px); display:flex; align-items:center; justify-content:center; z-index:2000; padding:24px; }
+    .adm-modal   { background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-xl); width:100%; max-width:560px; max-height:90vh; overflow:hidden; display:flex; flex-direction:column; box-shadow:var(--shadow-xl); animation:adm-in .2s cubic-bezier(.34,1.2,.64,1); }
+    .adm-modal-lg { max-width:840px; }
+    @keyframes adm-in { from{opacity:0;transform:scale(.94)} to{opacity:1;transform:scale(1)} }
+    .adm-modal-head { display:flex; align-items:center; justify-content:space-between; padding:22px 24px 0; flex-shrink:0; }
+    .adm-modal-head h2 { font-family:var(--font-display); font-size:20px; font-weight:800; }
+    .adm-modal-close { background:none; border:none; font-size:14px; color:var(--text-muted); cursor:pointer; padding:4px 8px; border-radius:6px; transition:all .15s; }
+    .adm-modal-close:hover { background:var(--bg-tertiary); color:var(--text-primary); }
+    .adm-modal-body { padding:20px 24px; display:flex; flex-direction:column; gap:16px; overflow-y:auto; flex:1; }
+    .adm-modal-foot { display:flex; gap:10px; justify-content:flex-end; padding:14px 24px; border-top:1px solid var(--border); flex-shrink:0; }
+    .adm-field label { display:block; font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px; }
+    .adm-input { width:100%; box-sizing:border-box; padding:10px 14px; background:var(--bg-tertiary); border:1.5px solid var(--border); border-radius:var(--radius-md); font-size:14px; color:var(--text-primary); outline:none; transition:border-color .15s; font-family:inherit; }
+    .adm-input:focus { border-color:var(--accent-blue); }
+    .adm-textarea { resize:vertical; min-height:80px; }
+
+    /* Plan picker */
+    .adm-plan-picker { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+    .adm-plan-pick   { padding:12px; border-radius:var(--radius-md); background:var(--bg-tertiary); border:2px solid var(--border); cursor:pointer; transition:all .15s; text-align:center; }
+    .adm-plan-pick:hover { border-color:var(--pc,var(--border)); }
+    .adm-plan-pick.active { border-color:var(--pc); background:color-mix(in srgb,var(--pc) 10%,var(--bg-tertiary)); }
+    .adm-plan-pick-name  { font-size:13px; font-weight:800; margin-bottom:3px; }
+    .adm-plan-pick-price { font-size:11px; color:var(--text-muted); }
+
+    /* User detail */
+    .adm-detail-body  { display:grid; grid-template-columns:220px 1fr; gap:20px; }
+    .adm-detail-left  { display:flex; flex-direction:column; align-items:center; text-align:center; gap:8px; }
+    .adm-detail-avatar{ width:80px; height:80px; border-radius:50%; background:linear-gradient(135deg,#667eea,#764ba2); color:#fff; font-size:30px; font-weight:800; display:flex; align-items:center; justify-content:center; }
+    .adm-detail-name  { font-size:17px; font-weight:800; }
+    .adm-detail-email { font-size:12px; color:var(--text-muted); word-break:break-all; }
+    .adm-detail-meta  { width:100%; margin-top:8px; }
+    .adm-meta-row     { display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--border); font-size:12px; }
+    .adm-meta-row:last-child { border:none; }
+    .adm-meta-label   { color:var(--text-muted); width:70px; flex-shrink:0; }
+    .adm-meta-val     { flex:1; text-align:left; font-weight:500; overflow:hidden; text-overflow:ellipsis; }
+    .adm-detail-actions { display:flex; flex-direction:column; gap:8px; width:100%; margin-top:8px; }
+    .adm-detail-section { font-size:13px; font-weight:700; color:var(--text-secondary); border-bottom:1px solid var(--border); padding-bottom:8px; margin-bottom:12px; }
+    .adm-biz-list     { display:flex; flex-direction:column; gap:8px; }
+    .adm-biz-item     { display:flex; align-items:center; gap:10px; padding:10px 12px; background:var(--bg-tertiary); border-radius:var(--radius-md); }
+    .adm-biz-main     { border:1px solid rgba(79,142,247,.3); }
+    .adm-biz-icon     { font-size:18px; flex-shrink:0; }
+    .adm-biz-name     { font-size:13px; font-weight:600; }
+    .adm-biz-niche    { font-size:11px; color:var(--text-muted); }
+    .adm-biz-badge    { font-size:10px; font-weight:800; padding:2px 8px; background:rgba(79,142,247,.15); color:var(--accent-blue); border-radius:var(--radius-full); margin-left:auto; }
+    .adm-modules-wrap { display:flex; flex-wrap:wrap; gap:6px; }
+    .adm-mod-chip     { font-size:11px; font-weight:600; padding:4px 10px; border-radius:var(--radius-full); background:var(--bg-tertiary); border:1px solid var(--border); }
+
+    /* Notifications */
+    .adm-notif-layout    { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    .adm-notif-form-card { display:flex; flex-direction:column; gap:14px; }
+    .adm-notif-list-card { overflow-y:auto; max-height:600px; }
+    .adm-type-row        { display:flex; gap:6px; flex-wrap:wrap; }
+    .adm-type-btn        { padding:6px 12px; border-radius:var(--radius-md); font-size:12px; font-weight:600; border:1.5px solid var(--border); background:var(--bg-tertiary); cursor:pointer; transition:all .15s; }
+    .adm-type-btn:hover  { border-color:var(--accent-blue); }
+    .adm-type-btn.active { background:var(--accent-blue); border-color:var(--accent-blue); color:#fff; }
+    .adm-notif-item      { background:var(--bg-tertiary); border:1px solid var(--border); border-radius:var(--radius-md); padding:12px 14px; margin-bottom:8px; border-left:3px solid var(--border); }
+    .adm-notif-info    { border-left-color:#4F8EF7; }
+    .adm-notif-success { border-left-color:#34D399; }
+    .adm-notif-warning { border-left-color:#F59E0B; }
+    .adm-notif-error   { border-left-color:#F87171; }
+    .adm-notif-item-head { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+    .adm-notif-type-icon { font-size:15px; flex-shrink:0; }
+    .adm-notif-item-title{ font-size:13px; font-weight:700; flex:1; }
+    .adm-notif-target    { font-size:10px; font-weight:700; padding:2px 8px; border-radius:var(--radius-full); background:rgba(79,142,247,.12); color:var(--accent-blue); flex-shrink:0; }
+    .adm-notif-date      { font-size:11px; color:var(--text-muted); flex-shrink:0; }
+    .adm-notif-del       { background:none; border:none; font-size:11px; color:var(--text-muted); cursor:pointer; padding:2px 4px; border-radius:4px; flex-shrink:0; }
+    .adm-notif-del:hover { color:#F87171; }
+    .adm-notif-item-body { font-size:12px; color:var(--text-secondary); margin-bottom:6px; line-height:1.5; }
+    .adm-notif-by        { font-size:10px; color:var(--text-muted); }
+
+    /* Misc */
+    .adm-empty       { color:var(--text-muted); font-size:14px; text-align:center; padding:48px; }
+    .adm-loading     { display:flex; justify-content:center; padding:20px; }
+    .adm-loading::after { content:''; width:20px; height:20px; border:2px solid var(--border); border-top-color:var(--accent-blue); border-radius:50%; animation:adm-spin .7s linear infinite; }
+    .adm-loading-big { display:flex; justify-content:center; padding:60px; }
+    .adm-loading-big::after { content:''; width:32px; height:32px; border:3px solid var(--border); border-top-color:var(--accent-blue); border-radius:50%; animation:adm-spin .7s linear infinite; }
+    @keyframes adm-spin { to{transform:rotate(360deg)} }
 
     /* Toast */
-    .admin-toast { position:fixed; bottom:24px; right:24px; background:#1E293B; color:#fff; padding:12px 20px; border-radius:var(--radius-md); font-size:14px; font-weight:600; box-shadow:var(--shadow-xl); z-index:9999; opacity:0; transform:translateY(8px); transition:all .3s; border-left:3px solid #34D399; }
-    .admin-toast.show { opacity:1; transform:translateY(0); }
+    .adm-toast { position:fixed; bottom:24px; right:24px; padding:12px 20px; border-radius:var(--radius-md); font-size:14px; font-weight:600; box-shadow:var(--shadow-xl); z-index:9999; opacity:0; transform:translateY(8px); transition:all .25s; border-left:3px solid #34D399; background:var(--bg-secondary); border:1px solid var(--border); }
+    .adm-toast.show { opacity:1; transform:translateY(0); }
+    .adm-toast-success { border-left:3px solid #34D399; }
+    .adm-toast-error   { border-left:3px solid #F87171; }
 
-    /* Modal reuse */
-    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; z-index:1000; padding:24px; }
-    .modal         { background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-xl); width:100%; box-shadow:var(--shadow-xl); animation:scaleIn .2s cubic-bezier(0.34,1.2,0.64,1); }
-    .modal-header  { display:flex; align-items:center; justify-content:space-between; padding:24px 24px 0; }
-    .modal-title   { font-family:var(--font-display); font-size:20px; font-weight:700; }
-    .modal-close   { width:32px; height:32px; border-radius:8px; color:var(--text-muted); font-size:16px; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .2s; }
-    .modal-close:hover { background:var(--accent-red-dim); color:var(--accent-red); }
-    .modal-body    { padding:20px 24px; display:flex; flex-direction:column; gap:14px; }
-    .modal-footer  { display:flex; gap:10px; justify-content:flex-end; padding:0 24px 24px; }
-    .field label   { display:block; font-size:12px; font-weight:600; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:6px; }
-
-    /* Search bar */
-    .search-bar        { display:flex; align-items:center; gap:10px; background:var(--bg-secondary); border:1.5px solid var(--border); border-radius:var(--radius-sm); padding:10px 14px; transition:border-color .2s; }
-    .search-bar:focus-within { border-color:var(--accent-blue); }
-    .search-icon       { font-size:15px; flex-shrink:0; }
-    .search-input      { flex:1; background:none; font-size:14px; color:var(--text-primary); }
-    .search-input::placeholder { color:var(--text-muted); }
-
-    @keyframes scaleIn { from{opacity:0;transform:scale(0.95)} to{opacity:1;transform:scale(1)} }
-
-    @media (max-width: 1100px) {
-      .overview-grid { grid-template-columns:repeat(2,1fr); }
-      .overview-bottom { grid-template-columns:1fr; }
+    @media (max-width:1100px) {
+      .adm-stats-row { grid-template-columns:repeat(3,1fr); }
+      .adm-overview-grid { grid-template-columns:1fr; }
+      .adm-an-grid { grid-template-columns:1fr; }
+      .adm-detail-body { grid-template-columns:1fr; }
+      .adm-notif-layout { grid-template-columns:1fr; }
     }
   `
-  document.head.appendChild(style)
+  document.head.appendChild(s)
 }

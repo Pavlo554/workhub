@@ -2,7 +2,7 @@
 export const PROFESSIONS = {
   freelancer: {
     id: 'freelancer', label: 'Фрілансер', icon: '💻', color: '#4F8EF7',
-    modules: ['dashboard','clients','projects','invoices','contracts','tasks','timer','passwords','notes'],
+    modules: ['dashboard','clients','projects','invoices','contracts','tasks','timer','kanban','portfolio','templates','passwords','notes','documents','reports','support'],
     quickActions: [
       { label: 'Новий клієнт',  icon: '👤', action: 'new-client' },
       { label: 'Новий рахунок', icon: '📄', action: 'new-invoice' },
@@ -12,7 +12,7 @@ export const PROFESSIONS = {
   },
   accountant: {
     id: 'accountant', label: 'Бухгалтер / ФОП', icon: '📊', color: '#34D399',
-    modules: ['dashboard','clients','finances','invoices','contracts','tax-calendar','passwords','notes'],
+    modules: ['dashboard','clients','invoices','contracts','tax-calendar','client-analytics','currency','templates','passwords','notes','documents','reports','support'],
     quickActions: [
       { label: 'Новий клієнт',    icon: '👤', action: 'new-client' },
       { label: 'Нова транзакція', icon: '💰', action: 'new-transaction' },
@@ -22,7 +22,7 @@ export const PROFESSIONS = {
   },
   smm: {
     id: 'smm', label: 'SMM / Маркетолог', icon: '📱', color: '#A78BFA',
-    modules: ['dashboard','clients','content-plan','accounts','tasks','passwords','notes'],
+    modules: ['dashboard','clients','content-plan','accounts','tasks','kanban','client-analytics','templates','passwords','notes','reports','support'],
     quickActions: [
       { label: 'Новий пост',    icon: '✏️', action: 'new-post' },
       { label: 'Новий клієнт', icon: '👤', action: 'new-client' },
@@ -31,7 +31,7 @@ export const PROFESSIONS = {
   },
   beauty: {
     id: 'beauty', label: 'Салон краси', icon: '💅', color: '#F472B6',
-    modules: ['dashboard','clients','appointments','services','finances','notes'],
+    modules: ['dashboard','clients','appointments','services','finances','warehouse','hr','client-analytics','notes','reports','support'],
     quickActions: [
       { label: 'Новий запис',   icon: '📅', action: 'new-appointment' },
       { label: 'Новий клієнт', icon: '👤', action: 'new-client' },

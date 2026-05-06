@@ -1,6 +1,10 @@
 // src/renderer/app.js
-import { addRoute, navigate } from '../core/router.js'
+import { addRoute, navigate, clearModuleCache } from '../core/router.js'
 import { onAuthChange, getUserProfile } from './services/auth.js'
+import { initTheme } from '../core/theme.js'
+
+initTheme()
+
 
 // ── Маршрути Auth ─────────────────────────────────────────
 addRoute('login',             () => import('./pages/auth/login.js'))
@@ -25,7 +29,18 @@ addRoute('business',          () => import('./pages/business/index.js'))
 addRoute('clients',           () => import('./modules/clients/index.js'))
 addRoute('tasks',             () => import('./modules/tasks/index.js'))
 addRoute('notes',             () => import('./modules/notes/index.js'))
+addRoute('documents',         () => import('./modules/documents/index.js'))
+addRoute('api-keys',          () => import('./modules/api-keys/index.js'))
 addRoute('passwords',         () => import('./modules/passwords/index.js'))
+addRoute('kanban',            () => import('./modules/kanban/index.js'))
+addRoute('templates',         () => import('./modules/templates/index.js'))
+addRoute('warehouse',         () => import('./modules/warehouse/index.js'))
+addRoute('portfolio',         () => import('./modules/portfolio/index.js'))
+addRoute('hr',                () => import('./modules/hr/index.js'))
+addRoute('client-analytics',  () => import('./modules/client-analytics/index.js'))
+addRoute('currency',          () => import('./modules/currency/index.js'))
+addRoute('support',           () => import('./modules/support/index.js'))
+addRoute('reports',           () => import('./modules/reports/index.js'))
 
 // ── Модулі Фрілансер ──────────────────────────────────────
 addRoute('projects',          () => import('./modules/projects/index.js'))
@@ -61,8 +76,13 @@ onAuthChange(async (user) => {
   const profile = await getUserProfile(user.uid)
 
   // ── Онбординг ──────────────────────────────────────────
-  // Старі юзери (без accountType але з onboardingDone) — одразу на dashboard
+  // Старі юзери (без accountType але з onboardingDone) — перевіряємо чи є ніша
   if (!profile?.accountType && profile?.onboardingDone) {
+    if (!profile?.profession) {
+      hideSidebar()
+      navigate('choose-profession')
+      return
+    }
     showSidebar(profile)
     navigate('dashboard')
     return
@@ -79,6 +99,13 @@ onAuthChange(async (user) => {
   if (profile.accountType === 'owner' && !profile.onboardingDone) {
     hideSidebar()
     navigate(profile.profession ? 'setup-business' : 'choose-profession')
+    return
+  }
+
+  // Є акаунт але немає ніші — питаємо
+  if (profile.accountType === 'owner' && !profile.profession) {
+    hideSidebar()
+    navigate('choose-profession')
     return
   }
 
@@ -102,4 +129,5 @@ function showSidebar(profile) {
 
 function hideSidebar() {
   document.getElementById('sidebar')?.remove()
+  clearModuleCache()
 }

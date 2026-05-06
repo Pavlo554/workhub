@@ -13,6 +13,16 @@ const firebaseConfig = {
   measurementId: "G-F8ZLHDK56H"
 }
 
+// const firebaseConfig = {
+//   apiKey: "AIzaSyBb9ROBz6VeLfxFF4GihZV-i585GE5xKmQ",
+//   authDomain: "desktop-crm.firebaseapp.com",
+//   projectId: "desktop-crm",
+//   storageBucket: "desktop-crm.firebasestorage.app",
+//   messagingSenderId: "208771547887",
+//   appId: "1:208771547887:web:415690ed2be03bf14c911a",
+//   measurementId: "G-F8ZLHDK56H"
+// };
+
 const app            = initializeApp(firebaseConfig)
 export const auth    = getAuth(app)
 export const db      = getFirestore(app)

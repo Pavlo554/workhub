@@ -1,6 +1,7 @@
 // src/renderer/modules/notes/index.js
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getActivePathSegments } from '../../services/auth.js'
+import { debounce } from '../../../core/utils.js'
 import {
   collection, addDoc, getDocs, deleteDoc,
   doc, updateDoc, query, orderBy, serverTimestamp
@@ -332,10 +333,10 @@ export async function render(container) {
     })
   })
 
-  container.querySelector('#nt-search').addEventListener('input', e => {
+  container.querySelector('#nt-search').addEventListener('input', debounce(e => {
     searchQ = e.target.value.toLowerCase().trim()
     renderGrid()
-  })
+  }, 250))
 
   await loadNotes()
 }
