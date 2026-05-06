@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron')
+const { app, BrowserWindow, ipcMain, shell, nativeImage } = require('electron')
 const path        = require('path')
 const { spawn }   = require('child_process')
 const os          = require('os')
@@ -238,6 +238,8 @@ ipcMain.handle('tg:fetchChannel', async (_, { token, username }) => {
 let mainWindow
 
 function createWindow() {
+  const appIcon = nativeImage.createFromPath(path.join(__dirname, '../../assets/icon.png'))
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -245,6 +247,7 @@ function createWindow() {
     minHeight: 600,
     frame: false,
     backgroundColor: '#0D0F14',
+    icon: appIcon,
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.js'),
       contextIsolation: true,
@@ -256,6 +259,7 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
 
   mainWindow.once('ready-to-show', () => {
+    mainWindow.setIcon(appIcon)
     mainWindow.show()
   })
 
@@ -263,6 +267,39 @@ function createWindow() {
     mainWindow.webContents.openDevTools()
   }
 }
+
+// ── Documents (local file storage) ────────────────────────
+const DOCS_DIR = path.join(app.getPath('userData'), 'documents')
+if (!fs.existsSync(DOCS_DIR)) fs.mkdirSync(DOCS_DIR, { recursive: true })
+
+ipcMain.handle('docs:save', async (_, { fileName, buffer, uid }) => {
+  try {
+    const userDir = path.join(DOCS_DIR, uid || 'default')
+    if (!fs.existsSync(userDir)) fs.mkdirSync(userDir, { recursive: true })
+    const safe     = fileName.replace(/[^a-zA-Zа-яА-ЯёЁіІїЇєЄ0-9._-]/g, '_')
+    const destName = `${Date.now()}_${safe}`
+    const destPath = path.join(userDir, destName)
+    fs.writeFileSync(destPath, Buffer.from(buffer))
+    return { success: true, localPath: destPath }
+  } catch (e) { return { error: e.message } }
+})
+
+ipcMain.handle('docs:open', async (_, { localPath }) => {
+  try { await shell.openPath(localPath); return { success: true } }
+  catch (e) { return { error: e.message } }
+})
+
+ipcMain.handle('docs:show', async (_, { localPath }) => {
+  shell.showItemInFolder(localPath)
+  return { success: true }
+})
+
+ipcMain.handle('docs:delete', async (_, { localPath }) => {
+  try {
+    if (fs.existsSync(localPath)) fs.unlinkSync(localPath)
+    return { success: true }
+  } catch (e) { return { error: e.message } }
+})
 
 // Titlebar buttons
 ipcMain.on('window-minimize', () => mainWindow.minimize())

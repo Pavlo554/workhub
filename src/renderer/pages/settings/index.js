@@ -2,552 +2,1309 @@
 import { navigate } from '../../../core/router.js'
 import { getCurrentUser, getUserProfile, updateProfileCache } from '../../services/auth.js'
 import { auth, db } from '../../services/firebase.js'
-import { signOut, updatePassword, updateEmail, EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js'
+import { signOut, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js'
 import { doc, updateDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
+import { t, getLang, setLang, SUPPORTED_LANGS } from '../../../core/i18n.js'
+import { applyTheme, applyAccent, ACCENT_COLORS } from '../../../core/theme.js'
 
 export async function render(container) {
-  const user = getCurrentUser()
+  injectStyles()
+
+  const user    = getCurrentUser()
   const profile = await getUserProfile(user.uid)
 
-  container.innerHTML = `
-    <div class="settings-page">
-      
-      <div class="settings-header">
-        <h1 class="settings-title">⚙️ Налаштування акаунта</h1>
-        <p class="settings-subtitle">Керуйте своїм профілем та налаштуваннями безпеки</p>
+  let activeTab = 'profile'
+
+  function renderPage() {
+    const lang = getLang()
+    container.innerHTML = `
+      <div class="st-page">
+
+        <!-- ── Sidebar ── -->
+        <aside class="st-sidebar">
+          <div class="st-sidebar-header">
+            <div class="st-sidebar-avatar" style="background:linear-gradient(135deg,#667eea,#764ba2)">
+              ${initials(profile?.name)}
+            </div>
+            <div class="st-sidebar-info">
+              <div class="st-sidebar-name">${profile?.name || 'Користувач'}</div>
+              <div class="st-sidebar-email">${user.email}</div>
+            </div>
+          </div>
+
+          <nav class="st-tabs">
+            ${[
+              { id: 'profile',       icon: '👤', key: 'settings.tab.profile' },
+              { id: 'language',      icon: '🌐', key: 'settings.tab.language' },
+              { id: 'appearance',    icon: '🎨', key: 'settings.tab.appearance' },
+              { id: 'notifications', icon: '🔔', label: 'Сповіщення' },
+              { id: 'security',      icon: '🔒', key: 'settings.tab.security' },
+              { id: 'subscription',  icon: '💎', key: 'settings.tab.subscription' },
+              { id: 'danger',        icon: '⚠️', key: 'settings.tab.danger' },
+            ].map(tab => `
+              <button class="st-tab ${activeTab === tab.id ? 'active' : ''}" data-tab="${tab.id}">
+                <span class="st-tab-icon">${tab.icon}</span>
+                <span class="st-tab-label">${tab.label || t(tab.key)}</span>
+              </button>
+            `).join('')}
+          </nav>
+
+          <div class="st-sidebar-footer">
+            <div class="st-plan-badge st-plan-${profile?.plan || 'free'}">
+              ${(profile?.plan || 'FREE').toUpperCase()} ПЛАН
+            </div>
+          </div>
+        </aside>
+
+        <!-- ── Content ── -->
+        <main class="st-content" id="st-content">
+          ${renderTab(activeTab, profile, user)}
+        </main>
+
+      </div>
+    `
+
+    // Tab navigation
+    container.querySelectorAll('.st-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeTab = btn.dataset.tab
+        container.querySelectorAll('.st-tab').forEach(b => b.classList.remove('active'))
+        btn.classList.add('active')
+        const content = container.querySelector('#st-content')
+        content.innerHTML = renderTab(activeTab, profile, user)
+        content.scrollTop = 0
+        attachTabEvents(content, activeTab, profile, user)
+      })
+    })
+
+    attachTabEvents(container.querySelector('#st-content'), activeTab, profile, user)
+  }
+
+  renderPage()
+}
+
+// ── Tab renderer ─────────────────────────────────────────────
+function renderTab(tab, profile, user) {
+  switch (tab) {
+    case 'profile':       return renderProfile(profile, user)
+    case 'language':      return renderLanguage()
+    case 'appearance':    return renderAppearance()
+    case 'notifications': return renderNotifications()
+    case 'security':      return renderSecurity()
+    case 'subscription':  return renderSubscription(profile)
+    case 'danger':        return renderDanger()
+    default: return ''
+  }
+}
+
+const NICHES = [
+  { id: 'freelancer', icon: '💻', label: 'Фрілансер',        color: '#4F8EF7', desc: 'Проекти, рахунки, договори, таймер' },
+  { id: 'accountant', icon: '📊', label: 'Бухгалтер / ФОП',  color: '#34D399', desc: 'Фінанси, рахунки, податковий календар' },
+  { id: 'smm',        icon: '📱', label: 'SMM / Маркетолог',  color: '#A78BFA', desc: 'Контент-план, акаунти, клієнти' },
+  { id: 'beauty',     icon: '💅', label: 'Салон краси',       color: '#F472B6', desc: 'Записи, послуги, розклад' },
+  { id: 'custom',     icon: '✦',  label: 'Інша ніша',         color: '#94A3B8', desc: 'Вибрати модулі вручну' },
+]
+
+// ── Profile tab ───────────────────────────────────────────────
+function renderProfile(profile, user) {
+  const currentNiche = profile?.profession || null
+  return `
+    <div class="st-panel">
+      <div class="st-panel-header">
+        <div>
+          <h2 class="st-panel-title">${t('profile.title')}</h2>
+          <p class="st-panel-subtitle">Ваше ім'я, контакти та бізнес</p>
+        </div>
       </div>
 
-      <!-- Основна інформація -->
-      <div class="settings-section">
-        <div class="section-header">
-          <h2 class="section-title">👤 Особиста інформація</h2>
+      <!-- Avatar row -->
+      <div class="st-avatar-row">
+        <div class="st-big-avatar" style="background:linear-gradient(135deg,#667eea,#764ba2)">
+          ${initials(profile?.name)}
         </div>
-        <div class="settings-card">
-          
-          <!-- Аватарка (тільки показ) -->
-          <div class="avatar-section">
-            <div class="avatar-placeholder">
-              ${(profile.name || 'U')[0].toUpperCase()}
-            </div>
-            <div class="avatar-info">
-              <div class="avatar-info-title">${profile.name || 'Користувач'}</div>
-              <div class="avatar-info-desc">${user.email}</div>
-            </div>
-          </div>
-
-          <!-- Ім'я -->
-          <div class="form-group">
-            <label class="form-label">Повне ім'я</label>
-            <input 
-              type="text" 
-              class="form-input" 
-              id="input-name" 
-              value="${profile.name || ''}"
-              placeholder="Іван Петренко"
-            >
-          </div>
-
-          <!-- Email -->
-          <div class="form-group">
-            <label class="form-label">Email</label>
-            <input 
-              type="email" 
-              class="form-input" 
-              id="input-email" 
-              value="${user.email}"
-              placeholder="email@example.com"
-              disabled
-            >
-            <div class="form-hint">📧 Email не можна змінити</div>
-          </div>
-
-          <!-- Телефон -->
-          <div class="form-group">
-            <label class="form-label">Телефон</label>
-            <input 
-              type="tel" 
-              class="form-input" 
-              id="input-phone" 
-              value="${profile.phone || ''}"
-              placeholder="+380 XX XXX XX XX"
-            >
-          </div>
-
-          <!-- Місто -->
-          <div class="form-group">
-            <label class="form-label">Місто</label>
-            <input 
-              type="text" 
-              class="form-input" 
-              id="input-city" 
-              value="${profile.city || ''}"
-              placeholder="Київ"
-            >
-          </div>
-
-          <button class="btn-primary btn-large" id="save-profile-btn">
-            💾 Зберегти зміни
-          </button>
+        <div>
+          <div class="st-avatar-name">${profile?.name || 'Користувач'}</div>
+          <div class="st-avatar-email">${user.email}</div>
+          <div class="st-avatar-plan st-plan-${profile?.plan || 'free'}">${(profile?.plan || 'free').toUpperCase()}</div>
         </div>
       </div>
 
-      <!-- Бізнес інформація -->
-      <div class="settings-section">
-        <div class="section-header">
-          <h2 class="section-title">💼 Мій бізнес</h2>
-          <p class="section-desc">Ця інформація використовується в рахунках, договорах та навігації</p>
+      <!-- ── Особисті дані ── -->
+      <h3 class="st-section-label" style="margin-top:24px">👤 Особиста інформація</h3>
+      <div class="st-form-grid">
+        <div class="st-field">
+          <label class="st-label">${t('profile.name')}</label>
+          <input class="st-input" type="text" id="input-name" value="${esc(profile?.name || '')}" placeholder="${t('profile.name_placeholder')}">
         </div>
-        <div class="settings-card">
 
-          <!-- Назва бізнесу -->
-          <div class="form-group">
-            <label class="form-label">Назва бізнесу або ваше ім'я *</label>
-            <input
-              type="text"
-              class="form-input"
-              id="input-business"
-              value="${profile.businessName || ''}"
-              placeholder="ФОП Іванов або Design Studio"
-            >
+        <div class="st-field">
+          <label class="st-label">${t('profile.email')}</label>
+          <div class="st-input-wrap">
+            <input class="st-input st-input-disabled" type="email" value="${esc(user.email)}" disabled>
+            <span class="st-input-lock">🔒</span>
           </div>
+          <span class="st-hint">${t('profile.email_hint')}</span>
+        </div>
 
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-            <div class="form-group">
-              <label class="form-label">Веб-сайт</label>
-              <input type="text" class="form-input" id="input-website"
-                value="${profile.website || ''}" placeholder="yoursite.com">
+        <div class="st-field">
+          <label class="st-label">${t('profile.phone')}</label>
+          <input class="st-input" type="tel" id="input-phone" value="${esc(profile?.phone || '')}" placeholder="${t('profile.phone_placeholder')}">
+        </div>
+
+        <div class="st-field">
+          <label class="st-label">${t('profile.city')}</label>
+          <input class="st-input" type="text" id="input-city" value="${esc(profile?.city || '')}" placeholder="${t('profile.city_placeholder')}">
+        </div>
+      </div>
+
+      <div class="st-actions">
+        <button class="st-btn st-btn-primary" id="save-profile-btn">
+          <span class="st-btn-icon">💾</span> ${t('profile.save')}
+        </button>
+      </div>
+
+      <div class="st-divider" style="margin:28px 0"></div>
+
+      <!-- ── Бізнес інформація ── -->
+      <h3 class="st-section-label">💼 Мій бізнес</h3>
+      <p class="st-panel-subtitle" style="margin-bottom:20px">Використовується в рахунках, договорах та навігації</p>
+
+      <div class="st-form-grid">
+        <div class="st-field" style="grid-column:1/-1">
+          <label class="st-label">Назва бізнесу або ваше ім'я *</label>
+          <input class="st-input" type="text" id="input-business"
+            value="${esc(profile?.businessName || '')}"
+            placeholder="ФОП Іванов або Design Studio">
+        </div>
+
+        <div class="st-field">
+          <label class="st-label">Веб-сайт</label>
+          <input class="st-input" type="text" id="input-website"
+            value="${esc(profile?.website || '')}" placeholder="yoursite.com">
+        </div>
+
+        <div class="st-field">
+          <label class="st-label">Instagram</label>
+          <div class="st-input-wrap">
+            <span class="st-input-at">@</span>
+            <input class="st-input st-input-at-pad" type="text" id="input-instagram"
+              value="${esc(profile?.instagram || '')}" placeholder="username">
+          </div>
+        </div>
+
+        <div class="st-field">
+          <label class="st-label">Telegram</label>
+          <div class="st-input-wrap">
+            <span class="st-input-at">@</span>
+            <input class="st-input st-input-at-pad" type="text" id="input-telegram"
+              value="${esc(profile?.telegram || '')}" placeholder="username або канал">
+          </div>
+        </div>
+      </div>
+
+      <!-- Ніша -->
+      <div class="st-field" style="margin-top:20px">
+        <label class="st-label" style="margin-bottom:12px">Сфера діяльності</label>
+        <div class="st-niche-grid" id="niche-grid">
+          ${NICHES.map(n => `
+            <button class="st-niche-card ${currentNiche === n.id || (!currentNiche && n.id === 'custom') ? 'active' : ''}"
+              data-niche="${n.id}" style="--nc:${n.color}">
+              <span class="st-niche-icon">${n.icon}</span>
+              <div class="st-niche-body">
+                <div class="st-niche-title">${n.label}</div>
+                <div class="st-niche-desc">${n.desc}</div>
+              </div>
+              <div class="st-niche-check">✓</div>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="st-actions">
+        <button class="st-btn st-btn-primary" id="save-business-btn">
+          <span class="st-btn-icon">🏢</span> Зберегти та оновити меню
+        </button>
+      </div>
+    </div>
+  `
+}
+
+// ── Language tab ──────────────────────────────────────────────
+function renderLanguage() {
+  const current = getLang()
+  const DATE_FORMATS = {
+    uk: 'дд.мм.рррр',
+    en: 'mm/dd/yyyy',
+    pl: 'dd.mm.rrrr',
+  }
+  const CURRENCIES = {
+    uk: '₴ Гривня (UAH)',
+    en: '$ Dollar (USD)',
+    pl: 'zł Złoty (PLN)',
+  }
+
+  return `
+    <div class="st-panel">
+      <div class="st-panel-header">
+        <div>
+          <h2 class="st-panel-title">${t('lang.title')}</h2>
+          <p class="st-panel-subtitle">${t('lang.subtitle')}</p>
+        </div>
+      </div>
+
+      <div class="st-lang-grid">
+        ${SUPPORTED_LANGS.map(l => `
+          <button class="st-lang-card ${current === l.code ? 'active' : ''}" data-lang="${l.code}">
+            <div class="st-lang-flag">${l.flag}</div>
+            <div class="st-lang-info">
+              <div class="st-lang-name">${l.label}</div>
+              <div class="st-lang-desc">${t(`lang.${l.code}_desc`)}</div>
             </div>
-            <div class="form-group">
-              <label class="form-label">Instagram</label>
-              <div class="input-with-prefix">
-                <span class="input-prefix">@</span>
-                <input type="text" class="form-input input-with-prefix-field" id="input-instagram"
-                  value="${profile.instagram || ''}" placeholder="username">
+            <div class="st-lang-check">
+              <div class="st-check-circle ${current === l.code ? 'checked' : ''}">
+                ${current === l.code ? '✓' : ''}
               </div>
             </div>
-          </div>
+          </button>
+        `).join('')}
+      </div>
 
-          <!-- Ніша -->
-          <div class="form-group">
-            <label class="form-label">Сфера діяльності</label>
-            <p class="form-hint" style="margin-bottom:12px">Визначає які модулі доступні в меню</p>
-            <div class="niche-grid">
-              ${[
-                { id: 'freelancer', icon: '💻', title: 'Фрілансер',       desc: 'Проекти, рахунки, договори, таймер' },
-                { id: 'accountant', icon: '📊', title: 'Бухгалтер / ФОП', desc: 'Фінанси, рахунки, податковий календар' },
-                { id: 'smm',        icon: '📱', title: 'SMM / Маркетолог', desc: 'Контент-план, акаунти, клієнти' },
-                { id: 'beauty',     icon: '💅', title: 'Салон краси',      desc: 'Записи, послуги, розклад' },
-              ].map(n => `
-                <div class="niche-card ${profile.profession === n.id ? 'selected' : ''}" data-niche="${n.id}">
-                  <span class="niche-icon">${n.icon}</span>
-                  <div class="niche-info">
-                    <div class="niche-title">${n.title}</div>
-                    <div class="niche-desc">${n.desc}</div>
-                  </div>
-                  <div class="niche-check">✓</div>
+      <div class="st-divider" style="margin: 28px 0 24px"></div>
+
+      <h3 class="st-section-label">${t('lang.region')}</h3>
+      <div class="st-form-grid">
+        <div class="st-field">
+          <label class="st-label">${t('lang.date_format')}</label>
+          <div class="st-input st-input-readonly">
+            <span class="st-input-icon">📅</span> ${DATE_FORMATS[current] || 'дд.мм.рррр'}
+          </div>
+        </div>
+        <div class="st-field">
+          <label class="st-label">${t('lang.currency')}</label>
+          <div class="st-input st-input-readonly">
+            <span class="st-input-icon">💱</span> ${CURRENCIES[current] || '₴ Гривня'}
+          </div>
+        </div>
+      </div>
+
+      <div class="st-actions">
+        <button class="st-btn st-btn-primary" id="save-lang-btn">
+          <span class="st-btn-icon">🌐</span> ${t('lang.apply')}
+        </button>
+      </div>
+    </div>
+  `
+}
+
+// ── Appearance tab ────────────────────────────────────────────
+function renderAppearance() {
+  const saved = localStorage.getItem('workhub_theme') || 'dark'
+  const themes = [
+    { id: 'dark',   label: 'Темна',   icon: '🌙', desc: 'Зручно для очей вночі' },
+    { id: 'light',  label: 'Світла',  icon: '☀️', desc: 'Класичний білий інтерфейс' },
+    { id: 'system', label: 'Системна',icon: '💻', desc: 'Слідує за налаштуваннями ОС' },
+  ]
+  const accents = [
+    { id: 'blue',   color: '#4F8EF7', label: 'Синій' },
+    { id: 'purple', color: '#A78BFA', label: 'Фіолет' },
+    { id: 'green',  color: '#34D399', label: 'Зелений' },
+    { id: 'orange', color: '#FB923C', label: 'Помаранч' },
+    { id: 'pink',   color: '#F472B6', label: 'Рожевий' },
+  ]
+  const savedAccent = localStorage.getItem('workhub_accent') || 'blue'
+
+  return `
+    <div class="st-panel">
+      <div class="st-panel-header">
+        <div>
+          <h2 class="st-panel-title">🎨 Зовнішній вигляд</h2>
+          <p class="st-panel-subtitle">Тема оформлення та акцентний колір</p>
+        </div>
+      </div>
+
+      <h3 class="st-section-label">Тема</h3>
+      <div class="st-theme-grid">
+        ${themes.map(th => `
+          <button class="st-theme-card ${saved === th.id ? 'active' : ''}" data-theme="${th.id}">
+            <div class="st-theme-preview st-theme-preview-${th.id}">
+              <div class="st-preview-sidebar"></div>
+              <div class="st-preview-content">
+                <div class="st-preview-bar"></div>
+                <div class="st-preview-cards">
+                  <div class="st-preview-card"></div>
+                  <div class="st-preview-card"></div>
                 </div>
-              `).join('')}
-            </div>
-          </div>
-
-          <button class="btn-primary btn-large" id="save-business-btn">
-            💾 Зберегти та оновити меню
-          </button>
-        </div>
-      </div>
-
-      <!-- Зміна пароля -->
-      <div class="settings-section">
-        <div class="section-header">
-          <h2 class="section-title">🔒 Безпека</h2>
-        </div>
-        <div class="settings-card">
-          
-          <div class="security-warning">
-            <div class="warning-icon">⚠️</div>
-            <div class="warning-text">
-              Для зміни пароля потрібно підтвердити поточний пароль
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Поточний пароль</label>
-            <input 
-              type="password" 
-              class="form-input" 
-              id="input-current-password" 
-              placeholder="••••••••"
-            >
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Новий пароль</label>
-            <input 
-              type="password" 
-              class="form-input" 
-              id="input-new-password" 
-              placeholder="••••••••"
-            >
-            <div class="form-hint">Мінімум 6 символів</div>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Підтвердіть новий пароль</label>
-            <input 
-              type="password" 
-              class="form-input" 
-              id="input-confirm-password" 
-              placeholder="••••••••"
-            >
-          </div>
-
-          <button class="btn-secondary btn-large" id="change-password-btn">
-            🔑 Змінити пароль
-          </button>
-        </div>
-      </div>
-
-      <!-- План підписки -->
-      <div class="settings-section">
-        <div class="section-header">
-          <h2 class="section-title">💎 Підписка</h2>
-        </div>
-        <div class="settings-card">
-          <div class="subscription-info">
-            <div class="subscription-plan">
-              <div class="plan-name">${(profile.plan || 'free').toUpperCase()}</div>
-              <div class="plan-status ${profile.subscriptionStatus === 'active' ? 'status-active' : 'status-inactive'}">
-                ${profile.subscriptionStatus === 'active' ? '✓ Активна' : '○ Неактивна'}
               </div>
             </div>
-            ${profile.subscriptionEnd ? `
-              <div class="subscription-end">
-                Діє до: <strong>${new Date(profile.subscriptionEnd).toLocaleDateString('uk-UA')}</strong>
-              </div>
-            ` : ''}
-          </div>
-          <button class="btn-primary" id="manage-subscription-btn">
-            Керувати підпискою
+            <div class="st-theme-label">
+              <span>${th.icon}</span>
+              <span>${th.label}</span>
+            </div>
+            <div class="st-theme-desc">${th.desc}</div>
+            ${saved === th.id ? '<div class="st-theme-active-badge">Активна</div>' : ''}
           </button>
-        </div>
+        `).join('')}
       </div>
 
-      <!-- Небезпечна зона -->
-      <div class="settings-section">
-        <div class="section-header">
-          <h2 class="section-title">⚠️ Небезпечна зона</h2>
-        </div>
-        <div class="settings-card danger-zone">
-          
-          <div class="danger-item">
-            <div class="danger-info">
-              <div class="danger-title">Вийти з акаунта</div>
-              <div class="danger-desc">Вийти з поточного облікового запису на цьому пристрої</div>
-            </div>
-            <button class="btn-secondary" id="logout-btn">Вийти</button>
-          </div>
+      <div class="st-divider" style="margin: 28px 0 24px"></div>
 
-          <div class="danger-item">
-            <div class="danger-info">
-              <div class="danger-title">Видалити акаунт</div>
-              <div class="danger-desc">Назавжди видалити ваш акаунт та всі дані</div>
-            </div>
-            <button class="btn-danger" id="delete-account-btn">Видалити акаунт</button>
-          </div>
-
-        </div>
+      <h3 class="st-section-label">Акцентний колір</h3>
+      <div class="st-accent-row">
+        ${accents.map(a => `
+          <button class="st-accent-btn ${savedAccent === a.id ? 'active' : ''}" data-accent="${a.id}" style="--ac:${a.color}" title="${a.label}">
+            <div class="st-accent-dot" style="background:${a.color}"></div>
+            ${savedAccent === a.id ? '<div class="st-accent-check">✓</div>' : ''}
+          </button>
+        `).join('')}
       </div>
 
     </div>
   `
+}
 
-  injectStyles()
-  attachEventListeners()
-
-  function attachEventListeners() {
-    // Збереження профілю
-    container.querySelector('#save-profile-btn')?.addEventListener('click', async () => {
-      const name = container.querySelector('#input-name').value.trim()
-      const phone = container.querySelector('#input-phone').value.trim()
-      const city = container.querySelector('#input-city').value.trim()
-
-      if (!name) {
-        showToast('Введіть ім\'я', 'error')
-        return
-      }
-
-      const loading = showLoading('Збереження...')
-
-      try {
-        await updateDoc(doc(db, 'users', user.uid), {
-          name,
-          phone,
-          city,
-          updatedAt: serverTimestamp()
-        })
-
-        loading.remove()
-        showToast('Профіль оновлено!', 'success')
-        setTimeout(() => location.reload(), 1000)
-      } catch (err) {
-        loading.remove()
-        console.error(err)
-        showToast('Помилка збереження', 'error')
-      }
-    })
-
-    // Вибір ніші
-    let selectedNiche = profile.profession || null
-    container.querySelectorAll('.niche-card').forEach(card => {
-      card.addEventListener('click', () => {
-        container.querySelectorAll('.niche-card').forEach(c => c.classList.remove('selected'))
-        card.classList.add('selected')
-        selectedNiche = card.dataset.niche
-      })
-    })
-
-    // Збереження бізнес інфо
-    container.querySelector('#save-business-btn')?.addEventListener('click', async () => {
-      const businessName = container.querySelector('#input-business').value.trim()
-      const website      = container.querySelector('#input-website').value.trim()
-      const instagram    = container.querySelector('#input-instagram').value.trim()
-
-      if (!businessName) { showToast("Введіть назву бізнесу", 'error'); return }
-      if (!selectedNiche) { showToast('Оберіть сферу діяльності', 'error'); return }
-
-      const loading = showLoading('Зберігаємо...')
-
-      try {
-        const bizData = {
-          businessName, website, instagram,
-          profession:     selectedNiche,
-          accountType:    'owner',
-          onboardingDone: true,
-          updatedAt:      serverTimestamp(),
-        }
-        await updateDoc(doc(db, 'users', user.uid), bizData)
-        updateProfileCache(user.uid, bizData)
-
-        // Оновлюємо sidebar з новою нішею
-        const { renderNavigation } = await import('../../components/navigation.js')
-        const updatedProfile = { ...profile, ...bizData }
-        const sidebar = document.getElementById('sidebar')
-        if (sidebar) renderNavigation(sidebar, updatedProfile)
-
-        loading.remove()
-        showToast('Збережено! Меню оновлено 🎉', 'success')
-      } catch (err) {
-        loading.remove()
-        console.error(err)
-        showToast('Помилка збереження', 'error')
-      }
-    })
-
-    // Зміна пароля
-    container.querySelector('#change-password-btn')?.addEventListener('click', async () => {
-      const currentPassword = container.querySelector('#input-current-password').value
-      const newPassword = container.querySelector('#input-new-password').value
-      const confirmPassword = container.querySelector('#input-confirm-password').value
-
-      if (!currentPassword || !newPassword || !confirmPassword) {
-        showToast('Заповніть всі поля', 'error')
-        return
-      }
-
-      if (newPassword.length < 6) {
-        showToast('Пароль має бути мінімум 6 символів', 'error')
-        return
-      }
-
-      if (newPassword !== confirmPassword) {
-        showToast('Паролі не співпадають', 'error')
-        return
-      }
-
-      const loading = showLoading('Зміна пароля...')
-
-      try {
-        const credential = EmailAuthProvider.credential(user.email, currentPassword)
-        await reauthenticateWithCredential(user, credential)
-        await updatePassword(user, newPassword)
-
-        loading.remove()
-        showToast('Пароль змінено!', 'success')
-        
-        // Очищаємо поля
-        container.querySelector('#input-current-password').value = ''
-        container.querySelector('#input-new-password').value = ''
-        container.querySelector('#input-confirm-password').value = ''
-      } catch (err) {
-        loading.remove()
-        console.error(err)
-        if (err.code === 'auth/wrong-password') {
-          showToast('Неправильний поточний пароль', 'error')
-        } else {
-          showToast('Помилка зміни пароля', 'error')
-        }
-      }
-    })
-
-    // Керування підпискою
-    container.querySelector('#manage-subscription-btn')?.addEventListener('click', () => {
-      navigate('subscribe')
-    })
-
-    // Вихід
-    container.querySelector('#logout-btn')?.addEventListener('click', async () => {
-      if (confirm('Ви впевнені що хочете вийти?')) {
-        try {
-          await signOut(auth)
-          window.location.reload()
-        } catch (err) {
-          console.error(err)
-          showToast('Помилка виходу', 'error')
-        }
-      }
-    })
-
-    // Видалення акаунта
-    container.querySelector('#delete-account-btn')?.addEventListener('click', () => {
-      const confirmation = prompt('Це незворотня дія! Введіть "ВИДАЛИТИ" для підтвердження:')
-      if (confirmation === 'ВИДАЛИТИ') {
-        alert('Функція видалення акаунта в розробці. Зверніться в підтримку.')
-      }
-    })
-  }
-
-  function showLoading(text) {
-    const loading = document.createElement('div')
-    loading.className = 'loading-overlay'
-    loading.innerHTML = `
-      <div class="loading-content">
-        <div class="spinner-large"></div>
-        <div class="loading-text">${text}</div>
+// ── Security tab ──────────────────────────────────────────────
+function renderSecurity() {
+  return `
+    <div class="st-panel">
+      <div class="st-panel-header">
+        <div>
+          <h2 class="st-panel-title">${t('security.title')}</h2>
+          <p class="st-panel-subtitle">Зміна пароля та управління сесіями</p>
+        </div>
       </div>
-    `
-    document.body.appendChild(loading)
-    return loading
-  }
 
-  function showToast(message, type = 'info') {
-    const toast = document.createElement('div')
-    toast.className = `toast toast-${type}`
-    toast.textContent = message
-    document.body.appendChild(toast)
+      <div class="st-security-alert">
+        <div class="st-security-alert-icon">🔐</div>
+        <div class="st-security-alert-text">${t('security.warning')}</div>
+      </div>
 
-    setTimeout(() => toast.classList.add('toast-show'), 100)
-    setTimeout(() => {
-      toast.classList.remove('toast-show')
-      setTimeout(() => toast.remove(), 300)
-    }, 3000)
+      <h3 class="st-section-label">Зміна пароля</h3>
+      <div class="st-form-grid">
+        <div class="st-field" style="grid-column:1/-1">
+          <label class="st-label">${t('security.current_pass')}</label>
+          <div class="st-input-wrap">
+            <input class="st-input" type="password" id="input-current-password" placeholder="••••••••">
+            <button class="st-eye-btn" data-target="input-current-password">👁</button>
+          </div>
+        </div>
+        <div class="st-field">
+          <label class="st-label">${t('security.new_pass')}</label>
+          <div class="st-input-wrap">
+            <input class="st-input" type="password" id="input-new-password" placeholder="••••••••">
+            <button class="st-eye-btn" data-target="input-new-password">👁</button>
+          </div>
+          <span class="st-hint">${t('security.new_pass_hint')}</span>
+          <div class="st-strength-bar" id="strength-bar">
+            <div class="st-strength-fill" id="strength-fill"></div>
+          </div>
+          <div class="st-strength-label" id="strength-label"></div>
+        </div>
+        <div class="st-field">
+          <label class="st-label">${t('security.confirm_pass')}</label>
+          <div class="st-input-wrap">
+            <input class="st-input" type="password" id="input-confirm-password" placeholder="••••••••">
+            <button class="st-eye-btn" data-target="input-confirm-password">👁</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="st-actions">
+        <button class="st-btn st-btn-primary" id="change-password-btn">
+          <span class="st-btn-icon">🔑</span> ${t('security.change_btn')}
+        </button>
+      </div>
+
+      <div class="st-divider" style="margin: 28px 0 24px"></div>
+
+      <h3 class="st-section-label">${t('security.sessions')}</h3>
+      <div class="st-session-row">
+        <div class="st-session-icon">🖥</div>
+        <div class="st-session-info">
+          <div class="st-session-name">WorkHub Desktop</div>
+          <div class="st-session-meta">${t('security.sessions_desc')} · ${new Date().toLocaleDateString('uk-UA')}</div>
+        </div>
+        <div class="st-session-badge">Активна</div>
+      </div>
+    </div>
+  `
+}
+
+// ── Subscription tab ──────────────────────────────────────────
+function renderSubscription(profile) {
+  const plan = profile?.plan || 'free'
+  const plans = [
+    { id: 'free',     icon: '🆓', name: 'FREE',     price: '0 грн',    descKey: 'sub.free_desc',  color: '#94A3B8' },
+    { id: 'pro',      icon: '⭐', name: 'PRO',      price: '299 грн',  descKey: 'sub.pro_desc',   color: '#4F8EF7' },
+    { id: 'business', icon: '🏢', name: 'BUSINESS', price: '799 грн',  descKey: 'sub.biz_desc',   color: '#A78BFA' },
+  ]
+
+  return `
+    <div class="st-panel">
+      <div class="st-panel-header">
+        <div>
+          <h2 class="st-panel-title">${t('sub.title')}</h2>
+          <p class="st-panel-subtitle">${t('sub.current_plan')}: <strong style="color:var(--accent-blue)">${plan.toUpperCase()}</strong></p>
+        </div>
+        <div class="st-plan-status-badge ${profile?.subscriptionStatus === 'active' ? 'active' : ''}">
+          ${profile?.subscriptionStatus === 'active' ? t('sub.active') : t('sub.inactive')}
+        </div>
+      </div>
+
+      ${profile?.subscriptionEnd ? `
+        <div class="st-sub-expiry">
+          📅 ${t('sub.expires')} <strong>${new Date(profile.subscriptionEnd).toLocaleDateString('uk-UA')}</strong>
+        </div>
+      ` : ''}
+
+      <div class="st-plans-grid">
+        ${plans.map(p => `
+          <div class="st-plan-card ${plan === p.id ? 'current' : ''}" style="--plan-color:${p.color}">
+            <div class="st-plan-icon">${p.icon}</div>
+            <div class="st-plan-name" style="color:${p.color}">${p.name}</div>
+            <div class="st-plan-price">${p.price}<span class="st-plan-period">/міс</span></div>
+            <div class="st-plan-desc">${t(p.descKey)}</div>
+            ${plan === p.id
+              ? `<div class="st-plan-current-badge">Ваш план</div>`
+              : `<button class="st-btn st-btn-outline st-btn-plan" data-plan="${p.id}" style="--plan-color:${p.color}">
+                  Обрати ${p.name}
+                </button>`
+            }
+          </div>
+        `).join('')}
+      </div>
+
+      <div class="st-actions">
+        <button class="st-btn st-btn-primary" id="manage-sub-btn">
+          💳 ${t('sub.manage')}
+        </button>
+      </div>
+    </div>
+  `
+}
+
+// ── Danger zone tab ───────────────────────────────────────────
+function renderDanger() {
+  return `
+    <div class="st-panel">
+      <div class="st-panel-header">
+        <div>
+          <h2 class="st-panel-title" style="color:#F87171">${t('danger.title')}</h2>
+          <p class="st-panel-subtitle">Незворотні дії з вашим акаунтом</p>
+        </div>
+      </div>
+
+      <div class="st-danger-card">
+        <div class="st-danger-row">
+          <div class="st-danger-icon">↪</div>
+          <div class="st-danger-info">
+            <div class="st-danger-title">${t('danger.logout_title')}</div>
+            <div class="st-danger-desc">${t('danger.logout_desc')}</div>
+          </div>
+          <button class="st-btn st-btn-ghost" id="logout-btn">${t('danger.logout_btn')}</button>
+        </div>
+
+        <div class="st-danger-divider"></div>
+
+        <div class="st-danger-row">
+          <div class="st-danger-icon st-danger-icon-red">🗑</div>
+          <div class="st-danger-info">
+            <div class="st-danger-title">${t('danger.delete_title')}</div>
+            <div class="st-danger-desc">${t('danger.delete_desc')}</div>
+          </div>
+          <button class="st-btn st-btn-danger" id="delete-account-btn">${t('danger.delete_btn')}</button>
+        </div>
+      </div>
+
+      <div class="st-notice st-notice-warn" style="margin-top:20px">
+        <span>⚠️</span>
+        <span>Видалення акаунта призведе до безповоротної втрати всіх ваших даних, включаючи клієнтів, проекти, рахунки та інше.</span>
+      </div>
+    </div>
+  `
+}
+
+// ── Notifications tab ─────────────────────────────────────────
+const NOTIF_KEY = 'workhub_notifications'
+
+function getNotifSettings() {
+  try { return JSON.parse(localStorage.getItem(NOTIF_KEY) || '{}') } catch { return {} }
+}
+
+function renderNotifications() {
+  const s = getNotifSettings()
+  const rows = [
+    { id: 'task_due',     icon: '📋', title: 'Дедлайни задач',       desc: 'Нагадування за день до дедлайну' },
+    { id: 'tax_calendar', icon: '📅', title: 'Податковий календар',   desc: 'Нагадування про звіти та платежі' },
+    { id: 'new_client',   icon: '👤', title: 'Новий клієнт',          desc: 'Сповіщення про нові записи клієнтів' },
+    { id: 'invoice_paid', icon: '💰', title: 'Оплата рахунку',        desc: 'Коли рахунок позначено як оплачений' },
+    { id: 'team_updates', icon: '👥', title: 'Оновлення команди',     desc: 'Дії учасників у спільному просторі' },
+  ]
+
+  return `
+    <div class="st-panel">
+      <div class="st-panel-header">
+        <div>
+          <h2 class="st-panel-title">🔔 Сповіщення</h2>
+          <p class="st-panel-subtitle">Обирайте, про що отримувати нагадування</p>
+        </div>
+      </div>
+
+      <h3 class="st-section-label">В застосунку</h3>
+      <div class="st-notif-list">
+        ${rows.map(r => `
+          <div class="st-notif-row">
+            <div class="st-notif-icon">${r.icon}</div>
+            <div class="st-notif-info">
+              <div class="st-notif-title">${r.title}</div>
+              <div class="st-notif-desc">${r.desc}</div>
+            </div>
+            <label class="st-toggle">
+              <input type="checkbox" data-notif="${r.id}" ${s[r.id] !== false ? 'checked' : ''}>
+              <span class="st-toggle-track"><span class="st-toggle-thumb"></span></span>
+            </label>
+          </div>
+        `).join('')}
+      </div>
+
+      <div class="st-divider" style="margin:28px 0 24px"></div>
+
+      <h3 class="st-section-label">Email</h3>
+      <div class="st-notif-list">
+        <div class="st-notif-row">
+          <div class="st-notif-icon">📧</div>
+          <div class="st-notif-info">
+            <div class="st-notif-title">Email-дайджест</div>
+            <div class="st-notif-desc">Щотижневий звіт про активність</div>
+          </div>
+          <label class="st-toggle">
+            <input type="checkbox" data-notif="email_digest" ${s['email_digest'] ? 'checked' : ''}>
+            <span class="st-toggle-track"><span class="st-toggle-thumb"></span></span>
+          </label>
+        </div>
+        <div class="st-notif-row">
+          <div class="st-notif-icon">🔐</div>
+          <div class="st-notif-info">
+            <div class="st-notif-title">Безпека акаунта</div>
+            <div class="st-notif-desc">Вхід з нового пристрою, зміна пароля</div>
+          </div>
+          <label class="st-toggle">
+            <input type="checkbox" data-notif="email_security" checked disabled>
+            <span class="st-toggle-track st-toggle-track-locked"><span class="st-toggle-thumb"></span></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="st-actions">
+        <button class="st-btn st-btn-primary" id="save-notif-btn">
+          <span class="st-btn-icon">💾</span> Зберегти налаштування
+        </button>
+      </div>
+    </div>
+  `
+}
+
+function attachNotifications(content) {
+  content.querySelector('#save-notif-btn')?.addEventListener('click', () => {
+    const s = {}
+    content.querySelectorAll('[data-notif]').forEach(el => {
+      if (!el.disabled) s[el.dataset.notif] = el.checked
+    })
+    localStorage.setItem(NOTIF_KEY, JSON.stringify(s))
+    showToast('Налаштування збережено ✓', 'success')
+  })
+}
+
+// ── Event handlers per tab ────────────────────────────────────
+function attachTabEvents(content, tab, profile, user) {
+  switch (tab) {
+    case 'profile':       attachProfile(content, profile, user); break
+    case 'language':      attachLanguage(content); break
+    case 'appearance':    attachAppearance(content); break
+    case 'notifications': attachNotifications(content); break
+    case 'security':      attachSecurity(content, user); break
+    case 'subscription':  attachSubscription(content); break
+    case 'danger':        attachDanger(content); break
   }
 }
 
+function attachProfile(content, profile, user) {
+  // ── Особисті дані ──────────────────────────────────────────
+  content.querySelector('#save-profile-btn')?.addEventListener('click', async () => {
+    const name  = content.querySelector('#input-name').value.trim()
+    const phone = content.querySelector('#input-phone').value.trim()
+    const city  = content.querySelector('#input-city').value.trim()
+    if (!name) { showToast(t('profile.name_required'), 'error'); return }
+
+    const btn = content.querySelector('#save-profile-btn')
+    btn.disabled = true
+    btn.innerHTML = `<span class="st-btn-icon">⏳</span> ${t('common.saving')}`
+
+    try {
+      const data = { name, phone, city, updatedAt: serverTimestamp() }
+      await updateDoc(doc(db, 'users', user.uid), data)
+      updateProfileCache(user.uid, data)
+      showToast(t('profile.saved'), 'success')
+    } catch (err) {
+      console.error(err)
+      showToast(t('profile.error'), 'error')
+    } finally {
+      btn.disabled = false
+      btn.innerHTML = `<span class="st-btn-icon">💾</span> ${t('profile.save')}`
+    }
+  })
+
+  // ── Вибір ніші ─────────────────────────────────────────────
+  let selectedNiche = profile?.profession || null
+
+  content.querySelectorAll('.st-niche-card').forEach(card => {
+    card.addEventListener('click', () => {
+      selectedNiche = card.dataset.niche === 'custom' ? null : card.dataset.niche
+      content.querySelectorAll('.st-niche-card').forEach(c => c.classList.remove('active'))
+      card.classList.add('active')
+    })
+  })
+
+  // ── Бізнес дані ────────────────────────────────────────────
+  content.querySelector('#save-business-btn')?.addEventListener('click', async () => {
+    const businessName = content.querySelector('#input-business')?.value.trim()
+    const website      = content.querySelector('#input-website')?.value.trim()
+    const instagram    = content.querySelector('#input-instagram')?.value.trim()
+    const telegram     = content.querySelector('#input-telegram')?.value.trim()
+
+    if (!businessName) { showToast('Введіть назву бізнесу', 'error'); return }
+
+    const btn = content.querySelector('#save-business-btn')
+    btn.disabled = true
+    btn.innerHTML = `<span class="st-btn-icon">⏳</span> ${t('common.saving')}`
+
+    try {
+      const data = {
+        businessName, website, instagram, telegram,
+        profession:     selectedNiche,
+        accountType:    'owner',
+        onboardingDone: true,
+        updatedAt:      serverTimestamp(),
+      }
+      await updateDoc(doc(db, 'users', user.uid), data)
+      updateProfileCache(user.uid, data)
+
+      // Оновлюємо sidebar з новою нішею
+      const { renderNavigation } = await import('../../components/navigation.js')
+      const updatedProfile = { ...profile, ...data }
+      const sidebar = document.getElementById('sidebar')
+      if (sidebar) renderNavigation(sidebar, updatedProfile)
+
+      showToast('Бізнес збережено! Меню оновлено 🎉', 'success')
+    } catch (err) {
+      console.error(err)
+      showToast(t('profile.error'), 'error')
+    } finally {
+      btn.disabled = false
+      btn.innerHTML = `<span class="st-btn-icon">🏢</span> Зберегти та оновити меню`
+    }
+  })
+}
+
+function attachLanguage(content) {
+  let selectedLang = getLang()
+
+  content.querySelectorAll('.st-lang-card').forEach(card => {
+    card.addEventListener('click', () => {
+      selectedLang = card.dataset.lang
+      content.querySelectorAll('.st-lang-card').forEach(c => c.classList.remove('active'))
+      content.querySelectorAll('.st-check-circle').forEach(c => { c.classList.remove('checked'); c.textContent = '' })
+      card.classList.add('active')
+      const circle = card.querySelector('.st-check-circle')
+      circle.classList.add('checked')
+      circle.textContent = '✓'
+    })
+  })
+
+  content.querySelector('#save-lang-btn')?.addEventListener('click', async () => {
+    setLang(selectedLang)
+
+    // Save to Firestore
+    try {
+      const u = getCurrentUser()
+      if (u) await updateDoc(doc(db, 'users', u.uid), { language: selectedLang })
+    } catch { /* non-critical */ }
+
+    showToast(t('lang.saved'), 'success')
+
+    // Re-render the entire settings page after a moment
+    setTimeout(() => navigate('settings'), 500)
+  })
+}
+
+function attachAppearance(content) {
+  content.querySelectorAll('.st-theme-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const themeId = card.dataset.theme
+      localStorage.setItem('workhub_theme', themeId)
+      applyTheme(themeId)
+      content.querySelectorAll('.st-theme-card').forEach(c => {
+        c.classList.remove('active')
+        c.querySelector('.st-theme-active-badge')?.remove()
+      })
+      card.classList.add('active')
+      const badge = document.createElement('div')
+      badge.className = 'st-theme-active-badge'
+      badge.textContent = 'Активна'
+      card.appendChild(badge)
+      showToast('Тему змінено ✓', 'success')
+    })
+  })
+
+  content.querySelectorAll('.st-accent-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const accentId = btn.dataset.accent
+      localStorage.setItem('workhub_accent', accentId)
+      applyAccent(accentId)
+      content.querySelectorAll('.st-accent-btn').forEach(b => {
+        b.classList.remove('active')
+        b.querySelector('.st-accent-check')?.remove()
+      })
+      btn.classList.add('active')
+      const chk = document.createElement('div')
+      chk.className = 'st-accent-check'
+      chk.textContent = '✓'
+      btn.appendChild(chk)
+      showToast('Колір акценту змінено ✓', 'success')
+    })
+  })
+
+}
+
+function attachSecurity(content, user) {
+  // Password strength
+  content.querySelector('#input-new-password')?.addEventListener('input', (e) => {
+    const val = e.target.value
+    const fill  = content.querySelector('#strength-fill')
+    const label = content.querySelector('#strength-label')
+    if (!fill || !label) return
+
+    let strength = 0
+    if (val.length >= 6) strength++
+    if (val.length >= 10) strength++
+    if (/[A-Z]/.test(val) && /[a-z]/.test(val)) strength++
+    if (/\d/.test(val)) strength++
+    if (/[^a-zA-Z0-9]/.test(val)) strength++
+
+    const levels = [
+      { w: '0%',   color: 'transparent', text: '' },
+      { w: '20%',  color: '#F87171', text: 'Дуже слабкий' },
+      { w: '40%',  color: '#FB923C', text: 'Слабкий' },
+      { w: '60%',  color: '#FBBF24', text: 'Середній' },
+      { w: '80%',  color: '#34D399', text: 'Сильний' },
+      { w: '100%', color: '#10B981', text: 'Дуже сильний' },
+    ]
+    const lvl = levels[strength] || levels[0]
+    fill.style.width = lvl.w
+    fill.style.background = lvl.color
+    label.textContent = lvl.text
+    label.style.color = lvl.color
+  })
+
+  // Show/hide password toggle
+  content.querySelectorAll('.st-eye-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const input = content.querySelector(`#${btn.dataset.target}`)
+      if (!input) return
+      input.type = input.type === 'password' ? 'text' : 'password'
+      btn.textContent = input.type === 'password' ? '👁' : '🙈'
+    })
+  })
+
+  content.querySelector('#change-password-btn')?.addEventListener('click', async () => {
+    const currentPass  = content.querySelector('#input-current-password').value
+    const newPass      = content.querySelector('#input-new-password').value
+    const confirmPass  = content.querySelector('#input-confirm-password').value
+
+    if (!currentPass || !newPass || !confirmPass) { showToast(t('security.fill_all'), 'error'); return }
+    if (newPass.length < 6)          { showToast(t('security.min_length'), 'error'); return }
+    if (newPass !== confirmPass)     { showToast(t('security.mismatch'), 'error'); return }
+
+    const btn = content.querySelector('#change-password-btn')
+    btn.disabled = true
+
+    try {
+      const credential = EmailAuthProvider.credential(user.email, currentPass)
+      await reauthenticateWithCredential(user, credential)
+      await updatePassword(user, newPass)
+      showToast(t('security.changed'), 'success')
+      content.querySelector('#input-current-password').value = ''
+      content.querySelector('#input-new-password').value     = ''
+      content.querySelector('#input-confirm-password').value = ''
+    } catch (err) {
+      console.error(err)
+      const msg = err.code === 'auth/wrong-password' ? t('security.wrong_pass') : t('security.error')
+      showToast(msg, 'error')
+    } finally {
+      btn.disabled = false
+    }
+  })
+}
+
+function attachSubscription(content) {
+  content.querySelector('#manage-sub-btn')?.addEventListener('click', () => navigate('subscribe'))
+  content.querySelectorAll('.st-btn-plan').forEach(btn => {
+    btn.addEventListener('click', () => navigate('subscribe'))
+  })
+}
+
+function attachDanger(content) {
+  content.querySelector('#logout-btn')?.addEventListener('click', async () => {
+    if (!confirm(t('danger.logout_confirm'))) return
+    try {
+      await signOut(auth)
+      window.location.reload()
+    } catch { showToast(t('common.error'), 'error') }
+  })
+
+  content.querySelector('#delete-account-btn')?.addEventListener('click', () => {
+    const answer = prompt(t('danger.delete_prompt'))
+    if (answer === 'ВИДАЛИТИ' || answer === 'DELETE' || answer === 'USUŃ') {
+      alert(t('danger.delete_wip'))
+    }
+  })
+}
+
+// ── Helpers ───────────────────────────────────────────────────
+function initials(name = '') {
+  return name.split(' ').slice(0, 2).map(w => w[0]?.toUpperCase() || '').join('') || 'U'
+}
+
+function esc(s) {
+  return String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+function showToast(msg, type = 'info') {
+  document.querySelector('.st-toast')?.remove()
+  const el = document.createElement('div')
+  el.className = `st-toast st-toast-${type}`
+  el.textContent = msg
+  document.body.appendChild(el)
+  requestAnimationFrame(() => el.classList.add('st-toast-show'))
+  setTimeout(() => { el.classList.remove('st-toast-show'); setTimeout(() => el.remove(), 300) }, 3000)
+}
+
+// ── Styles ────────────────────────────────────────────────────
 function injectStyles() {
-  if (document.getElementById('settings-styles')) return
-  const style = document.createElement('style')
-  style.id = 'settings-styles'
-  style.textContent = `
-    .settings-page { padding: 32px 36px; max-width: 800px; margin: 0 auto; }
-    .section-desc { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+  document.getElementById('settings-styles')?.remove()
+  const s = document.createElement('style')
+  s.id = 'settings-styles'
+  s.textContent = `
 
-    /* Niche cards */
-    .niche-grid { display: flex; flex-direction: column; gap: 8px; }
-    .niche-card {
-      display: flex; align-items: center; gap: 14px;
-      background: var(--bg-tertiary); border: 2px solid var(--border);
-      border-radius: var(--radius-md); padding: 14px 16px;
-      cursor: pointer; transition: all .2s; position: relative;
+    /* ── Layout ── */
+    .st-page {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      min-height: calc(100vh - 40px);
     }
-    .niche-card:hover { border-color: rgba(255,255,255,.2); }
-    .niche-card.selected { border-color: var(--accent-blue); background: rgba(79,142,247,.08); }
-    .niche-icon  { font-size: 24px; flex-shrink: 0; }
-    .niche-info  { flex: 1; min-width: 0; }
-    .niche-title { font-weight: 700; font-size: 14px; margin-bottom: 2px; }
-    .niche-desc  { font-size: 12px; color: var(--text-secondary); }
-    .niche-check {
-      width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
-      background: var(--bg-secondary); border: 2px solid var(--border);
+
+    /* ── Sidebar ── */
+    .st-sidebar {
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 28px 0 20px;
+      position: sticky;
+      top: 0;
+      height: calc(100vh - 40px);
+      overflow-y: auto;
+    }
+    .st-sidebar-header {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 0 20px 24px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+    .st-sidebar-avatar {
+      width: 72px; height: 72px; border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
-      font-size: 11px; font-weight: 700; color: transparent; transition: all .2s;
+      font-size: 26px; font-weight: 800; color: #fff;
+      margin-bottom: 12px; flex-shrink: 0;
     }
-    .niche-card.selected .niche-check {
-      background: var(--accent-blue); border-color: var(--accent-blue); color: #fff;
+    .st-sidebar-name  { font-size: 15px; font-weight: 700; margin-bottom: 3px; }
+    .st-sidebar-email { font-size: 11px; color: var(--text-muted); word-break: break-all; }
+
+    /* ── Tabs ── */
+    .st-tabs { display: flex; flex-direction: column; gap: 2px; padding: 0 10px; flex: 1; }
+    .st-tab {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; border-radius: var(--radius-md);
+      background: none; border: none; cursor: pointer;
+      font-size: 14px; font-weight: 500; color: var(--text-secondary);
+      text-align: left; transition: all .15s; width: 100%;
+    }
+    .st-tab:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+    .st-tab.active { background: rgba(79,142,247,.12); color: var(--accent-blue); font-weight: 700; }
+    .st-tab-icon  { font-size: 16px; width: 22px; text-align: center; flex-shrink: 0; }
+    .st-tab-label { flex: 1; }
+
+    .st-sidebar-footer { padding: 16px 20px 0; border-top: 1px solid var(--border); margin-top: 16px; }
+    .st-plan-badge {
+      text-align: center; padding: 5px 12px; border-radius: var(--radius-full);
+      font-size: 11px; font-weight: 800; letter-spacing: .06em;
+    }
+    .st-plan-free     { background: rgba(148,163,184,.15); color: #94A3B8; }
+    .st-plan-pro      { background: rgba(79,142,247,.15);  color: var(--accent-blue); }
+    .st-plan-business { background: rgba(167,139,250,.15); color: #A78BFA; }
+
+    /* ── Content panel ── */
+    .st-content {
+      padding: 36px 40px;
+      overflow-y: auto;
+      max-width: 780px;
+      height: calc(100vh - 40px);
+      box-sizing: border-box;
+    }
+    .st-panel {}
+    .st-panel-header {
+      display: flex; align-items: flex-start;
+      justify-content: space-between; gap: 12px;
+      margin-bottom: 28px;
+    }
+    .st-panel-title {
+      font-family: var(--font-display); font-size: 24px; font-weight: 800;
+      margin-bottom: 4px;
+    }
+    .st-panel-subtitle { font-size: 13px; color: var(--text-muted); }
+
+    /* ── Avatar row ── */
+    .st-avatar-row {
+      display: flex; align-items: center; gap: 20px;
+      padding: 20px; background: var(--bg-secondary);
+      border: 1px solid var(--border); border-radius: var(--radius-xl);
+      margin-bottom: 24px;
+    }
+    .st-big-avatar {
+      width: 72px; height: 72px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 26px; font-weight: 800; color: #fff; flex-shrink: 0;
+    }
+    .st-avatar-name  { font-size: 17px; font-weight: 700; margin-bottom: 3px; }
+    .st-avatar-email { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
+    .st-avatar-plan  { display: inline-flex; padding: 2px 10px; border-radius: var(--radius-full); font-size: 10px; font-weight: 800; letter-spacing: .06em; }
+
+    /* ── Form ── */
+    .st-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .st-field { display: flex; flex-direction: column; gap: 6px; }
+    .st-label { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+    .st-input {
+      width: 100%; box-sizing: border-box;
+      padding: 11px 14px; background: var(--bg-secondary);
+      border: 1.5px solid var(--border); border-radius: var(--radius-md);
+      font-size: 14px; color: var(--text-primary);
+      transition: border-color .15s; outline: none;
+      font-family: inherit;
+    }
+    .st-input:focus { border-color: var(--accent-blue); background: var(--bg-primary); }
+    .st-input-disabled { opacity: .5; cursor: not-allowed; }
+    .st-input-readonly {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 13px; color: var(--text-secondary);
+      background: var(--bg-tertiary); cursor: default;
+    }
+    .st-input-icon { font-size: 14px; }
+    .st-input-wrap { position: relative; }
+    .st-input-wrap .st-input { width: 100%; padding-right: 44px; box-sizing: border-box; }
+    .st-input-lock {
+      position: absolute; right: 12px; top: 50%;
+      transform: translateY(-50%); font-size: 14px; pointer-events: none;
+    }
+    .st-eye-btn {
+      position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; cursor: pointer; font-size: 15px;
+      padding: 4px; line-height: 1;
+    }
+    .st-hint { font-size: 11px; color: var(--text-muted); }
+    .st-divider { height: 1px; background: var(--border); }
+    .st-section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 14px; }
+
+    /* ── Actions ── */
+    .st-actions { margin-top: 24px; display: flex; gap: 10px; }
+    .st-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 11px 22px; border-radius: var(--radius-md);
+      font-size: 14px; font-weight: 700; cursor: pointer;
+      border: none; transition: all .18s;
+    }
+    .st-btn-icon { font-size: 15px; }
+    .st-btn-primary {
+      background: linear-gradient(135deg,#667eea,#4F8EF7);
+      color: #fff;
+    }
+    .st-btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(79,142,247,.4); }
+    .st-btn-primary:disabled { opacity: .6; transform: none; box-shadow: none; }
+    .st-btn-ghost {
+      background: var(--bg-secondary); border: 1.5px solid var(--border);
+      color: var(--text-primary);
+    }
+    .st-btn-ghost:hover { border-color: var(--accent-blue); }
+    .st-btn-danger { background: linear-gradient(135deg,#EF4444,#DC2626); color: #fff; }
+    .st-btn-danger:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(239,68,68,.4); }
+    .st-btn-outline {
+      background: none; border: 1.5px solid var(--plan-color,var(--border));
+      color: var(--plan-color, var(--text-primary));
+    }
+    .st-btn-outline:hover { background: color-mix(in srgb, var(--plan-color,#fff) 10%, transparent); }
+    .st-btn-plan { width: 100%; justify-content: center; margin-top: auto; }
+
+    /* ── Language ── */
+    .st-lang-grid { display: flex; flex-direction: column; gap: 10px; }
+    .st-lang-card {
+      display: flex; align-items: center; gap: 14px;
+      padding: 16px 18px; background: var(--bg-secondary);
+      border: 2px solid var(--border); border-radius: var(--radius-xl);
+      cursor: pointer; transition: all .15s; text-align: left; width: 100%;
+    }
+    .st-lang-card:hover { border-color: rgba(255,255,255,.2); }
+    .st-lang-card.active { border-color: var(--accent-blue); background: rgba(79,142,247,.07); }
+    .st-lang-flag  { font-size: 28px; flex-shrink: 0; }
+    .st-lang-info  { flex: 1; }
+    .st-lang-name  { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
+    .st-lang-desc  { font-size: 12px; color: var(--text-muted); }
+    .st-lang-check { flex-shrink: 0; }
+    .st-check-circle {
+      width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 800; color: transparent;
+      transition: all .15s;
+    }
+    .st-check-circle.checked {
+      background: var(--accent-blue); border-color: var(--accent-blue);
+      color: #fff;
     }
 
-    .settings-header { margin-bottom: 40px; }
-    .settings-title { font-family: var(--font-display); font-size: 36px; font-weight: 800; margin-bottom: 8px; }
-    .settings-subtitle { font-size: 16px; color: var(--text-secondary); }
+    /* ── Appearance ── */
+    .st-theme-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; }
+    .st-theme-card {
+      background: var(--bg-secondary); border: 2px solid var(--border);
+      border-radius: var(--radius-xl); padding: 14px;
+      cursor: pointer; transition: all .15s; text-align: left; position: relative; overflow: hidden;
+    }
+    .st-theme-card:hover { border-color: rgba(255,255,255,.2); }
+    .st-theme-card.active { border-color: var(--accent-blue); }
+    .st-theme-preview {
+      height: 80px; border-radius: var(--radius-md); overflow: hidden;
+      display: flex; margin-bottom: 10px;
+    }
+    .st-theme-preview-dark  { background: #0F1117; }
+    .st-theme-preview-light { background: #F8FAFC; }
+    .st-theme-preview-system { background: linear-gradient(to right, #0F1117 50%, #F8FAFC 50%); }
+    .st-preview-sidebar { width: 26px; background: rgba(255,255,255,.08); flex-shrink: 0; }
+    .st-theme-preview-light .st-preview-sidebar { background: rgba(0,0,0,.06); }
+    .st-preview-content { flex: 1; padding: 6px; display: flex; flex-direction: column; gap: 4px; }
+    .st-preview-bar     { height: 8px; border-radius: 4px; background: rgba(255,255,255,.12); width: 60%; }
+    .st-theme-preview-light .st-preview-bar { background: rgba(0,0,0,.1); }
+    .st-preview-cards   { display: flex; gap: 4px; flex: 1; }
+    .st-preview-card    { flex: 1; border-radius: 4px; background: rgba(255,255,255,.07); }
+    .st-theme-preview-light .st-preview-card { background: rgba(0,0,0,.07); }
+    .st-theme-label { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; margin-bottom: 3px; }
+    .st-theme-desc  { font-size: 11px; color: var(--text-muted); }
+    .st-theme-active-badge {
+      position: absolute; top: 8px; right: 8px;
+      background: var(--accent-blue); color: #fff;
+      font-size: 10px; font-weight: 800; padding: 2px 8px;
+      border-radius: var(--radius-full);
+    }
+    .st-accent-row  { display: flex; gap: 10px; align-items: center; }
+    .st-accent-btn  {
+      width: 36px; height: 36px; border-radius: 50%;
+      border: 2.5px solid transparent; cursor: pointer;
+      background: none; display: flex; align-items: center;
+      justify-content: center; position: relative; transition: all .15s;
+    }
+    .st-accent-btn:hover  { transform: scale(1.15); }
+    .st-accent-btn.active { border-color: var(--ac, #fff); }
+    .st-accent-dot  { width: 22px; height: 22px; border-radius: 50%; }
+    .st-accent-check {
+      position: absolute; font-size: 11px; font-weight: 800; color: #fff;
+      text-shadow: 0 1px 2px rgba(0,0,0,.6); pointer-events: none;
+    }
 
-    .settings-section { margin-bottom: 32px; }
-    .section-header { margin-bottom: 16px; }
-    .section-title { font-family: var(--font-display); font-size: 20px; font-weight: 700; }
+    /* ── Security ── */
+    .st-security-alert {
+      display: flex; align-items: center; gap: 12px;
+      background: rgba(251,191,36,.1); border: 1px solid rgba(251,191,36,.3);
+      border-radius: var(--radius-md); padding: 14px 16px;
+      margin-bottom: 24px;
+    }
+    .st-security-alert-icon { font-size: 22px; flex-shrink: 0; }
+    .st-security-alert-text { font-size: 13px; line-height: 1.5; }
+    .st-strength-bar {
+      height: 4px; background: var(--bg-tertiary); border-radius: 2px;
+      margin-top: 6px; overflow: hidden;
+    }
+    .st-strength-fill { height: 100%; border-radius: 2px; transition: all .3s; width: 0; }
+    .st-strength-label { font-size: 11px; font-weight: 600; margin-top: 4px; min-height: 14px; }
+    .st-session-row {
+      display: flex; align-items: center; gap: 14px;
+      padding: 14px 16px; background: var(--bg-secondary);
+      border: 1px solid var(--border); border-radius: var(--radius-md);
+    }
+    .st-session-icon  { font-size: 22px; }
+    .st-session-info  { flex: 1; }
+    .st-session-name  { font-size: 14px; font-weight: 600; }
+    .st-session-meta  { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+    .st-session-badge {
+      font-size: 11px; font-weight: 800; padding: 3px 10px;
+      border-radius: var(--radius-full); background: rgba(52,211,153,.15); color: #34D399;
+    }
 
-    .settings-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 28px; }
+    /* ── Subscription ── */
+    .st-plans-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; margin-bottom: 24px; }
+    .st-plan-card {
+      background: var(--bg-secondary); border: 2px solid var(--border);
+      border-radius: var(--radius-xl); padding: 20px;
+      display: flex; flex-direction: column; gap: 8px;
+      transition: all .2s; position: relative;
+    }
+    .st-plan-card.current { border-color: var(--plan-color); background: color-mix(in srgb, var(--plan-color) 6%, var(--bg-secondary)); }
+    .st-plan-icon { font-size: 28px; }
+    .st-plan-name { font-size: 11px; font-weight: 800; letter-spacing: .08em; }
+    .st-plan-price { font-family: var(--font-display); font-size: 28px; font-weight: 800; line-height: 1; }
+    .st-plan-period { font-size: 13px; font-weight: 400; color: var(--text-muted); }
+    .st-plan-desc { font-size: 12px; color: var(--text-muted); line-height: 1.5; flex: 1; }
+    .st-plan-current-badge {
+      text-align: center; padding: 6px; border-radius: var(--radius-md);
+      font-size: 11px; font-weight: 800;
+      background: color-mix(in srgb, var(--plan-color) 15%, transparent);
+      color: var(--plan-color);
+    }
+    .st-plan-status-badge {
+      padding: 5px 14px; border-radius: var(--radius-full);
+      font-size: 12px; font-weight: 700;
+      background: rgba(148,163,184,.15); color: #94A3B8;
+    }
+    .st-plan-status-badge.active { background: rgba(52,211,153,.15); color: #34D399; }
+    .st-sub-expiry {
+      padding: 10px 14px; background: var(--bg-secondary);
+      border: 1px solid var(--border); border-radius: var(--radius-md);
+      font-size: 13px; margin-bottom: 20px;
+    }
 
-    /* Avatar */
-    .avatar-section { display: flex; align-items: center; gap: 24px; margin-bottom: 28px; padding-bottom: 28px; border-bottom: 1px solid var(--border); }
-    .avatar-placeholder { width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 800; color: #fff; flex-shrink: 0; }
-    .avatar-info { flex: 1; }
-    .avatar-info-title { font-weight: 700; font-size: 18px; margin-bottom: 4px; }
-    .avatar-info-desc { font-size: 14px; color: var(--text-secondary); }
+    /* ── Danger ── */
+    .st-danger-card {
+      background: var(--bg-secondary);
+      border: 2px solid rgba(239,68,68,.25); border-radius: var(--radius-xl);
+      overflow: hidden;
+    }
+    .st-danger-row { display: flex; align-items: center; gap: 14px; padding: 20px 22px; }
+    .st-danger-divider { height: 1px; background: rgba(239,68,68,.15); }
+    .st-danger-icon { font-size: 22px; flex-shrink: 0; width: 32px; text-align: center; }
+    .st-danger-icon-red { filter: hue-rotate(0deg); }
+    .st-danger-info { flex: 1; }
+    .st-danger-title { font-size: 14px; font-weight: 700; margin-bottom: 3px; }
+    .st-danger-desc { font-size: 12px; color: var(--text-muted); }
 
-    /* Forms */
-    .form-group { margin-bottom: 24px; }
-    .form-label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 8px; }
-    .form-input, .form-select { width: 100%; padding: 12px 16px; background: var(--bg-tertiary); border: 2px solid var(--border); border-radius: var(--radius-md); font-size: 14px; color: var(--text-primary); transition: all .2s; }
-    .form-input:focus, .form-select:focus { outline: none; border-color: var(--accent-blue); background: var(--bg-primary); }
-    .form-input:disabled { opacity: 0.6; cursor: not-allowed; }
-    .form-hint { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+    /* ── Notice ── */
+    .st-notice {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 12px 14px; background: rgba(79,142,247,.08);
+      border: 1px solid rgba(79,142,247,.2); border-radius: var(--radius-md);
+      font-size: 12px; color: var(--text-secondary); line-height: 1.5;
+    }
+    .st-notice-warn {
+      background: rgba(251,191,36,.08); border-color: rgba(251,191,36,.25);
+    }
 
-    .input-with-prefix { position: relative; }
-    .input-prefix { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); font-weight: 600; }
-    .input-with-prefix-field { padding-left: 36px; }
+    /* ── Toast ── */
+    .st-toast {
+      position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+      padding: 12px 20px; border-radius: var(--radius-md);
+      background: var(--bg-secondary); border: 1px solid var(--border);
+      box-shadow: var(--shadow-xl); font-size: 14px; font-weight: 600;
+      transform: translateY(20px); opacity: 0; transition: all .25s;
+    }
+    .st-toast-show { transform: translateY(0); opacity: 1; }
+    .st-toast-success { border-left: 4px solid #34D399; }
+    .st-toast-error   { border-left: 4px solid #F87171; }
+    .st-toast-info    { border-left: 4px solid #4F8EF7; }
 
-    /* Security */
-    .security-warning { display: flex; align-items: center; gap: 12px; background: rgba(251,191,36,0.1); border: 1px solid rgba(251,191,36,0.3); border-radius: var(--radius-md); padding: 14px; margin-bottom: 24px; }
-    .warning-icon { font-size: 24px; }
-    .warning-text { font-size: 13px; line-height: 1.5; }
+    /* ── Niche cards ── */
+    .st-niche-grid { display: flex; flex-direction: column; gap: 8px; }
+    .st-niche-card {
+      display: flex; align-items: center; gap: 14px;
+      padding: 13px 16px; background: var(--bg-secondary);
+      border: 2px solid var(--border); border-radius: var(--radius-lg);
+      cursor: pointer; transition: all .15s; text-align: left; width: 100%;
+    }
+    .st-niche-card:hover { border-color: color-mix(in srgb, var(--nc) 60%, transparent); }
+    .st-niche-card.active {
+      border-color: var(--nc);
+      background: color-mix(in srgb, var(--nc) 8%, var(--bg-secondary));
+    }
+    .st-niche-icon  { font-size: 22px; flex-shrink: 0; width: 28px; text-align: center; }
+    .st-niche-body  { flex: 1; min-width: 0; }
+    .st-niche-title { font-size: 14px; font-weight: 700; margin-bottom: 2px; }
+    .st-niche-desc  { font-size: 11px; color: var(--text-muted); }
+    .st-niche-check {
+      width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+      background: var(--bg-tertiary); border: 2px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 800; color: transparent; transition: all .2s;
+    }
+    .st-niche-card.active .st-niche-check {
+      background: var(--nc); border-color: var(--nc); color: #fff;
+    }
 
-    /* Subscription */
-    .subscription-info { margin-bottom: 20px; }
-    .subscription-plan { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-    .plan-name { font-size: 24px; font-weight: 800; font-family: var(--font-display); }
-    .plan-status { padding: 4px 12px; border-radius: 50px; font-size: 12px; font-weight: 700; }
-    .status-active { background: rgba(52,211,153,0.2); color: #34D399; }
-    .status-inactive { background: rgba(156,163,175,0.2); color: #9CA3AF; }
-    .subscription-end { font-size: 14px; color: var(--text-secondary); }
+    /* @ prefix input */
+    .st-input-at { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-weight: 700; font-size: 14px; pointer-events: none; }
+    .st-input-at-pad { padding-left: 30px !important; }
 
-    /* Buttons */
-    .btn-primary, .btn-secondary, .btn-danger { padding: 12px 24px; border-radius: var(--radius-md); font-weight: 700; font-size: 14px; cursor: pointer; transition: all .3s; border: none; }
-    .btn-large { width: 100%; padding: 14px; font-size: 15px; }
-    .btn-primary { background: linear-gradient(135deg, #667eea 0%, #4F8EF7 100%); color: #fff; }
-    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(79,142,247,0.4); }
-    .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary); border: 2px solid var(--border); }
-    .btn-secondary:hover { border-color: var(--accent-blue); }
-    .btn-danger { background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%); color: #fff; }
-    .btn-danger:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(239,68,68,0.4); }
+    /* ── Notifications ── */
+    .st-notif-list { display: flex; flex-direction: column; gap: 2px; }
+    .st-notif-row {
+      display: flex; align-items: center; gap: 14px;
+      padding: 14px 16px; border-radius: var(--radius-md);
+      transition: background .15s;
+    }
+    .st-notif-row:hover { background: var(--bg-secondary); }
+    .st-notif-icon  { font-size: 20px; flex-shrink: 0; width: 28px; text-align: center; }
+    .st-notif-info  { flex: 1; min-width: 0; }
+    .st-notif-title { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+    .st-notif-desc  { font-size: 12px; color: var(--text-muted); }
 
-    /* Danger Zone */
-    .danger-zone { border: 2px solid rgba(239,68,68,0.3); }
-    .danger-item { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 16px 0; border-bottom: 1px solid var(--border); }
-    .danger-item:last-child { border-bottom: none; }
-    .danger-title { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
-    .danger-desc { font-size: 13px; color: var(--text-secondary); }
+    .st-toggle { position: relative; flex-shrink: 0; cursor: pointer; }
+    .st-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .st-toggle-track {
+      display: block; width: 44px; height: 24px; border-radius: var(--radius-full);
+      background: var(--bg-tertiary); border: 1.5px solid var(--border);
+      transition: all .2s; position: relative;
+    }
+    .st-toggle-thumb {
+      position: absolute; top: 2px; left: 2px;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: var(--text-muted); transition: all .2s;
+    }
+    .st-toggle input:checked + .st-toggle-track {
+      background: var(--accent-blue); border-color: var(--accent-blue);
+    }
+    .st-toggle input:checked + .st-toggle-track .st-toggle-thumb {
+      transform: translateX(20px); background: #fff;
+    }
+    .st-toggle-track-locked { opacity: .5; }
+    .st-toggle input:disabled + .st-toggle-track { cursor: not-allowed; }
 
-    /* Loading */
-    .loading-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 10000; }
-    .loading-content { text-align: center; }
-    .spinner-large { width: 48px; height: 48px; border: 4px solid rgba(255,255,255,0.2); border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
-    .loading-text { font-size: 16px; font-weight: 600; color: #fff; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    /* Toast */
-    .toast { position: fixed; bottom: 24px; right: 24px; background: var(--bg-secondary); border: 1px solid var(--border); padding: 16px 24px; border-radius: var(--radius-md); box-shadow: var(--shadow-xl); z-index: 10000; transform: translateY(100px); opacity: 0; transition: all .3s; font-weight: 600; }
-    .toast-show { transform: translateY(0); opacity: 1; }
-    .toast-success { border-left: 4px solid #34D399; }
-    .toast-error { border-left: 4px solid #EF4444; }
-    .toast-info { border-left: 4px solid #4F8EF7; }
+    /* ── Responsive ── */
+    @media (max-width: 720px) {
+      .st-page { grid-template-columns: 1fr; }
+      .st-sidebar { height: auto; position: static; border-right: none; border-bottom: 1px solid var(--border); flex-direction: row; flex-wrap: wrap; padding: 12px; }
+      .st-sidebar-header { display: none; }
+      .st-tabs { flex-direction: row; gap: 4px; flex: none; padding: 0; }
+      .st-tab-label { display: none; }
+      .st-sidebar-footer { display: none; }
+      .st-content { padding: 20px; }
+      .st-form-grid { grid-template-columns: 1fr; }
+      .st-theme-grid { grid-template-columns: 1fr; }
+      .st-plans-grid { grid-template-columns: 1fr; }
+    }
   `
-  document.head.appendChild(style)
+  document.head.appendChild(s)
 }

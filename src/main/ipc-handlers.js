@@ -1,5 +1,5 @@
 // src/main/ipc-handlers.js
-const { ipcMain } = require('electron')
+const { ipcMain, app, shell, dialog } = require('electron')
 const { spawn }   = require('child_process')
 const os          = require('os')
 const fs          = require('fs')
@@ -269,5 +269,53 @@ ipcMain.handle('tg:fetchChannel', async (_, { token, username }) => {
     }
   } catch (err) {
     return { error: err.message }
+  }
+})
+
+// ── IPC: Документи (локальне зберігання) ─────────────────────────────────────
+const DOCS_DIR = path.join(app.getPath('userData'), 'documents')
+if (!fs.existsSync(DOCS_DIR)) fs.mkdirSync(DOCS_DIR, { recursive: true })
+
+// Збереження файлу: отримуємо ArrayBuffer з renderer, копіюємо в userData/documents/
+ipcMain.handle('docs:save', async (_, { fileName, buffer, uid }) => {
+  try {
+    const userDir = path.join(DOCS_DIR, uid || 'default')
+    if (!fs.existsSync(userDir)) fs.mkdirSync(userDir, { recursive: true })
+
+    const timestamp = Date.now()
+    const safe      = fileName.replace(/[^a-zA-Zа-яА-ЯёЁіІїЇєЄ0-9._-]/g, '_')
+    const destName  = `${timestamp}_${safe}`
+    const destPath  = path.join(userDir, destName)
+
+    fs.writeFileSync(destPath, Buffer.from(buffer))
+    return { success: true, localPath: destPath, fileName: destName }
+  } catch (e) {
+    return { error: e.message }
+  }
+})
+
+// Відкрити файл у системному переглядачі
+ipcMain.handle('docs:open', async (_, { localPath }) => {
+  try {
+    await shell.openPath(localPath)
+    return { success: true }
+  } catch (e) {
+    return { error: e.message }
+  }
+})
+
+// Показати файл у провіднику
+ipcMain.handle('docs:show', async (_, { localPath }) => {
+  shell.showItemInFolder(localPath)
+  return { success: true }
+})
+
+// Видалити файл
+ipcMain.handle('docs:delete', async (_, { localPath }) => {
+  try {
+    if (fs.existsSync(localPath)) fs.unlinkSync(localPath)
+    return { success: true }
+  } catch (e) {
+    return { error: e.message }
   }
 })

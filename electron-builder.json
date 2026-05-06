@@ -1,7 +1,8 @@
 {
   "appId": "com.workhub.app",
   "productName": "WorkHub",
-  "copyright": "Copyright © 2024",
+  "copyright": "Copyright © 2026",
+  "icon": "assets/icon.png",
   "directories": {
     "output": "dist"
   },

@@ -2,8 +2,9 @@
 import { getCurrentUser, getUserProfile, getActivePathSegments } from '../../services/auth.js'
 import { getProfessionConfig } from '../../../core/profession-config.js'
 import { db } from '../../services/firebase.js'
-import { collection, getDocs, query, orderBy, limit, where } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
+import { collection, getDocs, query, orderBy, limit, where, doc, getDoc, updateDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 import { navigate } from '../../../core/router.js'
+import { clearProfileCache } from '../../services/auth.js'
 
 export async function render(container) {
   const user    = getCurrentUser()
@@ -49,42 +50,236 @@ function renderWorkerDashboard(container, profile) {
     return
   }
 
-  const modules = profile.workspaceModules || []
-  const MODULE_META = {
-    dashboard: { icon: '⊞', label: 'Дашборд' }, clients: { icon: '👥', label: 'Клієнти' },
-    projects: { icon: '📁', label: 'Проекти' }, invoices: { icon: '📄', label: 'Рахунки' },
-    contracts: { icon: '📝', label: 'Договори' }, tasks: { icon: '✓', label: 'Задачі' },
-    timer: { icon: '⏱', label: 'Таймер' }, finances: { icon: '💰', label: 'Фінанси' },
-    'tax-calendar': { icon: '📅', label: 'Податки' }, appointments: { icon: '🗓', label: 'Розклад' },
-    services: { icon: '💅', label: 'Послуги' }, 'content-plan': { icon: '📱', label: 'Контент' },
-    accounts: { icon: '🔗', label: 'Акаунти' }, passwords: { icon: '🔑', label: 'Паролі' },
-    notes: { icon: '🗒', label: 'Нотатки' },
-  }
+  const modules   = profile.workspaceModules || []
+  const role      = profile.workspaceRole || 'Учасник'
+  const wsName    = profile.workspaceName  || profile.businessName || 'Робочий простір'
+  const initials  = (profile.name || name).split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+  const hasStats  = modules.some(m => ['tasks','projects','clients','invoices'].includes(m))
+  const user      = getCurrentUser()
 
   container.innerHTML = `
-    <div class="worker-dash">
-      <div class="worker-dash-header">
-        <h1>${getGreeting()}, ${name}!</h1>
-        <p class="worker-dash-role">Ваша роль: <strong>${profile.workspaceRole || 'Учасник'}</strong></p>
-      </div>
-      <div class="worker-modules-title">Ваші розділи</div>
-      <div class="worker-modules-grid">
-        ${modules.filter(id => id !== 'dashboard').map(id => {
-          const m = MODULE_META[id]
-          if (!m) return ''
-          return `
-            <div class="worker-module-card" data-route="${id}">
-              <div class="worker-module-icon">${m.icon}</div>
-              <div class="worker-module-label">${m.label}</div>
+    <div class="wdb-page">
+
+      <!-- Hero -->
+      <div class="wdb-hero">
+        <div class="wdb-hero-glow"></div>
+        <div class="wdb-hero-left">
+          <div class="wdb-avatar">${initials}</div>
+          <div class="wdb-hero-text">
+            <div class="wdb-greeting">${getGreeting()}, ${name}!</div>
+            <div class="wdb-hero-meta">
+              <span class="wdb-role-pill">${role}</span>
+              <span class="wdb-hero-dot">·</span>
+              <span class="wdb-ws-name">${wsName}</span>
             </div>
-          `
-        }).join('')}
+          </div>
+        </div>
+        <div class="wdb-hero-date">
+          <div class="wdb-date-weekday">${new Date().toLocaleDateString('uk-UA', { weekday: 'long' })}</div>
+          <div class="wdb-date-num">${new Date().toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' })}</div>
+        </div>
+      </div>
+
+      <!-- Company info + Leave -->
+      <div class="wdb-two-col">
+
+        <div class="wdb-company-card" id="wdb-company-card">
+          <div class="wdb-company-label">Ваша компанія</div>
+          <div class="wdb-company-body">
+            <div class="wdb-company-avatar" id="wdb-owner-avatar">…</div>
+            <div class="wdb-company-info">
+              <div class="wdb-company-biz" id="wdb-owner-biz">
+                <span class="wdb-shimmer-line" style="width:140px"></span>
+              </div>
+              <div class="wdb-company-owner" id="wdb-owner-name">
+                <span class="wdb-shimmer-line" style="width:100px"></span>
+              </div>
+              <div class="wdb-company-email" id="wdb-owner-email"></div>
+            </div>
+          </div>
+          <div class="wdb-company-meta">
+            <div class="wdb-company-meta-row">
+              <span class="wdb-meta-key">Ваша роль</span>
+              <span class="wdb-meta-val wdb-role-pill-sm">${role}</span>
+            </div>
+            <div class="wdb-company-meta-row">
+              <span class="wdb-meta-key">Модулів доступно</span>
+              <span class="wdb-meta-val">${modules.filter(m => m !== 'dashboard').length}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="wdb-leave-card">
+          <div class="wdb-leave-icon">🚪</div>
+          <div class="wdb-leave-title">Покинути компанію</div>
+          <div class="wdb-leave-desc">
+            Ви більше не матимете доступу до даних і модулів цього воркспейсу.
+          </div>
+          <button class="wdb-leave-btn" id="wdb-leave-btn">
+            Вийти з воркспейсу
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Quick stats -->
+      ${hasStats ? `
+      <div class="wdb-stats-row">
+        ${modules.includes('tasks') ? `
+        <div class="wdb-stat-card" data-route="tasks" style="--sc:#A78BFA">
+          <div class="wdb-stat-icon">✅</div>
+          <div class="wdb-stat-val" id="wdb-task-count"><span class="wdb-stat-spin"></span></div>
+          <div class="wdb-stat-label">Відкритих задач</div>
+        </div>` : ''}
+        ${modules.includes('projects') ? `
+        <div class="wdb-stat-card" data-route="projects" style="--sc:#34D399">
+          <div class="wdb-stat-icon">📁</div>
+          <div class="wdb-stat-val" id="wdb-proj-count"><span class="wdb-stat-spin"></span></div>
+          <div class="wdb-stat-label">Активних проектів</div>
+        </div>` : ''}
+        ${modules.includes('clients') ? `
+        <div class="wdb-stat-card" data-route="clients" style="--sc:#4F8EF7">
+          <div class="wdb-stat-icon">👥</div>
+          <div class="wdb-stat-val" id="wdb-client-count"><span class="wdb-stat-spin"></span></div>
+          <div class="wdb-stat-label">Клієнтів</div>
+        </div>` : ''}
+        ${modules.includes('invoices') ? `
+        <div class="wdb-stat-card" data-route="invoices" style="--sc:#F59E0B">
+          <div class="wdb-stat-icon">💸</div>
+          <div class="wdb-stat-val" id="wdb-inv-count"><span class="wdb-stat-spin"></span></div>
+          <div class="wdb-stat-label">Неоплачених</div>
+        </div>` : ''}
+      </div>` : ''}
+
+      <!-- Modules grid -->
+      <div class="wdb-mods-wrap">
+        <div class="wdb-mods-label">Модулі</div>
+        <div class="wdb-mods-grid">
+          ${modules.filter(id => id !== 'dashboard').map(id => {
+            const m = MODULE_NAV[id]
+            if (!m) return ''
+            return `
+              <button class="wdb-mod-tile" data-route="${id}" style="--mc:${m.color || '#4F8EF7'}">
+                <div class="wdb-mod-tile-icon">${m.icon}</div>
+                <div class="wdb-mod-tile-label">${m.label}</div>
+              </button>
+            `
+          }).join('')}
+        </div>
+      </div>
+
+    </div>
+  `
+
+  container.querySelectorAll('[data-route]').forEach(el =>
+    el.addEventListener('click', () => navigate(el.dataset.route))
+  )
+
+  // Leave workspace
+  container.querySelector('#wdb-leave-btn')?.addEventListener('click', () => {
+    showLeaveConfirm(user.uid, profile.workspaceId)
+  })
+
+  // Load owner profile
+  loadOwnerProfile(profile.workspaceId).then(owner => {
+    const bizEl    = container.querySelector('#wdb-owner-biz')
+    const nameEl   = container.querySelector('#wdb-owner-name')
+    const emailEl  = container.querySelector('#wdb-owner-email')
+    const avatarEl = container.querySelector('#wdb-owner-avatar')
+    if (bizEl)    bizEl.textContent    = owner.businessName || owner.name || 'Бізнес'
+    if (nameEl)   nameEl.textContent   = owner.name ? `Власник: ${owner.name}` : ''
+    if (emailEl)  emailEl.textContent  = owner.email || ''
+    if (avatarEl) avatarEl.textContent = (owner.businessName || owner.name || '?')[0].toUpperCase()
+  })
+
+  // Load stats async
+  if (profile.workspaceId) {
+    loadWorkerStats(['users', profile.workspaceId], modules).then(stats => {
+      const set = (id, val) => { const el = container.querySelector(id); if (el) el.textContent = val ?? '—' }
+      set('#wdb-task-count',   stats.openTasks)
+      set('#wdb-proj-count',   stats.activeProjects)
+      set('#wdb-client-count', stats.totalClients)
+      set('#wdb-inv-count',    stats.unpaidInvoices)
+    })
+  }
+}
+
+async function loadOwnerProfile(workspaceId) {
+  try {
+    const snap = await getDoc(doc(db, 'users', workspaceId))
+    return snap.exists() ? snap.data() : {}
+  } catch { return {} }
+}
+
+function showLeaveConfirm(uid, workspaceId) {
+  const overlay = document.createElement('div')
+  overlay.className = 'wdb-confirm-overlay'
+  overlay.innerHTML = `
+    <div class="wdb-confirm-dialog">
+      <div class="wdb-confirm-icon">🚪</div>
+      <div class="wdb-confirm-title">Покинути воркспейс?</div>
+      <div class="wdb-confirm-desc">
+        Ви втратите доступ до всіх даних цього бізнесу.<br>
+        Власник зможе знову запросити вас пізніше.
+      </div>
+      <div class="wdb-confirm-actions">
+        <button class="wdb-confirm-cancel">Скасувати</button>
+        <button class="wdb-confirm-ok">Так, вийти</button>
       </div>
     </div>
   `
-  container.querySelectorAll('.worker-module-card').forEach(c =>
-    c.addEventListener('click', () => navigate(c.dataset.route))
-  )
+  document.body.appendChild(overlay)
+  overlay.querySelector('.wdb-confirm-cancel').addEventListener('click', () => overlay.remove())
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove() })
+  overlay.querySelector('.wdb-confirm-ok').addEventListener('click', async () => {
+    const btn = overlay.querySelector('.wdb-confirm-ok')
+    btn.textContent = 'Виходимо…'
+    btn.disabled = true
+    try {
+      await leaveWorkspace(uid, workspaceId)
+      overlay.remove()
+      navigate('dashboard')
+    } catch (e) {
+      btn.textContent = 'Помилка, спробуй ще'
+      btn.disabled = false
+    }
+  })
+}
+
+async function leaveWorkspace(uid, workspaceId) {
+  // Remove member doc from workspace
+  await deleteDoc(doc(db, 'workspaces', workspaceId, 'members', uid))
+  // Clear workspace fields from user profile
+  await updateDoc(doc(db, 'users', uid), {
+    accountType:      'owner',
+    workspaceId:      null,
+    workspaceRole:    null,
+    workspaceModules: null,
+    workspaceName:    null,
+  })
+  // Clear cache so dashboard re-reads fresh profile
+  clearProfileCache()
+}
+
+async function loadWorkerStats(base, modules) {
+  const stats = {}
+  const getAll = async (coll) => {
+    try {
+      const snap = await getDocs(collection(db, ...base, coll))
+      return snap.docs.map(d => d.data())
+    } catch { return [] }
+  }
+  const [tasks, projects, clients, invoices] = await Promise.all([
+    modules.includes('tasks')    ? getAll('tasks')    : Promise.resolve([]),
+    modules.includes('projects') ? getAll('projects') : Promise.resolve([]),
+    modules.includes('clients')  ? getAll('clients')  : Promise.resolve([]),
+    modules.includes('invoices') ? getAll('invoices') : Promise.resolve([]),
+  ])
+  stats.openTasks      = tasks.filter(t => t.status !== 'done').length
+  stats.activeProjects = projects.filter(p => p.status === 'active').length
+  stats.totalClients   = clients.length
+  stats.unpaidInvoices = invoices.filter(i => i.status === 'unpaid').length
+  return stats
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -92,7 +287,12 @@ function renderWorkerDashboard(container, profile) {
 // ═══════════════════════════════════════════════════════════
 async function renderDashboard(container, profile, user) {
   injectStyles()
-  const config = getProfessionConfig(profile?.profession)
+  const baseConfig = getProfessionConfig(profile?.profession)
+  // Use selectedModules if set, otherwise profession defaults
+  const activeModules = profile?.activeBusiness && profile?.activeBusinessModules?.length
+    ? profile.activeBusinessModules
+    : (profile?.selectedModules?.length ? profile.selectedModules : baseConfig.modules)
+  const config = { ...baseConfig, modules: activeModules }
   const name   = profile?.name?.split(' ')[0] || 'Користувач'
   const base   = getActivePathSegments(user.uid)
 
@@ -161,10 +361,39 @@ async function renderDashboard(container, profile, user) {
               ${[0,1].map(() => `<div class="db-row-shimmer"></div>`).join('')}
             </div>
           </div>` : ''}
+
         </div>
 
         <div class="db-col-side">
-          <!-- Tasks -->
+
+          <!-- ── Today card ── -->
+          <div class="db-today-card">
+            <div class="db-today-inner">
+              <div class="db-today-day">${new Date().toLocaleDateString('uk-UA', { weekday: 'long' })}</div>
+              <div class="db-today-date">${new Date().toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' })}</div>
+            </div>
+            <div class="db-today-tasks-wrap">
+              <div class="db-today-tasks-label">Задач відкрито</div>
+              <div class="db-today-tasks-num" id="db-today-task-count">—</div>
+            </div>
+          </div>
+
+          <!-- ── Module grid — always fills space ── -->
+          <div class="db-modgrid-card">
+            <div class="db-modgrid-title">Швидкий перехід</div>
+            <div class="db-modgrid">
+              ${config.modules.filter(m => m !== 'dashboard').map(m => {
+                const meta = MODULE_NAV[m]
+                if (!meta) return ''
+                return `<button class="db-modtile" data-route="${m}" style="--mc:${meta.color||'#4F8EF7'}">
+                  <span class="db-modtile-icon">${meta.icon}</span>
+                  <span class="db-modtile-label">${meta.label}</span>
+                </button>`
+              }).join('')}
+            </div>
+          </div>
+
+          <!-- ── Tasks compact ── -->
           <div class="db-section" id="db-tasks-section">
             <div class="db-section-header">
               <span class="db-section-title">✅ Задачі</span>
@@ -175,11 +404,11 @@ async function renderDashboard(container, profile, user) {
             </div>
           </div>
 
-          <!-- Active projects (only if has module) -->
+          <!-- ── Active projects ── -->
           ${config.modules.includes('projects') ? `
           <div class="db-section" id="db-projects-section">
             <div class="db-section-header">
-              <span class="db-section-title">📁 Активні проекти</span>
+              <span class="db-section-title">📁 Проекти</span>
               <button class="db-section-link" data-route="projects">Всі →</button>
             </div>
             <div class="db-section-body" id="db-projects-body">
@@ -187,36 +416,25 @@ async function renderDashboard(container, profile, user) {
             </div>
           </div>` : ''}
 
-          <!-- Notes -->
-          ${config.modules.includes('notes') ? `
-          <div class="db-section" id="db-notes-section">
+          <!-- ── Tax deadline ── -->
+          ${config.modules.includes('tax-calendar') ? `
+          <div class="db-section" id="db-tax-section">
             <div class="db-section-header">
-              <span class="db-section-title">🗒 Нотатки</span>
-              <button class="db-section-link" data-route="notes">Всі →</button>
+              <span class="db-section-title">📅 Найближчий податок</span>
+              <button class="db-section-link" data-route="tax-calendar">Всі →</button>
             </div>
-            <div class="db-section-body" id="db-notes-body">
-              <div class="db-loading-rows">${[0,1,2].map(() => `<div class="db-row-shimmer"></div>`).join('')}</div>
+            <div class="db-section-body" id="db-tax-body">
+              <div class="db-loading-rows"><div class="db-row-shimmer"></div></div>
             </div>
           </div>` : ''}
 
-          <!-- Quick nav -->
-          <div class="db-section db-quick-nav">
-            <div class="db-section-header"><span class="db-section-title">⚡ Швидкий перехід</span></div>
-            <div class="db-qnav-grid">
-              ${config.modules.filter(m => m !== 'dashboard').map(m => {
-                const meta = MODULE_NAV[m]
-                if (!meta) return ''
-                return `<button class="db-qnav-btn" data-route="${m}">${meta.icon}<span>${meta.label}</span></button>`
-              }).join('')}
-            </div>
-          </div>
         </div>
       </div>
     </div>
   `
 
-  // Quick action buttons
-  container.querySelectorAll('.db-qa-btn, .db-section-link, .db-qnav-btn').forEach(btn => {
+  // Quick action buttons + module tiles
+  container.querySelectorAll('.db-qa-btn, .db-section-link, .db-modtile').forEach(btn => {
     btn.addEventListener('click', () => navigate(btn.dataset.route))
   })
 
@@ -247,6 +465,14 @@ async function renderDashboard(container, profile, user) {
 
   if (config.modules.includes('notes'))
     renderNotesList(container, notes.value || [])
+
+  if (config.modules.includes('tax-calendar'))
+    renderTaxTeaser(container)
+
+  // Update today's open task count
+  const openCount = (tasks.value || []).filter(t => t.status !== 'done').length
+  const el = container.querySelector('#db-today-task-count')
+  if (el) el.textContent = openCount
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -332,8 +558,10 @@ async function loadRecentProjects(base) {
 // RENDERERS
 // ═══════════════════════════════════════════════════════════
 function renderKPI(container, kpi, profession) {
+  const row = container.querySelector('#db-kpi-row')
+  if (!row) return
   const cards = buildKPICards(kpi, profession)
-  container.querySelector('#db-kpi-row').innerHTML = cards.map(c => `
+  row.innerHTML = cards.map(c => `
     <div class="db-kpi-card" style="--kc:${c.color}">
       <div class="db-kpi-icon">${c.icon}</div>
       <div class="db-kpi-value">${c.value}</div>
@@ -504,24 +732,74 @@ function renderNotesList(container, notes) {
   el.querySelectorAll('.db-note-row').forEach(r => r.addEventListener('click', () => navigate(r.dataset.route)))
 }
 
+function renderTaxTeaser(container) {
+  const el = container.querySelector('#db-tax-body')
+  if (!el) return
+
+  const EVENTS = [
+    { month: 'Квітень', day: 19, label: 'ЄСВ (1 кв.)' },
+    { month: 'Квітень', day: 30, label: 'ЄП декларація (1 кв.)' },
+    { month: 'Травень', day: 19, label: 'ЄСВ (квітень)' },
+    { month: 'Липень', day: 19, label: 'ЄСВ (2 кв.)' },
+    { month: 'Серпень', day: 1,  label: 'ЄП (2 кв.)' },
+    { month: 'Жовтень', day: 19, label: 'ЄСВ (3 кв.)' },
+    { month: 'Листопад', day: 1, label: 'ЄП (3 кв.)' },
+    { month: 'Січень', day: 19,  label: 'ЄСВ (4 кв.)' },
+  ]
+
+  const MONTH_MAP = { Січень:0, Лютий:1, Березень:2, Квітень:3, Травень:4, Червень:5, Липень:6, Серпень:7, Вересень:8, Жовтень:9, Листопад:10, Грудень:11 }
+  const now = new Date()
+
+  const upcoming = EVENTS.map(e => {
+    const month = MONTH_MAP[e.month]
+    let year = now.getFullYear()
+    const d = new Date(year, month, e.day)
+    if (d < now) d.setFullYear(year + 1)
+    const days = Math.ceil((d - now) / 86400000)
+    return { ...e, date: d, days }
+  }).sort((a, b) => a.days - b.days)[0]
+
+  if (!upcoming) { el.innerHTML = `<div class="db-empty-row">Дедлайнів не знайдено</div>`; return }
+
+  const urgency = upcoming.days <= 3 ? 'db-tax-critical' : upcoming.days <= 7 ? 'db-tax-soon' : 'db-tax-ok'
+  el.innerHTML = `
+    <div class="db-tax-row ${urgency}">
+      <div class="db-tax-days">${upcoming.days}</div>
+      <div class="db-tax-info">
+        <div class="db-tax-name">${upcoming.label}</div>
+        <div class="db-tax-date">${upcoming.date.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long' })}</div>
+      </div>
+      <div class="db-tax-unit">дн.</div>
+    </div>
+  `
+}
+
 // ═══════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════
 const MODULE_NAV = {
-  clients:      { icon: '👥', label: 'Клієнти' },
-  projects:     { icon: '📁', label: 'Проекти' },
-  invoices:     { icon: '📄', label: 'Рахунки' },
-  contracts:    { icon: '📝', label: 'Договори' },
-  tasks:        { icon: '✅', label: 'Задачі' },
-  timer:        { icon: '⏱', label: 'Таймер' },
-  finances:     { icon: '💰', label: 'Фінанси' },
-  'tax-calendar': { icon: '📅', label: 'Податки' },
-  appointments: { icon: '🗓', label: 'Розклад' },
-  services:     { icon: '💅', label: 'Послуги' },
-  'content-plan': { icon: '📱', label: 'Контент' },
-  accounts:     { icon: '🔗', label: 'Акаунти' },
-  passwords:    { icon: '🔑', label: 'Паролі' },
-  notes:        { icon: '🗒', label: 'Нотатки' },
+  clients:           { icon: '👥', label: 'Клієнти',    color: '#4F8EF7' },
+  projects:          { icon: '📁', label: 'Проекти',    color: '#34D399' },
+  invoices:          { icon: '📄', label: 'Рахунки',    color: '#F59E0B' },
+  contracts:         { icon: '📝', label: 'Договори',   color: '#A78BFA' },
+  tasks:             { icon: '✅', label: 'Задачі',     color: '#38BDF8' },
+  timer:             { icon: '⏱', label: 'Таймер',     color: '#FB923C' },
+  finances:          { icon: '💰', label: 'Фінанси',    color: '#34D399' },
+  'tax-calendar':    { icon: '📅', label: 'Податки',    color: '#F87171' },
+  appointments:      { icon: '🗓', label: 'Розклад',    color: '#E879F9' },
+  services:          { icon: '💅', label: 'Послуги',    color: '#F472B6' },
+  'content-plan':    { icon: '📱', label: 'Контент',    color: '#A78BFA' },
+  accounts:          { icon: '🔗', label: 'Акаунти',    color: '#A3E635' },
+  passwords:         { icon: '🔑', label: 'Паролі',     color: '#94A3B8' },
+  notes:             { icon: '🗒', label: 'Нотатки',    color: '#6EE7B7' },
+  kanban:            { icon: '🗂', label: 'Kanban',     color: '#60A5FA' },
+  templates:         { icon: '📋', label: 'Шаблони',    color: '#C084FC' },
+  warehouse:         { icon: '📦', label: 'Склад',      color: '#FB923C' },
+  portfolio:         { icon: '🖼', label: 'Портфоліо',  color: '#34D399' },
+  hr:                { icon: '👔', label: 'Персонал',   color: '#38BDF8' },
+  'client-analytics':{ icon: '📈', label: 'Аналітика',  color: '#4F8EF7' },
+  currency:          { icon: '💱', label: 'Валюти',     color: '#F59E0B' },
+  documents:         { icon: '📁', label: 'Документи',  color: '#94A3B8' },
 }
 
 function getGreeting() {
@@ -537,7 +815,7 @@ function getTodayLabel() {
 }
 
 function actionToRoute(action) {
-  const map = { 'new-client':'clients','new-invoice':'invoices','start-timer':'projects','new-transaction':'finances','new-post':'content-plan','new-appointment':'appointments' }
+  const map = { 'new-client':'clients','new-invoice':'invoices','start-timer':'timer','new-transaction':'finances','new-post':'content-plan','new-appointment':'appointments' }
   return map[action] || 'dashboard'
 }
 
@@ -565,13 +843,13 @@ function strColor(str) {
 // STYLES
 // ═══════════════════════════════════════════════════════════
 function injectStyles() {
-  if (document.getElementById('dashboard-styles-v2')) return
+  document.getElementById('dashboard-styles-v2')?.remove()
   const style = document.createElement('style')
   style.id = 'dashboard-styles-v2'
   style.textContent = `
 
   /* ── Page ── */
-  .db-page { padding: 28px 32px; max-width: 1200px; display: flex; flex-direction: column; gap: 24px; }
+  .db-page { padding: 28px 32px; max-width: 1600px; display: flex; flex-direction: column; gap: 24px; }
 
   /* ── Header ── */
   .db-header {
@@ -596,7 +874,9 @@ function injectStyles() {
 
   /* ── KPI row ── */
   .db-kpi-row {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
   }
   .db-kpi-card {
     background: var(--bg-secondary); border: 1px solid var(--border);
@@ -620,8 +900,23 @@ function injectStyles() {
   .db-kpi-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
   .db-kpi-sub   { font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
 
-  /* ── Body two-col ── */
-  .db-body { display: grid; grid-template-columns: 1fr 340px; gap: 18px; align-items: start; }
+  /* ── Body two-col — responsive ── */
+  .db-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 20px;
+    align-items: start;
+  }
+  @media (min-width: 1400px) {
+    .db-body { grid-template-columns: minmax(0, 1fr) 420px; }
+    .db-modgrid { grid-template-columns: repeat(4, 1fr) !important; }
+    .db-kpi-row { grid-template-columns: repeat(4, 1fr); }
+  }
+  @media (min-width: 1700px) {
+    .db-body { grid-template-columns: minmax(0, 1fr) 500px; }
+    .db-modgrid { grid-template-columns: repeat(5, 1fr) !important; }
+    .db-today-tasks-num { font-size: 42px; }
+  }
   @media (max-width: 900px) { .db-body { grid-template-columns: 1fr; } }
 
   .db-col-main, .db-col-side { display: flex; flex-direction: column; gap: 16px; }
@@ -715,20 +1010,61 @@ function injectStyles() {
   .db-note-text { font-size: 13px; color: var(--text-secondary); line-height: 1.4; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .db-note-date { font-size: 11px; color: var(--text-muted); white-space: nowrap; flex-shrink: 0; }
 
-  /* ── Quick nav ── */
-  .db-quick-nav .db-section-header { border-bottom: 1px solid var(--border); }
-  .db-qnav-grid {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-    gap: 2px; padding: 8px;
+  /* ── Today card ── */
+  .db-today-card {
+    background: linear-gradient(135deg, #4F8EF7 0%, #7C3AED 100%);
+    border-radius: var(--radius-lg); padding: 18px 20px;
+    display: flex; align-items: center; justify-content: space-between;
+    position: relative; overflow: hidden;
   }
-  .db-qnav-btn {
-    display: flex; flex-direction: column; align-items: center; gap: 4px;
-    padding: 10px 6px; background: none; border: none; cursor: pointer;
-    border-radius: var(--radius-sm); transition: background .15s; font-size: 20px;
+  .db-today-card::before {
+    content: ''; position: absolute; right: -30px; top: -30px;
+    width: 120px; height: 120px; border-radius: 50%;
+    background: rgba(255,255,255,.07);
   }
-  .db-qnav-btn span { font-size: 10px; font-weight: 600; color: var(--text-secondary); text-align: center; }
-  .db-qnav-btn:hover { background: var(--bg-tertiary); }
-  .db-qnav-btn:hover span { color: var(--text-primary); }
+  .db-today-inner { position: relative; }
+  .db-today-day  { font-size: 13px; color: rgba(255,255,255,.7); font-weight: 600; text-transform: capitalize; margin-bottom: 3px; }
+  .db-today-date { font-family: var(--font-display); font-size: 20px; font-weight: 800; color: #fff; }
+  .db-today-tasks-wrap { text-align: center; position: relative; }
+  .db-today-tasks-label { font-size: 10px; color: rgba(255,255,255,.65); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+  .db-today-tasks-num { font-family: var(--font-display); font-size: 32px; font-weight: 800; color: #fff; line-height: 1; }
+
+  /* ── Module grid card ── */
+  .db-modgrid-card {
+    background: var(--bg-secondary); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 14px 12px;
+  }
+  .db-modgrid-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin-bottom: 12px; padding: 0 4px; }
+  .db-modgrid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+  .db-modtile {
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    padding: 10px 6px; border-radius: 10px; cursor: pointer;
+    background: color-mix(in srgb, var(--mc) 12%, var(--bg-tertiary));
+    border: 1px solid color-mix(in srgb, var(--mc) 25%, transparent);
+    transition: all .18s; color: var(--mc);
+  }
+  .db-modtile:hover {
+    background: color-mix(in srgb, var(--mc) 22%, var(--bg-tertiary));
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--mc) 20%, transparent);
+  }
+  .db-modtile-icon  { font-size: 20px; line-height: 1; }
+  .db-modtile-label { font-size: 9px; font-weight: 700; text-align: center; color: var(--mc); line-height: 1.2; }
+
+  /* ── Tax teaser ── */
+  .db-tax-row { display: flex; align-items: center; gap: 12px; padding: 12px 18px; }
+  .db-tax-days { font-family: var(--font-display); font-size: 32px; font-weight: 800; line-height: 1; min-width: 44px; text-align: center; }
+  .db-tax-unit { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; align-self: flex-end; padding-bottom: 4px; }
+  .db-tax-info { flex: 1; }
+  .db-tax-name { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+  .db-tax-date { font-size: 11px; color: var(--text-muted); }
+  .db-tax-critical .db-tax-days { color: #F87171; }
+  .db-tax-soon    .db-tax-days  { color: #F59E0B; }
+  .db-tax-ok      .db-tax-days  { color: #34D399; }
 
   /* ── Worker dashboard ── */
   .worker-welcome {
@@ -753,6 +1089,249 @@ function injectStyles() {
   .worker-module-card:hover { border-color: var(--accent-blue); transform: translateY(-2px); box-shadow: var(--shadow-sm); }
   .worker-module-icon  { font-size: 28px; margin-bottom: 10px; }
   .worker-module-label { font-size: 13px; font-weight: 600; }
+
+  /* ══════════════════════════════════════════════
+     WORKER DASHBOARD v2  (wdb-*)
+  ══════════════════════════════════════════════ */
+  .wdb-page {
+    padding: 28px 32px;
+    max-width: 1200px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* ── Hero ── */
+  .wdb-hero {
+    position: relative; overflow: hidden;
+    background: linear-gradient(135deg, #1e3a5f 0%, #312e81 60%, #4c1d95 100%);
+    border-radius: var(--radius-lg);
+    padding: 28px 32px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    border: 1px solid rgba(255,255,255,.08);
+  }
+  .wdb-hero-glow {
+    position: absolute; top: -60px; left: -60px;
+    width: 260px; height: 260px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(99,102,241,.35) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .wdb-hero::after {
+    content: ''; position: absolute; bottom: -40px; right: 60px;
+    width: 180px; height: 180px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(167,139,250,.2) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .wdb-hero-left {
+    display: flex; align-items: center; gap: 18px; position: relative; z-index: 1;
+  }
+  .wdb-avatar {
+    width: 52px; height: 52px; border-radius: 50%; flex-shrink: 0;
+    background: linear-gradient(135deg, #6366f1, #a78bfa);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; font-weight: 800; color: #fff;
+    border: 2px solid rgba(255,255,255,.2);
+    box-shadow: 0 0 0 4px rgba(99,102,241,.25);
+  }
+  .wdb-hero-text { position: relative; }
+  .wdb-greeting {
+    font-family: var(--font-display); font-size: 24px; font-weight: 800;
+    letter-spacing: -0.02em; color: #fff; margin-bottom: 8px;
+  }
+  .wdb-hero-meta {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: rgba(255,255,255,.65);
+  }
+  .wdb-role-pill {
+    background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.2);
+    border-radius: 20px; padding: 2px 10px; font-size: 11px; font-weight: 700;
+    color: rgba(255,255,255,.9); text-transform: uppercase; letter-spacing: .04em;
+  }
+  .wdb-hero-dot { color: rgba(255,255,255,.3); }
+  .wdb-ws-name  { font-weight: 600; color: rgba(255,255,255,.8); }
+
+  .wdb-hero-date {
+    text-align: right; position: relative; z-index: 1; flex-shrink: 0;
+  }
+  .wdb-date-weekday {
+    font-size: 12px; color: rgba(255,255,255,.5); font-weight: 600;
+    text-transform: capitalize; letter-spacing: .04em; margin-bottom: 4px;
+  }
+  .wdb-date-num {
+    font-family: var(--font-display); font-size: 18px; font-weight: 800;
+    color: rgba(255,255,255,.9); text-transform: capitalize;
+  }
+
+  /* ── Stats row ── */
+  .wdb-stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+  }
+  .wdb-stat-card {
+    background: var(--bg-secondary); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 18px 20px;
+    cursor: pointer; transition: all .18s;
+    border-top: 3px solid var(--sc, var(--accent-blue));
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .wdb-stat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0,0,0,.2);
+    border-color: var(--sc, var(--accent-blue));
+  }
+  .wdb-stat-icon { font-size: 20px; margin-bottom: 6px; }
+  .wdb-stat-val  {
+    font-family: var(--font-display); font-size: 32px; font-weight: 800;
+    color: var(--sc, var(--text-primary)); line-height: 1; letter-spacing: -0.03em;
+  }
+  .wdb-stat-label {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--text-muted); margin-top: 2px;
+  }
+  .wdb-stat-spin {
+    display: inline-block; width: 20px; height: 20px; border-radius: 50%;
+    border: 2px solid var(--border); border-top-color: var(--sc, var(--accent-blue));
+    animation: wdb-spin .8s linear infinite; vertical-align: middle;
+  }
+  @keyframes wdb-spin { to { transform: rotate(360deg); } }
+
+  /* ── Two-col row (company + leave) ── */
+  .wdb-two-col {
+    display: grid;
+    grid-template-columns: 1fr 260px;
+    gap: 14px;
+  }
+  @media (max-width: 700px) { .wdb-two-col { grid-template-columns: 1fr; } }
+
+  /* ── Company card ── */
+  .wdb-company-card {
+    background: var(--bg-secondary); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 20px 22px;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .wdb-company-label {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .07em; color: var(--text-muted);
+  }
+  .wdb-company-body { display: flex; align-items: center; gap: 14px; }
+  .wdb-company-avatar {
+    width: 48px; height: 48px; border-radius: 12px; flex-shrink: 0;
+    background: linear-gradient(135deg, #4F8EF7, #7C3AED);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; font-weight: 800; color: #fff;
+  }
+  .wdb-company-info { flex: 1; min-width: 0; }
+  .wdb-company-biz  { font-size: 16px; font-weight: 700; margin-bottom: 3px; }
+  .wdb-company-owner { font-size: 12px; color: var(--text-secondary); margin-bottom: 2px; }
+  .wdb-company-email { font-size: 11px; color: var(--text-muted); }
+  .wdb-shimmer-line {
+    display: inline-block; height: 12px; border-radius: 6px;
+    background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--bg-elevated) 50%, var(--bg-tertiary) 75%);
+    background-size: 200% 100%; animation: db-shimmer 1.4s infinite;
+  }
+  .wdb-company-meta { border-top: 1px solid var(--border); padding-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+  .wdb-company-meta-row { display: flex; align-items: center; justify-content: space-between; }
+  .wdb-meta-key { font-size: 12px; color: var(--text-muted); }
+  .wdb-meta-val { font-size: 12px; font-weight: 600; }
+  .wdb-role-pill-sm {
+    background: rgba(99,102,241,.15); color: #818cf8;
+    border-radius: 20px; padding: 2px 10px; font-size: 11px; font-weight: 700;
+  }
+
+  /* ── Leave card ── */
+  .wdb-leave-card {
+    background: var(--bg-secondary); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 22px 20px;
+    display: flex; flex-direction: column; align-items: center;
+    text-align: center; gap: 10px;
+  }
+  .wdb-leave-icon  { font-size: 32px; }
+  .wdb-leave-title { font-size: 14px; font-weight: 700; }
+  .wdb-leave-desc  { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+  .wdb-leave-btn {
+    margin-top: 6px; width: 100%;
+    padding: 10px 16px; border-radius: var(--radius-md);
+    background: rgba(239,68,68,.12); border: 1px solid rgba(239,68,68,.3);
+    color: #F87171; font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: all .18s;
+  }
+  .wdb-leave-btn:hover {
+    background: rgba(239,68,68,.22); border-color: #F87171;
+    transform: translateY(-1px);
+  }
+
+  /* ── Leave confirm dialog ── */
+  .wdb-confirm-overlay {
+    position: fixed; inset: 0; z-index: 9999;
+    background: rgba(0,0,0,.6); backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .wdb-confirm-dialog {
+    background: var(--bg-secondary); border: 1px solid var(--border);
+    border-radius: var(--radius-xl, 16px); padding: 32px 28px;
+    max-width: 380px; width: 90%; text-align: center;
+    box-shadow: 0 24px 60px rgba(0,0,0,.4);
+    animation: wdb-dialog-in .18s ease;
+  }
+  @keyframes wdb-dialog-in {
+    from { opacity: 0; transform: scale(.94) translateY(8px); }
+    to   { opacity: 1; transform: scale(1)  translateY(0); }
+  }
+  .wdb-confirm-icon  { font-size: 44px; margin-bottom: 12px; }
+  .wdb-confirm-title { font-size: 18px; font-weight: 800; margin-bottom: 10px; }
+  .wdb-confirm-desc  { font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 24px; }
+  .wdb-confirm-actions { display: flex; gap: 10px; }
+  .wdb-confirm-cancel {
+    flex: 1; padding: 11px; border-radius: var(--radius-md);
+    background: var(--bg-tertiary); border: 1px solid var(--border);
+    color: var(--text-secondary); font-size: 14px; font-weight: 600; cursor: pointer;
+    transition: all .15s;
+  }
+  .wdb-confirm-cancel:hover { border-color: var(--text-secondary); color: var(--text-primary); }
+  .wdb-confirm-ok {
+    flex: 1; padding: 11px; border-radius: var(--radius-md);
+    background: rgba(239,68,68,.15); border: 1px solid rgba(239,68,68,.4);
+    color: #F87171; font-size: 14px; font-weight: 700; cursor: pointer;
+    transition: all .15s;
+  }
+  .wdb-confirm-ok:hover:not(:disabled) { background: rgba(239,68,68,.28); border-color: #F87171; }
+  .wdb-confirm-ok:disabled { opacity: .6; cursor: default; }
+
+  /* ── Modules grid ── */
+  .wdb-mods-wrap {
+    background: var(--bg-secondary); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 18px 16px;
+  }
+  .wdb-mods-label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .07em; color: var(--text-muted);
+    margin-bottom: 14px; padding: 0 4px;
+  }
+  .wdb-mods-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 8px;
+  }
+  .wdb-mod-tile {
+    display: flex; flex-direction: column; align-items: center; gap: 7px;
+    padding: 16px 8px 14px; border-radius: 12px; cursor: pointer;
+    background: color-mix(in srgb, var(--mc) 10%, var(--bg-tertiary));
+    border: 1px solid color-mix(in srgb, var(--mc) 22%, transparent);
+    transition: all .18s; outline: none;
+  }
+  .wdb-mod-tile:hover {
+    background: color-mix(in srgb, var(--mc) 20%, var(--bg-tertiary));
+    border-color: color-mix(in srgb, var(--mc) 50%, transparent);
+    transform: translateY(-3px);
+    box-shadow: 0 6px 16px color-mix(in srgb, var(--mc) 25%, transparent);
+  }
+  .wdb-mod-tile:active { transform: translateY(-1px); }
+  .wdb-mod-tile-icon  { font-size: 26px; line-height: 1; }
+  .wdb-mod-tile-label {
+    font-size: 10px; font-weight: 700; text-align: center;
+    color: var(--mc); line-height: 1.3; letter-spacing: .01em;
+  }
   `
   document.head.appendChild(style)
 }

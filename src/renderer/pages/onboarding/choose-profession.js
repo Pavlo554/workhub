@@ -1,75 +1,322 @@
-// src/renderer/pages/onboarding/choose-profession.js
 import { db } from '../../services/firebase.js'
 import { getCurrentUser } from '../../services/auth.js'
 import { navigate } from '../../../core/router.js'
-// import { doc, updateDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 import { doc, setDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
-
 const PROFESSIONS = [
-  { id: 'freelancer', icon: '💻', title: 'Фрілансер',       desc: 'Дизайнер, розробник, копірайтер',      color: '#4F8EF7', modules: ['Клієнти','Проекти','Рахунки','Договори','Таймер'] },
-  { id: 'accountant', icon: '📊', title: 'Бухгалтер / ФОП', desc: 'Бухгалтер, податковий консультант',     color: '#34D399', modules: ['Клієнти','Фінанси','Рахунки','Податки'] },
-  { id: 'smm',        icon: '📱', title: 'SMM / Маркетолог', desc: 'SMM спеціаліст, таргетолог',           color: '#A78BFA', modules: ['Клієнти','Контент-план','Акаунти','Бюджети'] },
-  { id: 'beauty',     icon: '💅', title: 'Салон краси',      desc: 'Майстер нігтів, перукар, косметолог',  color: '#F472B6', modules: ['Клієнти','Записи','Послуги','Каса'] },
+  { id: 'freelancer', icon: '💻', title: 'Фрілансер',        desc: 'Дизайнер, розробник, копірайтер',     color: '#4F8EF7' },
+  { id: 'accountant', icon: '📊', title: 'Бухгалтер / ФОП',  desc: 'Бухгалтер, податковий консультант',    color: '#34D399' },
+  { id: 'smm',        icon: '📱', title: 'SMM / Маркетолог',  desc: 'SMM спеціаліст, таргетолог',           color: '#A78BFA' },
+  { id: 'beauty',     icon: '💅', title: 'Салон краси',       desc: 'Майстер нігтів, перукар, косметолог', color: '#F472B6' },
 ]
 
+// All selectable modules (dashboard always added, not shown)
+const ALL_MODULES = [
+  { id: 'clients',      icon: '👥', label: 'Клієнти',      desc: 'База клієнтів' },
+  { id: 'projects',     icon: '📁', label: 'Проекти',      desc: 'Управління проектами' },
+  { id: 'invoices',     icon: '📄', label: 'Рахунки',      desc: 'Виставлення рахунків' },
+  { id: 'contracts',    icon: '📝', label: 'Договори',     desc: 'Шаблони договорів' },
+  { id: 'tasks',        icon: '✓',  label: 'Задачі',       desc: 'Список завдань' },
+  { id: 'timer',        icon: '⏱', label: 'Таймер',       desc: 'Трекінг часу' },
+  { id: 'finances',     icon: '💰', label: 'Фінанси',      desc: 'Доходи та витрати' },
+  { id: 'tax-calendar', icon: '📅', label: 'Податки',      desc: 'Календар податків' },
+  { id: 'appointments', icon: '🗓', label: 'Розклад',      desc: 'Записи клієнтів' },
+  { id: 'services',     icon: '💅', label: 'Послуги',      desc: 'Каталог послуг' },
+  { id: 'content-plan', icon: '📱', label: 'Контент-план', desc: 'Планування постів' },
+  { id: 'accounts',     icon: '🔗', label: 'Акаунти',      desc: 'Соцмережі та сайти' },
+  { id: 'passwords',    icon: '🔑', label: 'Паролі',       desc: 'Сховище паролів' },
+  { id: 'notes',        icon: '🗒', label: 'Нотатки',       desc: 'Нотатки та ідеї' },
+  { id: 'documents',    icon: '📁', label: 'Документи',    desc: 'Файли та документи' },
+  { id: 'api-keys',    icon: '🔗', label: 'API & Інтеграції', desc: 'Ключі та підключення' },
+]
+
+// Default modules per profession (without 'dashboard')
+const DEFAULTS = {
+  freelancer: ['clients','projects','invoices','contracts','tasks','timer','passwords','notes'],
+  accountant: ['clients','finances','invoices','contracts','tax-calendar','passwords','notes'],
+  smm:        ['clients','content-plan','accounts','tasks','passwords','notes'],
+  beauty:     ['clients','appointments','services','finances','notes'],
+}
+
 export async function render(container) {
+  // Inject styles
+  if (!document.getElementById('ob-prof-styles')) {
+    const s = document.createElement('style')
+    s.id = 'ob-prof-styles'
+    s.textContent = `
+      .ob-steps { display:flex; gap:8px; justify-content:center; margin-bottom:28px; }
+      .ob-step-dot {
+        width:32px; height:6px; border-radius:3px;
+        background: rgba(255,255,255,.12);
+        transition: background .3s;
+      }
+      .ob-step-dot.active { background: #4F8EF7; }
+
+      .profession-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin-bottom: 24px;
+      }
+      .profession-card {
+        background: var(--bg-secondary, #1A1D2E);
+        border: 1.5px solid var(--border, rgba(255,255,255,.08));
+        border-radius: 14px;
+        padding: 18px 16px;
+        cursor: pointer;
+        position: relative;
+        transition: border-color .2s, transform .15s, box-shadow .15s;
+      }
+      .profession-card:hover {
+        border-color: var(--prof-color);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0,0,0,.25);
+      }
+      .profession-card.selected {
+        border-color: var(--prof-color);
+        background: color-mix(in srgb, var(--prof-color) 8%, var(--bg-secondary, #1A1D2E));
+      }
+      .prof-card-icon { font-size: 32px; margin-bottom: 10px; }
+      .prof-card-title { font-size: 15px; font-weight: 700; color: var(--text-primary, #F1F5F9); margin-bottom: 4px; }
+      .prof-card-desc  { font-size: 12px; color: var(--text-secondary, #94A3B8); }
+      .prof-card-check {
+        position: absolute; top: 12px; right: 12px;
+        width: 22px; height: 22px;
+        border-radius: 50%;
+        background: var(--prof-color);
+        color: #fff;
+        font-size: 12px;
+        display: flex; align-items: center; justify-content: center;
+        opacity: 0;
+        transform: scale(.5);
+        transition: opacity .2s, transform .2s;
+      }
+      .profession-card.selected .prof-card-check { opacity: 1; transform: scale(1); }
+
+      /* Modules step */
+      .ob-modules-section { display: none; }
+      .ob-modules-section.visible { display: block; }
+
+      .ob-modules-header {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 14px;
+      }
+      .ob-modules-title {
+        font-size: 15px; font-weight: 700;
+        color: var(--text-primary, #F1F5F9);
+      }
+      .ob-modules-hint {
+        font-size: 12px; color: var(--text-secondary, #94A3B8);
+      }
+
+      .ob-mod-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        margin-bottom: 24px;
+      }
+      .ob-mod-card {
+        background: var(--bg-secondary, #1A1D2E);
+        border: 1.5px solid var(--border, rgba(255,255,255,.08));
+        border-radius: 12px;
+        padding: 12px 10px;
+        cursor: pointer;
+        transition: border-color .2s, transform .1s;
+        user-select: none;
+      }
+      .ob-mod-card:hover { border-color: rgba(255,255,255,.2); transform: translateY(-1px); }
+      .ob-mod-card.checked {
+        border-color: var(--mod-color, #4F8EF7);
+        background: color-mix(in srgb, var(--mod-color, #4F8EF7) 8%, var(--bg-secondary, #1A1D2E));
+      }
+      .ob-mod-icon { font-size: 20px; margin-bottom: 6px; }
+      .ob-mod-label { font-size: 12px; font-weight: 600; color: var(--text-primary, #F1F5F9); margin-bottom: 2px; }
+      .ob-mod-desc  { font-size: 11px; color: var(--text-secondary, #94A3B8); }
+      .ob-mod-chk {
+        float: right;
+        width: 16px; height: 16px;
+        border-radius: 50%;
+        background: var(--mod-color, #4F8EF7);
+        color: #fff;
+        font-size: 9px;
+        display: flex; align-items: center; justify-content: center;
+        margin-top: -4px;
+        opacity: 0;
+        transition: opacity .15s;
+      }
+      .ob-mod-card.checked .ob-mod-chk { opacity: 1; }
+
+      .ob-select-all {
+        font-size: 12px; color: #4F8EF7;
+        background: none; border: none; cursor: pointer; padding: 0;
+        text-decoration: underline; text-underline-offset: 2px;
+      }
+    `
+    document.head.appendChild(s)
+  }
+
+  let selectedProfession = null
+  let selectedModules    = new Set()
+
   container.innerHTML = `
     <div class="onboarding-page">
       <div class="onboarding-content">
+        <div class="ob-steps">
+          <div class="ob-step-dot active" id="dot-1"></div>
+          <div class="ob-step-dot active"></div>
+          <div class="ob-step-dot" id="dot-3"></div>
+        </div>
         <div class="onboarding-header">
-          <div class="onboarding-step">Крок 2 з 3</div>
-          <h1 class="onboarding-title">Оберіть свою сферу</h1>
-          <p class="onboarding-subtitle">WorkHub автоматично налаштує потрібні інструменти під вашу роботу</p>
+          <div class="onboarding-step" id="step-label">Крок 2 з 3</div>
+          <h1 class="onboarding-title" id="step-title">Оберіть свою сферу</h1>
+          <p class="onboarding-subtitle" id="step-sub">WorkHub автоматично налаштує потрібні інструменти під вашу роботу</p>
         </div>
 
-        <div class="profession-grid">
-          ${PROFESSIONS.map(p => `
-            <div class="profession-card" data-id="${p.id}" style="--prof-color:${p.color}">
-              <div class="prof-card-icon">${p.icon}</div>
-              <div class="prof-card-body">
-                <div class="prof-card-title">${p.title}</div>
-                <div class="prof-card-desc">${p.desc}</div>
-                <div class="prof-card-modules">
-                  ${p.modules.map(m => `<span class="prof-module-tag">${m}</span>`).join('')}
+        <!-- Step 1: profession -->
+        <div id="step-professions">
+          <div class="profession-grid">
+            ${PROFESSIONS.map(p => `
+              <div class="profession-card" data-id="${p.id}" style="--prof-color:${p.color}">
+                <div class="prof-card-icon">${p.icon}</div>
+                <div class="prof-card-body">
+                  <div class="prof-card-title">${p.title}</div>
+                  <div class="prof-card-desc">${p.desc}</div>
                 </div>
+                <div class="prof-card-check">✓</div>
               </div>
-              <div class="prof-card-check">✓</div>
-            </div>
-          `).join('')}
+            `).join('')}
+          </div>
+          <div class="onboarding-footer">
+            <button class="btn btn-secondary" id="back-btn">← Назад</button>
+            <button class="btn btn-primary" id="next-prof-btn" disabled>Далі →</button>
+          </div>
         </div>
 
-        <div class="onboarding-footer">
-          <button class="btn btn-primary" id="next-btn" disabled>Продовжити →</button>
+        <!-- Step 2: modules -->
+        <div id="step-modules" style="display:none">
+          <div class="ob-modules-header">
+            <div class="ob-modules-title">Обери модулі для роботи</div>
+            <button class="ob-select-all" id="toggle-all-btn">Вибрати всі</button>
+          </div>
+          <div class="ob-mod-grid" id="mod-grid"></div>
+          <div class="onboarding-footer">
+            <button class="btn btn-secondary" id="back-modules-btn">← Назад</button>
+            <button class="btn btn-primary" id="next-modules-btn">Продовжити →</button>
+          </div>
         </div>
       </div>
     </div>
   `
 
-  let selected = null
-  const nextBtn = container.querySelector('#next-btn')
+  const stepLabel    = container.querySelector('#step-label')
+  const stepTitle    = container.querySelector('#step-title')
+  const stepSub      = container.querySelector('#step-sub')
+  const dot3         = container.querySelector('#dot-3')
+  const stepProf     = container.querySelector('#step-professions')
+  const stepMods     = container.querySelector('#step-modules')
+  const nextProfBtn  = container.querySelector('#next-prof-btn')
+  const modGrid      = container.querySelector('#mod-grid')
 
+  // ── Step 1: profession selection ────────────────────────
   container.querySelectorAll('.profession-card').forEach(card => {
     card.addEventListener('click', () => {
       container.querySelectorAll('.profession-card').forEach(c => c.classList.remove('selected'))
       card.classList.add('selected')
-      selected = card.dataset.id
-      nextBtn.disabled = false
+      selectedProfession = card.dataset.id
+      nextProfBtn.disabled = false
     })
   })
 
-  nextBtn.addEventListener('click', async () => {
-    if (!selected) return
-    nextBtn.disabled = true
-    nextBtn.innerHTML = '<div class="spinner"></div> Зберігаємо...'
+  container.querySelector('#back-btn').addEventListener('click', () => navigate('choose-role'))
+
+  nextProfBtn.addEventListener('click', () => {
+    if (!selectedProfession) return
+    // Pre-select default modules for this profession
+    selectedModules = new Set(DEFAULTS[selectedProfession] || [])
+    renderModuleGrid()
+    // Switch to step 2
+    stepProf.style.display = 'none'
+    stepMods.style.display = 'block'
+    dot3.classList.add('active')
+    stepLabel.textContent = 'Крок 3 з 3'
+    stepTitle.textContent = 'Налаштуй модулі'
+    stepSub.textContent   = 'Вибери які розділи хочеш бачити у своєму робочому просторі'
+  })
+
+  // ── Step 2: module selection ────────────────────────────
+  function renderModuleGrid() {
+    const prof = PROFESSIONS.find(p => p.id === selectedProfession)
+    const color = prof?.color || '#4F8EF7'
+
+    modGrid.innerHTML = ALL_MODULES.map(m => {
+      const checked = selectedModules.has(m.id)
+      return `
+        <div class="ob-mod-card${checked?' checked':''}" data-mod="${m.id}" style="--mod-color:${color}">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div class="ob-mod-icon">${m.icon}</div>
+            <div class="ob-mod-chk">✓</div>
+          </div>
+          <div class="ob-mod-label">${m.label}</div>
+          <div class="ob-mod-desc">${m.desc}</div>
+        </div>`
+    }).join('')
+
+    // Bind module toggle clicks
+    modGrid.querySelectorAll('.ob-mod-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const id = card.dataset.mod
+        if (selectedModules.has(id)) {
+          selectedModules.delete(id)
+          card.classList.remove('checked')
+        } else {
+          selectedModules.add(id)
+          card.classList.add('checked')
+        }
+      })
+    })
+  }
+
+  // Toggle all
+  let allSelected = false
+  container.querySelector('#toggle-all-btn').addEventListener('click', () => {
+    allSelected = !allSelected
+    if (allSelected) {
+      ALL_MODULES.forEach(m => selectedModules.add(m.id))
+      container.querySelector('#toggle-all-btn').textContent = 'Зняти всі'
+    } else {
+      selectedModules = new Set(DEFAULTS[selectedProfession] || [])
+      container.querySelector('#toggle-all-btn').textContent = 'Вибрати всі'
+    }
+    renderModuleGrid()
+  })
+
+  // Back from modules → profession
+  container.querySelector('#back-modules-btn').addEventListener('click', () => {
+    stepMods.style.display = 'none'
+    stepProf.style.display = 'block'
+    dot3.classList.remove('active')
+    stepLabel.textContent = 'Крок 2 з 3'
+    stepTitle.textContent = 'Оберіть свою сферу'
+    stepSub.textContent   = 'WorkHub автоматично налаштує потрібні інструменти під вашу роботу'
+  })
+
+  // Save and continue
+  container.querySelector('#next-modules-btn').addEventListener('click', async () => {
+    const btn = container.querySelector('#next-modules-btn')
+    btn.disabled = true
+    btn.innerHTML = '<div class="spinner"></div> Зберігаємо...'
     try {
       const user = getCurrentUser()
-      await setDoc(doc(db, 'users', user.uid), { profession: selected }, { merge: true })
+      const modules = ['dashboard', ...Array.from(selectedModules)]
+      await setDoc(doc(db, 'users', user.uid), {
+        profession:      selectedProfession,
+        selectedModules: modules,
+      }, { merge: true })
       navigate('setup-business')
     } catch (err) {
       console.error(err)
-      nextBtn.disabled = false
-      nextBtn.innerHTML = 'Продовжити →'
+      btn.disabled = false
+      btn.textContent = 'Продовжити →'
     }
   })
 }

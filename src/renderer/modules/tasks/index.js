@@ -48,6 +48,12 @@ export async function render(container) {
           </div>
         </div>
 
+        <!-- Project filter -->
+        <div class="tk-proj-filter-row" id="tk-proj-row" style="display:none">
+          <span class="tk-proj-label">📁 Проект:</span>
+          <div class="tk-proj-pills" id="tk-proj-pills"></div>
+        </div>
+
         <div id="tasks-list">
           <div class="tk-loading"><div class="spinner"></div></div>
         </div>
@@ -143,6 +149,7 @@ export async function render(container) {
   let newFiles    = []
   let filter      = 'all'
   let priFilter   = 'all'
+  let projFilter  = 'all'
   let selectedId  = null
   const user      = getCurrentUser()
   const base      = getActivePathSegments(user.uid)
@@ -152,6 +159,8 @@ export async function render(container) {
     try {
       const snap = await getDocs(collection(db, ...base, 'projects'))
       projects = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+
+      // Populate modal select
       const sel = container.querySelector('#f-project')
       projects.forEach(p => {
         const opt = document.createElement('option')
@@ -161,6 +170,24 @@ export async function render(container) {
       })
       if (projects.length === 0) {
         container.querySelector('#project-field').style.display = 'none'
+      }
+
+      // Build project filter pills
+      if (projects.length > 0) {
+        const row   = container.querySelector('#tk-proj-row')
+        const pills = container.querySelector('#tk-proj-pills')
+        row.style.display = 'flex'
+        pills.innerHTML = `<button class="tk-proj-pill active" data-proj="all">Всі</button>` +
+          projects.map(p => `<button class="tk-proj-pill" data-proj="${p.id}">${p.name}</button>`).join('')
+        pills.querySelectorAll('.tk-proj-pill').forEach(btn => {
+          btn.addEventListener('click', () => {
+            pills.querySelectorAll('.tk-proj-pill').forEach(b => b.classList.remove('active'))
+            btn.classList.add('active')
+            projFilter = btn.dataset.proj
+            renderList()
+            updateCount()
+          })
+        })
       }
     } catch (_) {}
   }
@@ -197,6 +224,7 @@ export async function render(container) {
     const el = container.querySelector('#tasks-list')
     let list = filter === 'all' ? tasks : tasks.filter(t => t.status === filter)
     if (priFilter !== 'all') list = list.filter(t => (t.priority || 'medium') === priFilter)
+    if (projFilter !== 'all') list = list.filter(t => t.projectId === projFilter)
 
     if (list.length === 0) {
       el.innerHTML = `
@@ -636,10 +664,15 @@ export async function render(container) {
 
   // ── Helpers ───────────────────────────────────────────────
   function updateCount() {
-    const done  = tasks.filter(t => t.status === 'done').length
-    const total = tasks.length
+    const visible = projFilter === 'all' ? tasks : tasks.filter(t => t.projectId === projFilter)
+    const done    = visible.filter(t => t.status === 'done').length
+    const total   = visible.length
+
+    const proj = projFilter !== 'all' ? projects.find(p => p.id === projFilter) : null
     container.querySelector('#tasks-count').textContent =
-      total === 0 ? 'Задач немає' : `${done} з ${total} виконано`
+      total === 0 ? 'Задач немає'
+      : proj ? `${done} з ${total} виконано · ${proj.name}`
+      : `${done} з ${total} виконано`
 
     const wrap  = container.querySelector('#tk-progress-wrap')
     const fill  = container.querySelector('#tk-progress-fill')
@@ -699,6 +732,13 @@ function injectStyles() {
     .tk-pri-btn:hover   { color:var(--text-primary); border-color:var(--pc, var(--border)); }
     .tk-pri-btn.active  { background:var(--pc, var(--accent-blue)); border-color:var(--pc, var(--accent-blue)); color:#fff; }
     .tk-pri-btn[data-pri="all"].active { background:var(--bg-secondary); border-color:rgba(255,255,255,.2); color:var(--text-primary); }
+
+    .tk-proj-filter-row { display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+    .tk-proj-label      { font-size:12px; font-weight:700; color:var(--text-muted); white-space:nowrap; }
+    .tk-proj-pills      { display:flex; gap:6px; flex-wrap:wrap; }
+    .tk-proj-pill       { padding:5px 14px; border-radius:var(--radius-full); font-size:12px; font-weight:600; color:var(--text-secondary); background:var(--bg-secondary); border:1.5px solid var(--border); cursor:pointer; transition:all .2s; }
+    .tk-proj-pill:hover { border-color:rgba(79,142,247,.5); color:var(--text-primary); }
+    .tk-proj-pill.active { background:rgba(79,142,247,.15); border-color:var(--accent-blue); color:var(--accent-blue); }
 
     /* Loading */
     .tk-loading { display:flex; justify-content:center; padding:60px; }

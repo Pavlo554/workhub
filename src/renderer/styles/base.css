@@ -25,6 +25,12 @@
   position: relative;
 }
 
+/* ── Module slot (router cache container) ───────────────── */
+.mod-slot {
+  width: 100%;
+  height: 100%;
+}
+
 /* ── Page transitions ───────────────────────────────────── */
 .page-exit { opacity: 0; transform: translateY(6px); transition: opacity 0.15s ease, transform 0.15s ease; }
 .page-enter { animation: pageEnter 0.25s ease forwards; }

@@ -49,12 +49,20 @@ export async function getUserProfile(uid) {
   const snap   = await getDoc(doc(db, 'users', uid))
   _profileCache    = snap.exists() ? snap.data() : null
   _profileCacheUid = uid
+  // Sync activeBusiness to localStorage on fresh fetch
+  if (_profileCache?.activeBusiness) localStorage.setItem(`activeBiz_${uid}`, _profileCache.activeBusiness)
+  else                                localStorage.removeItem(`activeBiz_${uid}`)
   return _profileCache
 }
 
 export function updateProfileCache(uid, data) {
   _profileCacheUid = uid
   _profileCache    = _profileCache ? { ..._profileCache, ...data } : data
+  // Persist activeBusiness to localStorage so modules always get the right path
+  if ('activeBusiness' in data) {
+    if (data.activeBusiness) localStorage.setItem(`activeBiz_${uid}`, data.activeBusiness)
+    else                      localStorage.removeItem(`activeBiz_${uid}`)
+  }
 }
 
 export function clearProfileCache() {
@@ -68,10 +76,17 @@ export function getCurrentUser() {
 }
 
 // ── Базовий шлях для даних активного бізнесу ─────────────
+// Воркер:           "users/{workspaceId}"  (дані власника)
 // Головний бізнес:  "users/{uid}"
 // Другий бізнес:    "users/{uid}/businesses/{bizId}"
 export function getActiveBasePath(uid) {
-  const bizId = _profileCache?.activeBusiness
+  // Workers must read/write from the workspace owner's data path
+  const cache = _profileCache
+  if (cache?.accountType === 'worker' && cache?.workspaceId) {
+    return `users/${cache.workspaceId}`
+  }
+  // In-memory cache is source of truth; localStorage is fallback for edge cases
+  const bizId = cache?.activeBusiness ?? localStorage.getItem(`activeBiz_${uid}`)
   if (bizId) return `users/${uid}/businesses/${bizId}`
   return `users/${uid}`
 }

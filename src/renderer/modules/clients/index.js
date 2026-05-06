@@ -2,6 +2,7 @@
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getUserProfile, getActivePathSegments } from '../../services/auth.js'
 import { checkPlanLimit } from '../../services/plan-guard.js'
+import { debounce } from '../../../core/utils.js'
 import {
   collection, addDoc, getDocs, deleteDoc, doc, updateDoc,
   query, orderBy, serverTimestamp
@@ -255,14 +256,22 @@ export async function render(container) {
   }
 
   // ── List ──────────────────────────────────────────────────
+  const STATUS_ORDER = { active: 0, lead: 1, inactive: 2 }
+
   function filtered() {
-    return clients.filter(c => {
-      const matchSt = activeFilter === 'all' || (c.status || 'active') === activeFilter
-      const q = searchQ.toLowerCase()
-      const matchQ = !q || [c.name, c.email, c.phone, c.company, c.telegram]
-        .filter(Boolean).some(v => v.toLowerCase().includes(q))
-      return matchSt && matchQ
-    })
+    return clients
+      .filter(c => {
+        const matchSt = activeFilter === 'all' || (c.status || 'active') === activeFilter
+        const q = searchQ.toLowerCase()
+        const matchQ = !q || [c.name, c.email, c.phone, c.company, c.telegram]
+          .filter(Boolean).some(v => v.toLowerCase().includes(q))
+        return matchSt && matchQ
+      })
+      .sort((a, b) => {
+        const oa = STATUS_ORDER[a.status || 'inactive'] ?? 2
+        const ob = STATUS_ORDER[b.status || 'inactive'] ?? 2
+        return oa - ob
+      })
   }
 
   function renderGrid() {
@@ -552,10 +561,10 @@ export async function render(container) {
     container.querySelectorAll('.cl-filter').forEach(b => b.classList.toggle('active', b === btn))
     renderGrid()
   })
-  container.querySelector('#cl-search').addEventListener('input', e => {
+  container.querySelector('#cl-search').addEventListener('input', debounce(e => {
     searchQ = e.target.value.trim()
     renderGrid()
-  })
+  }, 250))
 
   // ── Detail panel ──────────────────────────────────────────
   async function openDetail(id) {

@@ -2,33 +2,48 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ── Хелпер: перевірка чи юзер є адміном ─────────────────
     function isAdmin() {
       return request.auth != null &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
     }
 
-    // ── Профілі користувачів ─────────────────────────────────
+    function isWorkspaceMember(ownerId) {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/workspaces/$(ownerId)/members/$(request.auth.uid));
+    }
+
     match /users/{userId} {
-      // Адмін читає і пише всіх (зміна плану, isAdmin), юзер — тільки себе
       allow read:  if request.auth != null && (request.auth.uid == userId || isAdmin());
       allow write: if request.auth != null && (request.auth.uid == userId || isAdmin());
     }
 
-    // ── Підколекції юзера (notes, passwords, clients і т.д.) ─
     match /users/{userId}/{document=**} {
       allow read, write: if request.auth != null &&
-        (request.auth.uid == userId || isAdmin());
+        (request.auth.uid == userId || isAdmin() || isWorkspaceMember(userId));
     }
 
-    // ── Платежі (collectionGroup для адміна) ─────────────────
+    match /tickets/{ticketId} {
+      allow read: if request.auth != null && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
+      allow create: if request.auth != null &&
+        request.auth.uid == request.resource.data.userId;
+      allow update: if request.auth != null && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
+    }
+
+    match /announcements/{id} {
+      allow read:  if request.auth != null;
+      allow write: if isAdmin();
+    }
+
     match /{path=**}/pendingPayments/{paymentId} {
       allow read:   if request.auth != null && isAdmin();
       allow create: if request.auth != null;
       allow update, delete: if request.auth != null && isAdmin();
     }
 
-    // ── Воркспейси ───────────────────────────────────────────
     match /workspaces/{workspaceId} {
       allow read: if request.auth != null;
       allow write: if request.auth != null && request.auth.uid == workspaceId;
@@ -37,7 +52,9 @@ service cloud.firestore {
         allow read: if request.auth != null &&
           (request.auth.uid == workspaceId || request.auth.uid == memberId);
         allow create: if request.auth != null && request.auth.uid == memberId;
-        allow update, delete: if request.auth != null && request.auth.uid == workspaceId;
+        allow update: if request.auth != null && request.auth.uid == workspaceId;
+        allow delete: if request.auth != null &&
+          (request.auth.uid == workspaceId || request.auth.uid == memberId);
       }
 
       match /invites/{inviteCode} {
@@ -48,7 +65,6 @@ service cloud.firestore {
       }
     }
 
-    // ── Запрошення (root) ─────────────────────────────────────
     match /invites/{inviteCode} {
       allow read: if request.auth != null;
       allow create: if request.auth != null &&
