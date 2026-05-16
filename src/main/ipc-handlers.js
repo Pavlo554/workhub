@@ -251,7 +251,10 @@ function tgApiRequest(token, method, params = {}) {
 ipcMain.handle('tg:fetchChannel', async (_, { token, username }) => {
   if (!token || !username) return { error: 'Потрібен токен і username каналу' }
 
-  const chatId = username.startsWith('@') ? username : '@' + username
+  let raw = username.trim()
+  // витягуємо username з посилань: https://t.me/username або t.me/username
+  if (raw.includes('t.me/')) raw = raw.split('t.me/').pop().replace(/\//g, '')
+  const chatId = raw.startsWith('@') ? raw : '@' + raw
 
   try {
     const [chat, count] = await Promise.all([
@@ -269,6 +272,37 @@ ipcMain.handle('tg:fetchChannel', async (_, { token, username }) => {
     }
   } catch (err) {
     return { error: err.message }
+  }
+})
+
+// ── IPC: PDF генерація (printToPDF через прихований BrowserWindow) ───────────
+const { BrowserWindow } = require('electron')
+
+ipcMain.handle('pdf:generate', async (event, { html, filename }) => {
+  const tmpHtml = path.join(os.tmpdir(), `wh_${Date.now()}.html`)
+  const outPdf  = path.join(os.tmpdir(), filename || `invoice_${Date.now()}.pdf`)
+  try {
+    fs.writeFileSync(tmpHtml, html, 'utf8')
+
+    const win = new BrowserWindow({ show: false, width: 900, height: 1200,
+      webPreferences: { sandbox: false, contextIsolation: true }
+    })
+    await win.loadFile(tmpHtml)
+    await new Promise(r => setTimeout(r, 700))
+
+    const buf = await win.webContents.printToPDF({
+      printBackground: true,
+      pageSize: 'A4',
+      margins: { marginType: 'default' },
+    })
+    win.destroy()
+    fs.unlinkSync(tmpHtml)
+    fs.writeFileSync(outPdf, buf)
+    await shell.openPath(outPdf)
+    return { success: true }
+  } catch (e) {
+    try { fs.unlinkSync(tmpHtml) } catch {}
+    return { error: e.message }
   }
 })
 

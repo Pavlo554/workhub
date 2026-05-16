@@ -42,10 +42,13 @@
     script-src 'self' https://www.gstatic.com https://cdnjs.cloudflare.com;
     style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
     font-src 'self' https://fonts.gstatic.com;
+    img-src 'self' data: blob: https://*.googleapis.com https://*.firebasestorage.app;
     connect-src 'self'
       https://*.firebaseio.com
       https://*.googleapis.com
+      https://*.firebasestorage.app
       https://api.telegram.org
+      https://api.coingecko.com
       wss://*.firebaseio.com;
   ">
   <title>WorkHub</title>
@@ -81,6 +84,7 @@
     <div id="page-container"></div>
   </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <script type="module" src="./app.js"></script>
 </body>
 </html>

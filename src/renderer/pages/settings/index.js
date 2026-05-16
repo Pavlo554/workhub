@@ -39,6 +39,7 @@ export async function render(container) {
               { id: 'appearance',    icon: '🎨', key: 'settings.tab.appearance' },
               { id: 'notifications', icon: '🔔', label: 'Сповіщення' },
               { id: 'security',      icon: '🔒', key: 'settings.tab.security' },
+              { id: 'payments',      icon: '💳', label: 'Платежі' },
               { id: 'subscription',  icon: '💎', key: 'settings.tab.subscription' },
               { id: 'danger',        icon: '⚠️', key: 'settings.tab.danger' },
             ].map(tab => `
@@ -91,6 +92,7 @@ function renderTab(tab, profile, user) {
     case 'appearance':    return renderAppearance()
     case 'notifications': return renderNotifications()
     case 'security':      return renderSecurity()
+    case 'payments':      return renderPayments(profile)
     case 'subscription':  return renderSubscription(profile)
     case 'danger':        return renderDanger()
     default: return ''
@@ -429,6 +431,59 @@ function renderSecurity() {
   `
 }
 
+// ── Payments tab ─────────────────────────────────────────────
+function renderPayments(profile) {
+  const hasPub  = !!profile?.liqpayPublicKey
+  const hasPriv = !!profile?.liqpayPrivateKey
+  return `
+    <div class="st-panel">
+      <div class="st-panel-header">
+        <div>
+          <h2 class="st-panel-title">💳 Прийом онлайн-оплати</h2>
+          <p class="st-panel-subtitle">LiqPay — отримуй оплату від клієнтів без ФОП і юридичних формальностей</p>
+        </div>
+      </div>
+
+      <div class="st-info-card" style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:24px;display:flex;gap:14px;align-items:flex-start">
+        <span style="font-size:22px;flex-shrink:0">ℹ️</span>
+        <div style="font-size:13px;color:var(--text-secondary);line-height:1.6">
+          <b style="color:var(--text-primary)">Як отримати ключі безкоштовно:</b><br>
+          1. Зареєструйся на <b>liqpay.ua</b> зі звичайним акаунтом ПриватБанку — ФОП не потрібен<br>
+          2. Зайди в кабінет → <b>Бізнес → API</b><br>
+          3. Скопіюй <b>Публічний ключ</b> і <b>Приватний ключ</b> та встав нижче
+        </div>
+      </div>
+
+      <div class="st-form-grid">
+        <div class="st-field" style="grid-column:1/-1">
+          <label class="st-label">Публічний ключ (public_key)</label>
+          <input class="st-input" type="text" id="input-liqpay-pub"
+            value="${esc(profile?.liqpayPublicKey || '')}"
+            placeholder="i00000000000000">
+        </div>
+        <div class="st-field" style="grid-column:1/-1">
+          <label class="st-label">Приватний ключ (private_key)</label>
+          <input class="st-input" type="password" id="input-liqpay-priv"
+            value="${esc(profile?.liqpayPrivateKey || '')}"
+            placeholder="••••••••••••••••">
+          <span class="st-hint">Зберігається тільки у вашому акаунті</span>
+        </div>
+      </div>
+
+      ${hasPub && hasPriv ? `
+      <div style="display:flex;align-items:center;gap:8px;margin-top:4px;margin-bottom:4px;font-size:13px;color:#34D399">
+        ✅ Ключі налаштовано — кнопка "Посилання на оплату" активна у рахунках
+      </div>` : ''}
+
+      <div class="st-actions">
+        <button class="st-btn st-btn-primary" id="save-payments-btn">
+          <span class="st-btn-icon">💾</span> Зберегти ключі
+        </button>
+      </div>
+    </div>
+  `
+}
+
 // ── Subscription tab ──────────────────────────────────────────
 function renderSubscription(profile) {
   const plan = profile?.plan || 'free'
@@ -622,6 +677,7 @@ function attachTabEvents(content, tab, profile, user) {
     case 'appearance':    attachAppearance(content); break
     case 'notifications': attachNotifications(content); break
     case 'security':      attachSecurity(content, user); break
+    case 'payments':      attachPayments(content, user); break
     case 'subscription':  attachSubscription(content); break
     case 'danger':        attachDanger(content); break
   }
@@ -849,6 +905,32 @@ function attachSubscription(content) {
   content.querySelector('#manage-sub-btn')?.addEventListener('click', () => navigate('subscribe'))
   content.querySelectorAll('.st-btn-plan').forEach(btn => {
     btn.addEventListener('click', () => navigate('subscribe'))
+  })
+}
+
+function attachPayments(content, user) {
+  content.querySelector('#save-payments-btn')?.addEventListener('click', async () => {
+    const pub  = content.querySelector('#input-liqpay-pub').value.trim()
+    const priv = content.querySelector('#input-liqpay-priv').value.trim()
+
+    if (!pub || !priv) { showToast('Введіть обидва ключі', 'error'); return }
+
+    const btn = content.querySelector('#save-payments-btn')
+    btn.disabled = true
+    btn.innerHTML = '<span class="st-btn-icon">⏳</span> Збереження...'
+
+    try {
+      const data = { liqpayPublicKey: pub, liqpayPrivateKey: priv, updatedAt: serverTimestamp() }
+      await updateDoc(doc(db, 'users', user.uid), data)
+      updateProfileCache(user.uid, data)
+      showToast('Ключі збережено ✅', 'success')
+    } catch (err) {
+      console.error(err)
+      showToast('Помилка збереження', 'error')
+    } finally {
+      btn.disabled = false
+      btn.innerHTML = '<span class="st-btn-icon">💾</span> Зберегти ключі'
+    }
   })
 }
 

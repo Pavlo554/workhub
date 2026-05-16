@@ -158,7 +158,33 @@ export async function render(container) {
 
       <!-- ── PAYMENTS ── -->
       <div id="tab-payments" class="adm-panel" style="display:none">
-        <div class="adm-toolbar">
+
+        <!-- Налаштування способів оплати -->
+        <div class="adm-pay-config" id="pay-config-block">
+          <div class="adm-section-title" style="margin-bottom:16px">⚙️ Налаштування способів оплати</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+            <div>
+              <label style="font-size:12px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">USDT TRC20 адреса</label>
+              <input class="adm-input" id="cfg-usdt" placeholder="TXxxxxxxxxxx..." type="text">
+            </div>
+            <div>
+              <label style="font-size:12px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">Bitcoin (BTC) адреса</label>
+              <input class="adm-input" id="cfg-btc" placeholder="1Axxxxxxxxxx..." type="text">
+            </div>
+            <div>
+              <label style="font-size:12px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">Ethereum (ETH) адреса</label>
+              <input class="adm-input" id="cfg-eth" placeholder="0xxxxxxxxxxx..." type="text">
+            </div>
+            <div>
+              <label style="font-size:12px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">Monobank банка (URL)</label>
+              <input class="adm-input" id="cfg-mono" placeholder="https://send.monobank.ua/jar/..." type="text">
+            </div>
+          </div>
+          <button class="adm-action-btn adm-btn-approve" id="save-pay-cfg" style="padding:8px 20px">💾 Зберегти реквізити</button>
+          <span id="pay-cfg-status" style="font-size:12px;margin-left:12px;color:var(--text-muted)"></span>
+        </div>
+
+        <div class="adm-toolbar" style="margin-top:20px">
           <div class="adm-filter-pills" id="pay-filter-tabs">
             <button class="adm-pill active" data-status="pending">⏳ Очікують</button>
             <button class="adm-pill" data-status="approved">✓ Підтверджені</button>
@@ -321,6 +347,36 @@ export async function render(container) {
     }
   })
 
+  // ── Payment config ────────────────────────────────────────
+  async function loadPayCfg() {
+    const snap = await getDoc(doc(db, 'config', 'payments'))
+    if (!snap.exists()) return
+    const d = snap.data()
+    container.querySelector('#cfg-usdt').value = d.address_usdt || ''
+    container.querySelector('#cfg-btc').value  = d.address_btc  || ''
+    container.querySelector('#cfg-eth').value  = d.address_eth  || ''
+    container.querySelector('#cfg-mono').value = d.monobankJar  || ''
+  }
+
+  container.querySelector('#save-pay-cfg').addEventListener('click', async () => {
+    const btn = container.querySelector('#save-pay-cfg')
+    const st  = container.querySelector('#pay-cfg-status')
+    btn.disabled = true
+    try {
+      await setDoc(doc(db, 'config', 'payments'), {
+        address_usdt: container.querySelector('#cfg-usdt').value.trim() || null,
+        address_btc:  container.querySelector('#cfg-btc').value.trim()  || null,
+        address_eth:  container.querySelector('#cfg-eth').value.trim()  || null,
+        monobankJar:  container.querySelector('#cfg-mono').value.trim() || null,
+        updatedAt: serverTimestamp(),
+      })
+      st.textContent = '✅ Збережено'
+      setTimeout(() => { st.textContent = '' }, 3000)
+    } catch (err) {
+      console.error(err); st.textContent = '❌ Помилка'
+    } finally { btn.disabled = false }
+  })
+
   // ── Load ──────────────────────────────────────────────────
   async function loadAndRender() {
     const [users, payments, announcements, tickets] = await Promise.all([
@@ -338,7 +394,7 @@ export async function render(container) {
     renderAnnouncements()
   }
 
-  await loadAndRender()
+  await Promise.all([loadAndRender(), loadPayCfg()])
 
   // ═══════════════════════════════════════════════════════════
   // LOADERS
@@ -1311,6 +1367,7 @@ function injectStyles() {
     .adm-field label { display:block; font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px; }
     .adm-input { width:100%; box-sizing:border-box; padding:10px 14px; background:var(--bg-tertiary); border:1.5px solid var(--border); border-radius:var(--radius-md); font-size:14px; color:var(--text-primary); outline:none; transition:border-color .15s; font-family:inherit; }
     .adm-input:focus { border-color:var(--accent-blue); }
+    .adm-pay-config { background:var(--bg-tertiary); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px 24px; margin-bottom:4px; }
     .adm-textarea { resize:vertical; min-height:80px; }
 
     /* Plan picker */

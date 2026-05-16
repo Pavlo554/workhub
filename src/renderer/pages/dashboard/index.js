@@ -350,6 +350,18 @@ async function renderDashboard(container, profile, user) {
             </div>
           </div>` : ''}
 
+          <!-- Revenue chart -->
+          ${config.modules.includes('invoices') ? `
+          <div class="db-section" id="db-revenue-chart">
+            <div class="db-section-header">
+              <span class="db-section-title">📊 Дохід (6 міс.)</span>
+              <button class="db-section-link" data-route="reports">Детальніше →</button>
+            </div>
+            <div class="db-section-body" style="padding:16px 18px;position:relative;height:170px">
+              <canvas id="db-revenue-canvas"></canvas>
+            </div>
+          </div>` : ''}
+
           <!-- Content plan (SMM) -->
           ${config.modules.includes('content-plan') ? `
           <div class="db-section" id="db-recent-posts">
@@ -469,6 +481,39 @@ async function renderDashboard(container, profile, user) {
   if (config.modules.includes('tax-calendar'))
     renderTaxTeaser(container)
 
+  // Revenue chart
+  if (config.modules.includes('invoices') && window.Chart) {
+    loadRevenueChart(base).then(chartData => {
+      if (!chartData) return
+      const canvas = container.querySelector('#db-revenue-canvas')
+      if (!canvas) return
+      new window.Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels: chartData.map(m => m.label),
+          datasets: [{
+            data: chartData.map(m => m.income),
+            backgroundColor: chartData.map((_, i) =>
+              i === chartData.length - 1 ? 'rgba(79,142,247,0.85)' : 'rgba(79,142,247,0.35)'),
+            borderRadius: 6,
+            borderSkipped: false,
+          }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: c => '₴' + Number(c.raw).toLocaleString('uk-UA') } }
+          },
+          scales: {
+            y: { beginAtZero: true, ticks: { color: '#6B7280', callback: v => v >= 1000 ? Math.round(v/1000) + 'к' : v }, grid: { color: 'rgba(255,255,255,0.04)' }, border: { display: false } },
+            x: { ticks: { color: '#9CA3AF' }, grid: { display: false }, border: { display: false } }
+          }
+        }
+      })
+    }).catch(() => {})
+  }
+
   // Update today's open task count
   const openCount = (tasks.value || []).filter(t => t.status !== 'done').length
   const el = container.querySelector('#db-today-task-count')
@@ -543,6 +588,29 @@ async function loadRecent(base, coll, n = 5) {
     const snap = await getDocs(query(collection(db, ...base, coll), orderBy('createdAt', 'desc'), limit(n)))
     return snap.docs.map(d => ({ id: d.id, ...d.data() }))
   } catch { return [] }
+}
+
+async function loadRevenueChart(base) {
+  const SHORT = ['Січ','Лют','Бер','Кві','Тра','Чер','Лип','Сер','Вер','Жов','Лис','Гру']
+  try {
+    const snap = await getDocs(collection(db, ...base, 'invoices'))
+    const invoices = snap.docs.map(d => d.data())
+    const now = new Date()
+    const months6 = []
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const m = d.getMonth(), y = d.getFullYear()
+      const inc = invoices
+        .filter(inv => {
+          if (inv.status !== 'paid') return false
+          const dt = inv.createdAt?.toDate?.() || (inv.createdAt ? new Date(inv.createdAt) : null)
+          return dt && dt.getMonth() === m && dt.getFullYear() === y
+        })
+        .reduce((s, inv) => s + (Number(inv.amount) || 0), 0)
+      months6.push({ label: SHORT[m], income: inc })
+    }
+    return months6
+  } catch { return null }
 }
 
 async function loadRecentProjects(base) {

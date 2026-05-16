@@ -119,15 +119,11 @@ export async function render(container) {
               </select>
             </div>
 
-            <!-- Photo attachments -->
-            <div class="field">
-              <label>Фото / файли</label>
+            <!-- Photo attachments — hidden, coming soon -->
+            <div style="display:none" id="attach-zone-wrap">
               <div class="attach-zone" id="attach-zone">
                 <input type="file" id="f-files" multiple accept="image/*,.pdf,.doc,.docx" style="display:none" />
-                <button type="button" class="attach-btn" id="attach-pick-btn">
-                  📎 Додати файли
-                </button>
-                <span class="attach-hint">Зображення, PDF, DOC</span>
+                <button type="button" class="attach-btn" id="attach-pick-btn">📎 Додати файли</button>
               </div>
               <div class="attach-previews" id="attach-previews"></div>
             </div>
@@ -220,11 +216,23 @@ export async function render(container) {
   }
 
   // ── Render list ───────────────────────────────────────────
+  const STATUS_ORDER   = { 'todo': 0, 'in-progress': 1, 'done': 2 }
+  const PRIORITY_ORDER = { 'high': 0, 'medium': 1, 'low': 2 }
+
   function renderList() {
     const el = container.querySelector('#tasks-list')
     let list = filter === 'all' ? tasks : tasks.filter(t => t.status === filter)
     if (priFilter !== 'all') list = list.filter(t => (t.priority || 'medium') === priFilter)
     if (projFilter !== 'all') list = list.filter(t => t.projectId === projFilter)
+
+    // Незакриті зверху, потім по пріоритету, потім по даті
+    list = [...list].sort((a, b) => {
+      const sDiff = (STATUS_ORDER[a.status] ?? 0) - (STATUS_ORDER[b.status] ?? 0)
+      if (sDiff !== 0) return sDiff
+      const pDiff = (PRIORITY_ORDER[a.priority] ?? 1) - (PRIORITY_ORDER[b.priority] ?? 1)
+      if (pDiff !== 0) return pDiff
+      return (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)
+    })
 
     if (list.length === 0) {
       el.innerHTML = `
@@ -528,6 +536,8 @@ export async function render(container) {
     container.querySelector('#f-files').click()
   })
 
+  // clipboard paste — disabled while attachments are hidden
+
   container.querySelector('#f-files').addEventListener('change', (e) => {
     const files = Array.from(e.target.files)
     files.forEach(file => {
@@ -605,7 +615,8 @@ export async function render(container) {
       // Завантажуємо нові файли
       const taskId = editingId || `temp_${Date.now()}`
       const uploadedAttachments = await Promise.all(newFiles.map(async file => {
-        const path = `users/${user.uid}/tasks/${taskId}/${Date.now()}_${file.name}`
+        const safeName = file.name.replace(/[^\w.\-]/g, '_')
+        const path = `users/${user.uid}/tasks/${taskId}/${Date.now()}_${safeName}`
         const storageRef = ref(storage, path)
         await uploadBytes(storageRef, file)
         const url = await getDownloadURL(storageRef)
@@ -797,10 +808,12 @@ function injectStyles() {
     .tk-empty-desc  { font-size:14px; color:var(--text-muted); }
 
     /* Attach zone */
-    .attach-zone { display:flex; align-items:center; gap:10px; }
+    .attach-zone { display:flex; align-items:center; gap:10px; border:1.5px dashed transparent; border-radius:var(--radius-md); padding:4px 6px; transition:all .2s; }
     .attach-btn  { background:var(--bg-tertiary); border:1.5px dashed var(--border); border-radius:var(--radius-md); padding:8px 16px; font-size:13px; font-weight:500; color:var(--text-secondary); cursor:pointer; transition:all .2s; }
     .attach-btn:hover { border-color:var(--accent-blue); color:var(--accent-blue); }
     .attach-hint { font-size:11px; color:var(--text-muted); }
+    .attach-hint kbd { background:var(--bg-tertiary); border:1px solid var(--border); border-radius:4px; padding:1px 5px; font-size:10px; font-family:monospace; color:var(--text-secondary); }
+    .attach-zone--pasted { border-color:var(--accent-blue) !important; background:rgba(79,142,247,.06) !important; transition:all .15s; }
     .attach-previews { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
     .attach-item { position:relative; display:flex; flex-direction:column; align-items:center; gap:4px; }
     .attach-preview-img { width:72px; height:72px; object-fit:cover; border-radius:8px; border:1px solid var(--border); }
