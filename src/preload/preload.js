@@ -22,4 +22,8 @@ contextBridge.exposeInMainWorld('electron', {
     show:   (localPath)             => ipcRenderer.invoke('docs:show',   { localPath }),
     delete: (localPath)             => ipcRenderer.invoke('docs:delete', { localPath }),
   },
+
+  pdf: {
+    generate: (html, filename) => ipcRenderer.invoke('pdf:generate', { html, filename }),
+  },
 })

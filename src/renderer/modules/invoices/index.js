@@ -3,6 +3,7 @@ import { db } from '../../services/firebase.js'
 import { getCurrentUser, getUserProfile, getActivePathSegments } from '../../services/auth.js'
 import { checkPlanLimit } from '../../services/plan-guard.js'
 import { generateInvoicePDF } from './invoice-pdf.js'
+import { generatePaymentLink } from '../../services/liqpay.js'
 import {
   collection, addDoc, getDocs, deleteDoc, doc, updateDoc,
   query, orderBy, where, serverTimestamp
@@ -422,7 +423,8 @@ export async function render(container) {
             <div class="invd-label">Деталі</div>
             <div class="invd-info-list">
               <div class="invd-row"><span class="invd-key">📅 Дата</span><span>${formatDate(inv.date)}</span></div>
-              <div class="invd-row"><span class="invd-key">${pm.icon} Оплата</span><span>${pm.label}${inv.cryptoAddr ? ` · ${inv.cryptoAddr}` : ''}</span></div>
+              <div class="invd-row"><span class="invd-key">${pm.icon} Оплата</span><span>${pm.label}</span></div>
+              ${inv.cryptoAddr ? `<div class="invd-row invd-row--addr"><span class="invd-key">📋 Адреса</span><span class="invd-addr">${inv.cryptoAddr}</span></div>` : ''}
               ${inv.note ? `<div class="invd-row"><span class="invd-key">📝 Нотатка</span><span>${inv.note}</span></div>` : ''}
             </div>
           </div>
@@ -438,9 +440,12 @@ export async function render(container) {
 
         </div>
         <div class="invd-footer">
-          <button class="btn btn-secondary" id="invd-edit">✏️ Редагувати</button>
-          <button class="btn btn-secondary" id="invd-pdf">📄 PDF</button>
-          <button class="btn invd-del-btn" id="invd-delete">🗑 Видалити</button>
+          <div class="invd-footer-row">
+            <button class="btn btn-secondary invd-btn-grow" id="invd-edit">✏️ Редагувати</button>
+            <button class="btn btn-secondary" id="invd-pdf">📄 PDF</button>
+            ${profile.liqpayPublicKey ? `<button class="btn btn-secondary" id="invd-pay-link">💳 Посилання</button>` : ''}
+          </div>
+          <button class="btn invd-del-btn invd-del-full" id="invd-delete">🗑 Видалити</button>
         </div>
       </div>
     `
@@ -448,6 +453,26 @@ export async function render(container) {
     detEl.querySelector('#invd-close').addEventListener('click', closeInvDetail)
     detEl.querySelector('#invd-edit').addEventListener('click', () => openInvModal(inv))
     detEl.querySelector('#invd-pdf').addEventListener('click', () => generateInvoicePDF(inv, profile))
+    detEl.querySelector('#invd-pay-link')?.addEventListener('click', async () => {
+      const btn = detEl.querySelector('#invd-pay-link')
+      const orig = btn.textContent
+      try {
+        const url = await generatePaymentLink({
+          publicKey:   profile.liqpayPublicKey,
+          privateKey:  profile.liqpayPrivateKey,
+          amount:      inv.amount,
+          description: `Рахунок №${inv.number} — ${inv.client}`,
+          orderId:     `inv_${inv.id}`,
+        })
+        await navigator.clipboard.writeText(url)
+        btn.textContent = '✅ Скопійовано!'
+        setTimeout(() => { btn.textContent = orig }, 2500)
+      } catch (err) {
+        console.error(err)
+        btn.textContent = '❌ Помилка'
+        setTimeout(() => { btn.textContent = orig }, 2500)
+      }
+    })
     detEl.querySelector('#invd-delete')?.addEventListener('click', async () => {
       if (!confirm('Видалити рахунок?')) return
       await deleteDoc(doc(db, ...base, 'invoices', inv.id))
@@ -838,6 +863,8 @@ function injectStyles() {
     .invd-desc-box { background:var(--bg-secondary); border-radius:var(--radius-lg); padding:12px 14px; font-size:13px; color:var(--text-secondary); line-height:1.6; }
     .invd-info-list { display:flex; flex-direction:column; gap:8px; }
     .invd-row    { display:flex; justify-content:space-between; font-size:13px; gap:16px; }
+    .invd-row--addr { flex-direction:column; gap:3px; }
+    .invd-addr   { font-size:11px; font-family:var(--font-mono,monospace); word-break:break-all; color:var(--text-secondary); width:100%; }
     .invd-key    { color:var(--text-muted); flex-shrink:0; }
 
     .invd-pay-btn   { background:rgba(52,211,153,.12); color:#34D399; border:1px solid rgba(52,211,153,.3); font-weight:600; }
@@ -845,7 +872,10 @@ function injectStyles() {
     .invd-unpay-btn { background:rgba(107,114,128,.12); color:var(--text-secondary); border:1px solid var(--border); font-weight:600; }
     .invd-unpay-btn:hover { background:rgba(107,114,128,.2); }
 
-    .invd-footer { padding:16px 20px; display:flex; gap:8px; border-top:1px solid var(--border); flex-shrink:0; }
+    .invd-footer      { padding:16px 20px; display:flex; flex-direction:column; gap:8px; border-top:1px solid var(--border); flex-shrink:0; }
+    .invd-footer-row  { display:flex; gap:8px; }
+    .invd-btn-grow    { flex:1; }
+    .invd-del-full    { width:100%; }
     .invd-del-btn { background:rgba(239,68,68,.1); color:#EF4444; border:1px solid rgba(239,68,68,.25); font-weight:600; border-radius:var(--radius-md); padding:8px 16px; cursor:pointer; font-size:13px; transition:all .2s; }
     .invd-del-btn:hover { background:rgba(239,68,68,.2); }
 

@@ -171,16 +171,8 @@ export async function render(container) {
         <div class="rp-section-head">
           <div class="rp-section-title">📊 Дохід за 6 місяців</div>
         </div>
-        <div class="rp-bar-chart">
-          ${months6.map(m => `
-            <div class="rp-bar-col">
-              <div class="rp-bar-label-top">${m.income > 0 ? '₴'+Math.round(m.income/1000)+'к' : ''}</div>
-              <div class="rp-bar-wrap">
-                <div class="rp-bar" style="height:${Math.max(m.income/maxInc*100, m.income > 0 ? 4 : 0)}%"></div>
-              </div>
-              <div class="rp-bar-label">${m.label}</div>
-            </div>
-          `).join('')}
+        <div class="rp-chart-wrap">
+          <canvas id="rp-income-canvas"></canvas>
         </div>
       </div>
 
@@ -189,36 +181,93 @@ export async function render(container) {
         <div class="rp-section-head">
           <div class="rp-section-title">✅ Задачі цього місяця</div>
         </div>
-        ${(() => {
-          const byStatus = {
-            new:         tasks.filter(t => t.status === 'new'         && taskInMonth(t, thisM, thisY)).length,
-            in_progress: tasks.filter(t => t.status === 'in_progress' && taskInMonth(t, thisM, thisY)).length,
-            done:        doneThis,
-          }
-          const total = Object.values(byStatus).reduce((a,b) => a+b, 0) || 1
-          const rows = [
-            { label: 'Нові',      count: byStatus.new,         color: '#94A3B8' },
-            { label: 'В роботі',  count: byStatus.in_progress, color: '#FBBF24' },
-            { label: 'Виконані',  count: byStatus.done,        color: '#34D399' },
-          ]
-          return `<div class="rp-progress-rows">
-            ${rows.map(r => `
-              <div class="rp-progress-row">
-                <div class="rp-progress-label-wrap">
-                  <span class="rp-progress-dot" style="background:${r.color}"></span>
-                  <span class="rp-progress-lbl">${r.label}</span>
-                  <span class="rp-progress-cnt">${r.count}</span>
+        <div class="rp-tasks-split">
+          ${(() => {
+            const byStatus = {
+              new:         tasks.filter(t => t.status === 'new'         && taskInMonth(t, thisM, thisY)).length,
+              in_progress: tasks.filter(t => t.status === 'in_progress' && taskInMonth(t, thisM, thisY)).length,
+              done:        doneThis,
+            }
+            const total = Object.values(byStatus).reduce((a,b) => a+b, 0) || 1
+            const rows = [
+              { label: 'Нові',      count: byStatus.new,         color: '#94A3B8' },
+              { label: 'В роботі',  count: byStatus.in_progress, color: '#FBBF24' },
+              { label: 'Виконані',  count: byStatus.done,        color: '#34D399' },
+            ]
+            return `<div class="rp-progress-rows">
+              ${rows.map(r => `
+                <div class="rp-progress-row">
+                  <div class="rp-progress-label-wrap">
+                    <span class="rp-progress-dot" style="background:${r.color}"></span>
+                    <span class="rp-progress-lbl">${r.label}</span>
+                    <span class="rp-progress-cnt">${r.count}</span>
+                  </div>
+                  <div class="rp-progress-track">
+                    <div class="rp-progress-fill" style="width:${Math.round(r.count/total*100)}%;background:${r.color}"></div>
+                  </div>
+                  <div class="rp-progress-pct">${Math.round(r.count/total*100)}%</div>
                 </div>
-                <div class="rp-progress-track">
-                  <div class="rp-progress-fill" style="width:${Math.round(r.count/total*100)}%;background:${r.color}"></div>
-                </div>
-                <div class="rp-progress-pct">${Math.round(r.count/total*100)}%</div>
-              </div>
-            `).join('')}
-          </div>`
-        })()}
+              `).join('')}
+            </div>`
+          })()}
+          <div class="rp-donut-wrap">
+            <canvas id="rp-task-canvas"></canvas>
+          </div>
+        </div>
       </div>
     `
+
+    const C = window.Chart
+    if (C) {
+      const incCanvas = el.querySelector('#rp-income-canvas')
+      if (incCanvas) {
+        new C(incCanvas, {
+          type: 'bar',
+          data: {
+            labels: months6.map(m => m.label),
+            datasets: [{
+              data: months6.map(m => m.income),
+              backgroundColor: months6.map((_, i) =>
+                i === months6.length - 1 ? 'rgba(79,142,247,0.85)' : 'rgba(79,142,247,0.4)'),
+              borderRadius: 8,
+              borderSkipped: false,
+            }]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: { callbacks: { label: c => '₴' + Number(c.raw).toLocaleString('uk-UA') } }
+            },
+            scales: {
+              y: { beginAtZero: true, ticks: { color: '#6B7280', callback: v => v >= 1000 ? Math.round(v/1000) + 'к' : v }, grid: { color: 'rgba(255,255,255,0.06)' }, border: { display: false } },
+              x: { ticks: { color: '#9CA3AF' }, grid: { display: false }, border: { display: false } }
+            }
+          }
+        })
+      }
+      const taskCanvas = el.querySelector('#rp-task-canvas')
+      if (taskCanvas) {
+        const bySt = {
+          new:         tasks.filter(t => t.status === 'new' && taskInMonth(t, thisM, thisY)).length,
+          in_progress: tasks.filter(t => (t.status === 'in_progress' || t.status === 'in-progress') && taskInMonth(t, thisM, thisY)).length,
+          done:        doneThis,
+        }
+        if (bySt.new + bySt.in_progress + bySt.done > 0) {
+          new C(taskCanvas, {
+            type: 'doughnut',
+            data: {
+              labels: ['Нові', 'В роботі', 'Виконані'],
+              datasets: [{ data: [bySt.new, bySt.in_progress, bySt.done], backgroundColor: ['#94A3B8','#FBBF24','#34D399'], borderWidth: 0, hoverOffset: 4 }]
+            },
+            options: {
+              cutout: '65%', responsive: true, maintainAspectRatio: false,
+              plugins: { legend: { position: 'bottom', labels: { color: '#9CA3AF', padding: 10, font: { size: 11 }, boxWidth: 10 } } }
+            }
+          })
+        }
+      }
+    }
   }
 
   // ══ TAB 2: ТОП КЛІЄНТИ ════════════════════════════════════
@@ -450,19 +499,8 @@ export async function render(container) {
             <span class="rp-legend-dot" style="background:#FBBF24;margin-left:12px"></span> Очікується
           </div>
         </div>
-        <div class="rp-stacked-chart">
-          ${months.map(m => `
-            <div class="rp-sc-col">
-              <div class="rp-sc-values">
-                ${m.paid > 0 ? `<div class="rp-sc-val">₴${Math.round(m.paid/1000)}к</div>` : ''}
-              </div>
-              <div class="rp-sc-bars">
-                <div class="rp-sc-bar rp-sc-bar--paid"    style="height:${Math.round(m.paid/maxVal*160)}px"></div>
-                <div class="rp-sc-bar rp-sc-bar--pending" style="height:${Math.round(m.pending/maxVal*160)}px"></div>
-              </div>
-              <div class="rp-sc-label">${m.short}</div>
-            </div>
-          `).join('')}
+        <div class="rp-chart-wrap" style="height:240px">
+          <canvas id="rp-compare-canvas"></canvas>
         </div>
       </div>
 
@@ -497,6 +535,34 @@ export async function render(container) {
         </div>
       </div>
     `
+
+    const C = window.Chart
+    if (C) {
+      const compareCanvas = el.querySelector('#rp-compare-canvas')
+      if (compareCanvas) {
+        new C(compareCanvas, {
+          type: 'bar',
+          data: {
+            labels: months.map(m => m.short),
+            datasets: [
+              { label: 'Оплачено',    data: months.map(m => m.paid),    backgroundColor: 'rgba(52,211,153,0.7)',  borderRadius: 6, borderSkipped: false },
+              { label: 'Очікується',  data: months.map(m => m.pending), backgroundColor: 'rgba(251,191,36,0.5)', borderRadius: 6, borderSkipped: false }
+            ]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+              legend: { labels: { color: '#9CA3AF', padding: 16, font: { size: 12 } } },
+              tooltip: { callbacks: { label: c => c.dataset.label + ': ₴' + Number(c.raw).toLocaleString('uk-UA') } }
+            },
+            scales: {
+              y: { beginAtZero: true, ticks: { color: '#6B7280', callback: v => v >= 1000 ? Math.round(v/1000) + 'к' : v }, grid: { color: 'rgba(255,255,255,0.06)' }, border: { display: false } },
+              x: { ticks: { color: '#9CA3AF' }, grid: { display: false }, border: { display: false } }
+            }
+          }
+        })
+      }
+    }
   }
 
   loadTab()
@@ -550,13 +616,11 @@ function injectStyles() {
     .rp-section-title { font-size:15px; font-weight:700; }
     .rp-section-sub   { font-size:12px; color:var(--text-muted); }
 
-    /* Bar chart */
-    .rp-bar-chart { display:flex; align-items:flex-end; gap:8px; height:160px; padding-bottom:28px; position:relative; }
-    .rp-bar-col   { flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end; }
-    .rp-bar-label-top { font-size:10px; color:var(--text-muted); margin-bottom:4px; white-space:nowrap; }
-    .rp-bar-wrap  { flex:1; display:flex; align-items:flex-end; width:100%; }
-    .rp-bar       { width:100%; background:linear-gradient(180deg,#4F8EF7,#A78BFA); border-radius:6px 6px 0 0; min-height:0; transition:height .5s cubic-bezier(.34,1.2,.64,1); }
-    .rp-bar-label { font-size:11px; color:var(--text-muted); margin-top:6px; font-weight:600; }
+    /* Chart.js wrappers */
+    .rp-chart-wrap { position:relative; height:200px; padding:8px 0; }
+    .rp-tasks-split { display:flex; gap:24px; padding:16px; align-items:center; }
+    .rp-tasks-split .rp-progress-rows { flex:1; }
+    .rp-donut-wrap { width:160px; height:160px; flex-shrink:0; position:relative; }
 
     /* Progress rows */
     .rp-progress-rows { display:flex; flex-direction:column; gap:12px; }

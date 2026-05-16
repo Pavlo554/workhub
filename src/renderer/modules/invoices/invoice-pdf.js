@@ -1,4 +1,5 @@
 // src/renderer/modules/invoices/invoice-pdf.js
+// Generates PDF via Electron's printToPDF (proper Cyrillic support, real download).
 
 const PAY_LABELS = {
   card:   'Банківська картка',
@@ -7,216 +8,142 @@ const PAY_LABELS = {
 }
 
 export async function generateInvoicePDF(invoice, profile) {
-  const { jsPDF } = window.jspdf
+  const html     = buildHTML(invoice, profile)
+  const safeName = (invoice.client || 'client').replace(/[^\wа-яА-ЯіІїЇєЄ]/g, '_')
+  const filename = `Rakhunok_${invoice.number || 'INV'}_${safeName}.pdf`
 
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-  doc.setFont('helvetica')
+  if (window.electron?.pdf?.generate) {
+    const result = await window.electron.pdf.generate(html, filename)
+    if (result?.error) throw new Error(result.error)
+  } else {
+    // Browser fallback (non-Electron): open print dialog
+    const w = window.open('', '_blank', 'width=900,height=700')
+    if (!w) { alert('Дозвольте спливаючі вікна'); return }
+    w.document.open(); w.document.write(html); w.document.close()
+  }
+}
 
-  const L = 20    // left margin
-  const R = 190   // right margin
-  const W = R - L // content width
-  let y = 20
-
-  // ── Header ────────────────────────────────────────────────
-  doc.setFontSize(22)
-  doc.setFont('helvetica', 'bold')
-  doc.text('РАХУНОК', 105, y, { align: 'center' })
-  y += 8
-
-  doc.setFontSize(12)
-  doc.setFont('helvetica', 'normal')
-  doc.text(`№ ${invoice.number}`, 105, y, { align: 'center' })
-  y += 6
-
-  const dateStr = formatDate(invoice.date)
-  doc.setFontSize(10)
-  doc.setTextColor(100)
-  doc.text(`м. ${profile.city || '___________'}, ${dateStr}`, 105, y, { align: 'center' })
-  doc.setTextColor(0)
-  y += 12
-
-  // ── Divider ───────────────────────────────────────────────
-  doc.setDrawColor(200)
-  doc.setLineWidth(0.4)
-  doc.line(L, y, R, y)
-  y += 10
-
-  // ── Parties: two-column block ─────────────────────────────
-  doc.setFontSize(9)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(120)
-  doc.text('ВИКОНАВЕЦЬ', L, y)
-  doc.text('ЗАМОВНИК', 110, y)
-  doc.setTextColor(0)
-  y += 6
-
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(11)
-  doc.text(profile.businessName || profile.name || '___________', L, y)
-  doc.text(invoice.client, 110, y)
-  y += 7
-
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(10)
-
-  const execLines = []
-  if (profile.phone) execLines.push(`Тел: ${profile.phone}`)
-  if (profile.email) execLines.push(`Email: ${profile.email}`)
-  if (profile.taxId) execLines.push(`ІПН: ${profile.taxId}`)
-
-  execLines.forEach(line => {
-    doc.text(line, L, y)
-    y += 5.5
-  })
-
-  y += 6
-
-  // ── Divider ───────────────────────────────────────────────
-  doc.setDrawColor(200)
-  doc.line(L, y, R, y)
-  y += 10
-
-  // ── Services description ──────────────────────────────────
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(11)
-  doc.text('Послуги / опис робіт', L, y)
-  y += 8
-
-  // Table header
-  doc.setFillColor(245, 245, 245)
-  doc.roundedRect(L, y - 4, W, 8, 1, 1, 'F')
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(9)
-  doc.setTextColor(80)
-  doc.text('Опис', L + 2, y + 1)
-  doc.text('Сума', R - 2, y + 1, { align: 'right' })
-  doc.setTextColor(0)
-  y += 10
-
-  // Table row(s)
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(10)
-
-  const descLines = doc.splitTextToSize(invoice.description, W - 30)
-  const rowH = Math.max(descLines.length * 5.5 + 8, 14)
-
-  doc.setDrawColor(220)
-  doc.setLineWidth(0.3)
-  doc.rect(L, y - 2, W, rowH)
-
-  doc.text(descLines, L + 2, y + 3)
-  doc.text(`₴${formatMoney(invoice.amount)}`, R - 2, y + 3, { align: 'right' })
-  y += rowH + 4
-
-  // ── Totals block ──────────────────────────────────────────
-  const totalsX = 130
-  const totalsW = R - totalsX
-
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(10)
-  doc.setTextColor(80)
-  doc.text('Всього без ПДВ:', totalsX, y)
-  doc.setTextColor(0)
-  doc.text(`₴${formatMoney(invoice.amount)}`, R, y, { align: 'right' })
-  y += 6
-
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(12)
-  doc.setFillColor(240, 248, 255)
-  doc.roundedRect(totalsX - 2, y - 4, totalsW + 2, 10, 1, 1, 'F')
-  doc.setTextColor(40, 100, 220)
-  doc.text('До сплати:', totalsX, y + 2)
-  doc.text(`₴${formatMoney(invoice.amount)}`, R, y + 2, { align: 'right' })
-  doc.setTextColor(0)
-  y += 16
-
-  // ── Payment details ───────────────────────────────────────
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(11)
-  doc.text('Реквізити оплати', L, y)
-  y += 7
-
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(10)
-
+function buildHTML(invoice, profile) {
+  const dateStr  = formatDate(invoice.date)
   const payLabel = PAY_LABELS[invoice.payMethod] || invoice.payMethod || '—'
-  doc.text(`Спосіб оплати: ${payLabel}`, L, y)
-  y += 6
+  const isPaid   = invoice.status === 'paid'
+  const money    = v => Number(v).toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
-  if (invoice.payMethod === 'crypto' && invoice.cryptoAddr) {
-    doc.text(`Адреса: ${invoice.cryptoAddr}`, L, y)
-    y += 6
-  }
+  return `<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<title>Рахунок ${esc(invoice.number)}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;background:#fff}
+.page{max-width:760px;margin:0 auto;padding:44px 52px;position:relative}
+.stamp{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-25deg);
+  font-size:80px;font-weight:900;letter-spacing:.06em;color:rgba(34,197,94,.1);
+  pointer-events:none;white-space:nowrap;z-index:0}
+.hd{text-align:center;margin-bottom:28px}
+.hd-title{font-size:30px;font-weight:900;letter-spacing:.04em}
+.hd-num{font-size:14px;color:#555;margin-top:4px}
+.hd-date{font-size:12px;color:#888;margin-top:2px}
+hr{border:none;border-top:1px solid #ddd;margin:20px 0}
+.parties{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-bottom:24px}
+.party-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#888;margin-bottom:6px}
+.party-name{font-size:16px;font-weight:800;margin-bottom:6px}
+.party-info{font-size:12px;color:#555;line-height:1.7}
+table{width:100%;border-collapse:collapse;margin-bottom:12px}
+thead th{background:#f4f4f4;padding:8px 10px;text-align:left;font-size:10px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.05em;color:#666;border-bottom:2px solid #ddd}
+thead th:last-child{text-align:right;width:130px}
+tbody td{padding:12px 10px;border-bottom:1px solid #eee;font-size:13px;vertical-align:top}
+tbody td:last-child{text-align:right;font-weight:700;white-space:nowrap}
+.totals{display:flex;justify-content:flex-end;margin-bottom:28px}
+.totals-box{width:280px}
+.total-row{display:flex;justify-content:space-between;padding:6px 0;font-size:13px;color:#666;border-bottom:1px solid #eee}
+.total-main{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;
+  background:#e8f0fe;border-radius:8px;margin-top:10px}
+.total-main span:first-child{font-size:13px;font-weight:700;color:#1d4ed8}
+.total-main span:last-child{font-size:17px;font-weight:900;color:#1d4ed8}
+.section-title{font-size:13px;font-weight:700;margin-bottom:8px}
+.info-line{font-size:12px;color:#444;line-height:1.9;word-break:break-all}
+.notes{background:#fafafa;border:1px solid #eee;border-radius:8px;padding:14px 16px;margin-bottom:24px}
+.sigs{display:grid;grid-template-columns:1fr 1fr;gap:60px;margin-top:44px;padding-top:20px;border-top:1px solid #ddd}
+.sig-lbl{font-size:12px;font-weight:700;margin-bottom:32px}
+.sig-line{border-top:1px solid #999;padding-top:4px;font-size:10px;color:#aaa;text-align:center}
+@media print{
+  body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  @page{size:A4;margin:15mm 18mm}
+}
+</style>
+</head>
+<body>
+<div class="page">
+${isPaid ? '<div class="stamp">ОПЛАЧЕНО</div>' : ''}
+<div class="hd">
+  <div class="hd-title">РАХУНОК</div>
+  <div class="hd-num">№ ${esc(invoice.number)}</div>
+  <div class="hd-date">м. ${esc(profile.city || '___')}, ${dateStr}</div>
+</div>
+<hr>
+<div class="parties">
+  <div>
+    <div class="party-lbl">Виконавець</div>
+    <div class="party-name">${esc(profile.businessName || profile.name || '___')}</div>
+    <div class="party-info">
+      ${profile.phone ? `Тел: ${esc(profile.phone)}<br>` : ''}
+      ${profile.email ? `Email: ${esc(profile.email)}<br>` : ''}
+      ${profile.taxId ? `ІПН: ${esc(profile.taxId)}` : ''}
+    </div>
+  </div>
+  <div>
+    <div class="party-lbl">Замовник</div>
+    <div class="party-name">${esc(invoice.client || '___')}</div>
+  </div>
+</div>
+<hr>
+<table>
+  <thead><tr><th>Опис послуг / робіт</th><th>Сума</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>${esc(invoice.description || '—')}</td>
+      <td>₴${money(invoice.amount)}</td>
+    </tr>
+  </tbody>
+</table>
+<div class="totals">
+  <div class="totals-box">
+    <div class="total-row"><span>Всього без ПДВ:</span><span>₴${money(invoice.amount)}</span></div>
+    <div class="total-main"><span>До сплати:</span><span>₴${money(invoice.amount)}</span></div>
+  </div>
+</div>
+<div style="margin-bottom:24px">
+  <div class="section-title">Реквізити оплати</div>
+  <div class="info-line">
+    Спосіб оплати: ${esc(payLabel)}<br>
+    ${invoice.payMethod === 'crypto' && invoice.cryptoAddr ? `Адреса: ${esc(invoice.cryptoAddr)}<br>` : ''}
+    ${profile.iban     ? `IBAN: ${esc(profile.iban)}<br>` : ''}
+    ${profile.bankName ? `Банк: ${esc(profile.bankName)}`  : ''}
+  </div>
+</div>
+${invoice.note ? `
+<div class="notes">
+  <div class="section-title">Примітки</div>
+  <div class="info-line">${esc(invoice.note)}</div>
+</div>` : ''}
+<div class="sigs">
+  <div><div class="sig-lbl">Виконавець:</div><div class="sig-line">підпис</div></div>
+  <div><div class="sig-lbl">Замовник:</div><div class="sig-line">підпис</div></div>
+</div>
+</div>
+</body>
+</html>`
+}
 
-  if (profile.iban) {
-    doc.text(`IBAN: ${profile.iban}`, L, y)
-    y += 6
-  }
-  if (profile.bankName) {
-    doc.text(`Банк: ${profile.bankName}`, L, y)
-    y += 6
-  }
-
-  y += 6
-
-  // ── Notes ─────────────────────────────────────────────────
-  if (invoice.note) {
-    doc.setDrawColor(200)
-    doc.line(L, y, R, y)
-    y += 8
-
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(10)
-    doc.text('Примітки:', L, y)
-    y += 6
-
-    doc.setFont('helvetica', 'normal')
-    const noteLines = doc.splitTextToSize(invoice.note, W)
-    doc.text(noteLines, L, y)
-    y += noteLines.length * 5.5 + 8
-  }
-
-  // ── Signatures ────────────────────────────────────────────
-  const signY = Math.max(y + 10, 245)
-  doc.setDrawColor(200)
-  doc.line(L, signY - 2, R, signY - 2)
-
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(10)
-  doc.text('Виконавець:', L, signY + 6)
-  doc.text('Замовник:', 110, signY + 6)
-
-  doc.setFont('helvetica', 'normal')
-  doc.setDrawColor(80)
-  doc.line(L, signY + 18, L + 55, signY + 18)
-  doc.line(110, signY + 18, 110 + 55, signY + 18)
-  doc.setFontSize(8)
-  doc.setTextColor(140)
-  doc.text('підпис', L + 27, signY + 22, { align: 'center' })
-  doc.text('підпис', 110 + 27, signY + 22, { align: 'center' })
-
-  // ── Status stamp (if paid) ────────────────────────────────
-  if (invoice.status === 'paid') {
-    doc.saveGraphicsState()
-    doc.setGState(doc.GState({ opacity: 0.12 }))
-    doc.setTextColor(34, 197, 94)
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(48)
-    doc.text('ОПЛАЧЕНО', 105, 148, { align: 'center', angle: 30 })
-    doc.restoreGraphicsState()
-    doc.setTextColor(0)
-  }
-
-  const filename = `Rakhunok_${invoice.number}_${invoice.client.replace(/\s+/g, '_')}.pdf`
-  doc.save(filename)
+function esc(str) {
+  if (!str) return ''
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
 }
 
 function formatDate(dateStr) {
   if (!dateStr) return '__.__.____'
-  const d = new Date(dateStr)
-  return d.toLocaleDateString('uk-UA', { day: '2-digit', month: 'long', year: 'numeric' })
-}
-
-function formatMoney(amount) {
-  return Number(amount).toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return new Date(dateStr).toLocaleDateString('uk-UA', { day: '2-digit', month: 'long', year: 'numeric' })
 }

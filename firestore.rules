@@ -38,6 +38,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    match /config/{docId} {
+      allow read:  if request.auth != null;
+      allow write: if isAdmin();
+    }
+
     match /{path=**}/pendingPayments/{paymentId} {
       allow read:   if request.auth != null && isAdmin();
       allow create: if request.auth != null;

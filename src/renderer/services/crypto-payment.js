@@ -1,52 +1,63 @@
 // src/renderer/services/crypto-payment.js
-// Мануальний прийом криптовалют
 
 import { db } from './firebase.js'
-import { doc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
+import { doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
-// ⚠️ ВАЖЛИВО: Отримай адреси в Trustee Plus і вставь сюди
-const CRYPTO_ADDRESSES = {
-  'USDT': 'TE2EuWzsNE8mVW19pYMyJiFN9pHXj5CxhC',  // TRC20 (найдешевша мережа)
-  'BTC': 'TE2EuWzsNE8mVW19pYMyJiFN9pHXj5CxhC',           // Bitcoin
-  'ETH': 'TE2EuWzsNE8mVW19pYMyJiFN9pHXj5CxhC',           // Ethereum
+// Завантажує адреси з Firestore (налаштовуються в адмін-панелі)
+export async function getPaymentConfig() {
+  const snap = await getDoc(doc(db, 'config', 'payments'))
+  return snap.exists() ? snap.data() : {}
 }
 
-// Приблизні курси (оновлюй вручну або через API)
-const CRYPTO_RATES = {
-  'USDT': 41,      // 1 USDT ≈ 41 UAH
-  'BTC': 1850000,  // 1 BTC ≈ 1,850,000 UAH
-  'ETH': 95000,    // 1 ETH ≈ 95,000 UAH
+export function getCryptoAddress(config, currency) {
+  const key = `address_${currency.toLowerCase()}`
+  return config?.[key] || null
 }
 
-export function getCryptoAddress(currency) {
-  return CRYPTO_ADDRESSES[currency] || null
+export function getMonobankJar(config) {
+  return config?.monobankJar || null
 }
 
-export function calculateCryptoAmount(uahAmount, currency) {
-  const rate = CRYPTO_RATES[currency]
-  if (!rate) return '0'
-  return (uahAmount / rate).toFixed(8)
-}
-
-export async function createPendingPayment(userId, planId, amount, currency) {
-  const paymentId = `payment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-  
-  try {
-    await setDoc(doc(db, 'users', userId, 'pendingPayments', paymentId), {
-      paymentId,
-      planId,
-      amount,
-      currency,
-      cryptoAmount: calculateCryptoAmount(amount, currency),
-      address: getCryptoAddress(currency),
-      status: 'pending',
-      createdAt: serverTimestamp(),
-    })
-    
-    console.log('Pending payment created:', paymentId)
-    return paymentId
-  } catch (err) {
-    console.error('Error creating pending payment:', err)
-    throw err
+// Живий курс з CoinGecko (безкоштовний API)
+const _rateCache = {}
+export async function fetchCryptoRate(currency) {
+  const now = Date.now()
+  if (_rateCache[currency] && now - _rateCache[currency].ts < 5 * 60_000) {
+    return _rateCache[currency].rate
   }
+
+  const ids = { USDT: 'tether', BTC: 'bitcoin', ETH: 'ethereum' }
+  const id = ids[currency]
+  if (!id) return null
+
+  try {
+    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=uah`)
+    const json = await res.json()
+    const rate = json[id]?.uah
+    if (rate) _rateCache[currency] = { rate, ts: now }
+    return rate
+  } catch {
+    // fallback курси якщо API недоступний
+    const fallback = { USDT: 41.5, BTC: 3_900_000, ETH: 155_000 }
+    return fallback[currency] ?? null
+  }
+}
+
+export function calculateCryptoAmount(uahAmount, rateUAH) {
+  if (!rateUAH) return '0'
+  return (uahAmount / rateUAH).toFixed(8)
+}
+
+export async function createPendingPayment(userId, planId, amount, method, extra = {}) {
+  const paymentId = `pay_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+  await setDoc(doc(db, 'users', userId, 'pendingPayments', paymentId), {
+    paymentId,
+    planId,
+    amount,
+    method,   // 'usdt' | 'btc' | 'eth' | 'monobank'
+    status: 'pending',
+    createdAt: serverTimestamp(),
+    ...extra,
+  })
+  return paymentId
 }
