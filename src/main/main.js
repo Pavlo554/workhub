@@ -329,6 +329,41 @@ ipcMain.handle('docs:delete', async (_, { localPath }) => {
   } catch (e) { return { error: e.message } }
 })
 
+// ── IPC: open-external ────────────────────────────────────────
+ipcMain.handle('open-external', async (_, url) => {
+  try { await shell.openExternal(url); return { ok: true } }
+  catch (e) { return { error: e.message } }
+})
+
+// ── IPC: shop:request (bypasses renderer CSP for store APIs) ──
+const http  = require('http')
+const { URL: NodeURL } = require('url')
+
+ipcMain.handle('shop:request', async (_, { url, headers = {} }) => {
+  return new Promise((resolve) => {
+    try {
+      const parsed  = new NodeURL(url)
+      const lib     = parsed.protocol === 'https:' ? https : http
+      const options = {
+        hostname: parsed.hostname,
+        port:     parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+        path:     parsed.pathname + parsed.search,
+        method:   'GET',
+        headers:  { 'Accept': 'application/json', 'User-Agent': 'WorkHub/1.0', ...headers },
+        timeout:  15000,
+      }
+      const req = lib.request(options, (res) => {
+        let data = ''
+        res.on('data', chunk => { data += chunk })
+        res.on('end', () => resolve({ status: res.statusCode, body: data }))
+      })
+      req.on('error',   err => resolve({ error: err.message }))
+      req.on('timeout', ()  => { req.destroy(); resolve({ error: 'Request timeout' }) })
+      req.end()
+    } catch (err) { resolve({ error: err.message }) }
+  })
+})
+
 // Titlebar buttons
 ipcMain.on('window-minimize', () => mainWindow.minimize())
 ipcMain.on('window-maximize', () => {

@@ -3,6 +3,7 @@ import { db } from '../../services/firebase.js'
 import { getCurrentUser, getUserProfile, getActivePathSegments } from '../../services/auth.js'
 import { getProfessionConfig } from '../../../core/profession-config.js'
 import { navigate } from '../../../core/router.js'
+import { icon } from '../../utils/icons.js'
 import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
 export async function render(container) {
@@ -49,7 +50,7 @@ export async function render(container) {
             ${(profile?.name || 'U')[0].toUpperCase()}
           </div>
           <div>
-            <h1 class="pf-name">${getGreeting()}, ${name}! ${config.icon}</h1>
+            <h1 class="pf-name">${getGreeting()}, ${name}!</h1>
             <div class="pf-meta">
               <span class="pf-biz">${profile?.businessName || 'Мій бізнес'}</span>
               <span class="pf-dot">·</span>
@@ -60,9 +61,9 @@ export async function render(container) {
           </div>
         </div>
         <div class="pf-hdr-right">
-          <button class="pf-hdr-btn" id="pf-btn-settings" title="Налаштування">⚙️ Налаштування</button>
+          <button class="pf-hdr-btn" id="pf-btn-settings" title="Налаштування">${icon('settings', 14)} Налаштування</button>
           <button class="pf-hdr-btn pf-hdr-btn-primary" id="pf-btn-upgrade">
-            ${profile?.plan === 'free' ? '⭐ Оновити до PRO' : '💎 ' + (profile?.plan||'').toUpperCase()}
+            ${profile?.plan === 'free' ? `${icon('upgrade', 14)} Оновити до PRO` : `${icon('gem', 14)} ${(profile?.plan||'').toUpperCase()}`}
           </button>
         </div>
       </div>
@@ -70,29 +71,29 @@ export async function render(container) {
       <!-- ── KPI cards ── -->
       <div class="pf-kpi-row">
         <div class="pf-kpi-card" style="--kc:#4F8EF7">
-          <div class="pf-kpi-icon">👥</div>
+          <div class="pf-kpi-icon" style="color:#4F8EF7">${icon('clients', 20)}</div>
           <div class="pf-kpi-val">${stats.totalClients}</div>
           <div class="pf-kpi-lbl">Всього клієнтів</div>
           ${stats.newClientsMonth > 0 ? `<div class="pf-kpi-sub pf-up">↗ +${stats.newClientsMonth} цього місяця</div>` : ''}
         </div>
         <div class="pf-kpi-card" style="--kc:#34D399">
-          <div class="pf-kpi-icon">💰</div>
+          <div class="pf-kpi-icon" style="color:#34D399">${icon('finances', 20)}</div>
           <div class="pf-kpi-val">₴${fmtNum(stats.totalRevenue)}</div>
           <div class="pf-kpi-lbl">Загальний дохід</div>
           ${stats.monthRevenue > 0 ? `<div class="pf-kpi-sub pf-up">↗ ₴${fmtNum(stats.monthRevenue)} цього місяця</div>` : ''}
         </div>
         <div class="pf-kpi-card" style="--kc:#A78BFA">
-          <div class="pf-kpi-icon">📄</div>
+          <div class="pf-kpi-icon" style="color:#A78BFA">${icon('invoices', 20)}</div>
           <div class="pf-kpi-val">${stats.totalInvoices}</div>
           <div class="pf-kpi-lbl">Рахунків створено</div>
           <div class="pf-kpi-sub">${stats.paidInvoices} оплачено</div>
         </div>
         <div class="pf-kpi-card" style="--kc:${stats.pendingInvoices > 0 ? '#F59E0B' : '#34D399'}">
-          <div class="pf-kpi-icon">${stats.pendingInvoices > 0 ? '⏳' : '✅'}</div>
+          <div class="pf-kpi-icon" style="color:${stats.pendingInvoices > 0 ? '#F59E0B' : '#34D399'}">${stats.pendingInvoices > 0 ? icon('alert-triangle', 20) : icon('check-circle', 20)}</div>
           <div class="pf-kpi-val">${stats.pendingInvoices}</div>
           <div class="pf-kpi-lbl">Очікує оплати</div>
           <div class="pf-kpi-sub ${stats.pendingInvoices > 0 ? 'pf-warn' : 'pf-up'}">
-            ${stats.pendingInvoices > 0 ? 'Потребує уваги' : 'Все оплачено ✓'}
+            ${stats.pendingInvoices > 0 ? 'Потребує уваги' : 'Все оплачено'}
           </div>
         </div>
       </div>
@@ -101,7 +102,7 @@ export async function render(container) {
       <div class="pf-charts-row">
         <div class="pf-chart-card">
           <div class="pf-chart-hdr">
-            <span class="pf-chart-title">📈 Дохід за останні 7 днів</span>
+            <span class="pf-chart-title">${icon('client-analytics', 14)} Дохід за останні 7 днів</span>
             <span class="pf-chart-total">₴${fmtNum(stats.totalRevenue)}</span>
           </div>
           <div class="pf-chart-body" id="pf-rev-chart"></div>
@@ -109,7 +110,7 @@ export async function render(container) {
         </div>
         <div class="pf-chart-card">
           <div class="pf-chart-hdr">
-            <span class="pf-chart-title">👥 Нові клієнти за 7 днів</span>
+            <span class="pf-chart-title">${icon('clients', 14)} Нові клієнти за 7 днів</span>
             <span class="pf-chart-total">+${stats.newClientsWeek} цього тижня</span>
           </div>
           <div class="pf-chart-body" id="pf-cli-chart"></div>
@@ -123,12 +124,12 @@ export async function render(container) {
         <!-- Activity -->
         <div class="pf-section">
           <div class="pf-section-hdr">
-            <span class="pf-section-title">🕐 Остання активність</span>
+            <span class="pf-section-title">${icon('timer', 14)} Остання активність</span>
             <button class="pf-link" data-route="invoices">Всі рахунки →</button>
           </div>
           ${stats.recentActivity.length > 0 ? stats.recentActivity.map(item => `
             <div class="pf-act-row">
-              <div class="pf-act-icon ${item.status}">📄</div>
+              <div class="pf-act-icon ${item.status}">${icon('invoices', 14)}</div>
               <div class="pf-act-info">
                 <div class="pf-act-text">${item.text}</div>
                 <div class="pf-act-time">${item.timeAgo}</div>
@@ -141,7 +142,7 @@ export async function render(container) {
         <!-- Top clients -->
         <div class="pf-section">
           <div class="pf-section-hdr">
-            <span class="pf-section-title">⭐ Топ клієнти</span>
+            <span class="pf-section-title">${icon('star', 14)} Топ клієнти</span>
             <button class="pf-link" data-route="clients">Всі клієнти →</button>
           </div>
           ${stats.topClients.length > 0 ? stats.topClients.map((c, i) => `
@@ -161,24 +162,24 @@ export async function render(container) {
         <div class="pf-col-side">
 
           <div class="pf-section">
-            <div class="pf-section-hdr"><span class="pf-section-title">👤 Профіль</span></div>
-            ${infoRow('📧', 'Email',   user.email)}
-            ${infoRow('📞', 'Телефон', profile?.phone)}
-            ${infoRow('🏙', 'Місто',   profile?.city)}
-            ${infoRow('🌐', 'Сайт',    profile?.website)}
+            <div class="pf-section-hdr"><span class="pf-section-title">${icon('user', 14)} Профіль</span></div>
+            ${infoRow('mail',    'Email',   user.email)}
+            ${infoRow('phone',   'Телефон', profile?.phone)}
+            ${infoRow('map-pin', 'Місто',   profile?.city)}
+            ${infoRow('globe',   'Сайт',    profile?.website)}
             <div class="pf-info-edit">
-              <button class="pf-link" id="pf-btn-edit">✏️ Редагувати профіль</button>
+              <button class="pf-link" id="pf-btn-edit">${icon('pencil', 13)} Редагувати профіль</button>
             </div>
           </div>
 
           <div class="pf-section pf-plan-card">
-            <div class="pf-section-hdr"><span class="pf-section-title">💎 Підписка</span></div>
+            <div class="pf-section-hdr"><span class="pf-section-title">${icon('gem', 14)} Підписка</span></div>
             <div class="pf-plan-badge pf-plan-${profile?.plan || 'free'}">
               ${(profile?.plan || 'FREE').toUpperCase()}
             </div>
             ${profile?.subscriptionEnd ? `<div class="pf-plan-end">Діє до: <strong>${new Date(profile.subscriptionEnd).toLocaleDateString('uk-UA')}</strong></div>` : ''}
             <button class="pf-upgrade-btn" id="pf-btn-upgrade2">
-              ${profile?.plan === 'free' ? '⭐ Оновити до PRO' : '📊 Керувати підпискою'}
+              ${profile?.plan === 'free' ? `${icon('upgrade', 14)} Оновити до PRO` : `${icon('settings', 14)} Керувати підпискою`}
             </button>
           </div>
 
@@ -347,11 +348,11 @@ function getTodayLabel() {
   return new Date().toLocaleDateString('uk-UA', { weekday:'long', day:'numeric', month:'long' })
 }
 
-function infoRow(icon, label, val) {
+function infoRow(iconName, label, val) {
   if (!val) return ''
   return `
     <div class="pf-info-row">
-      <span class="pf-info-icon">${icon}</span>
+      <span class="pf-info-icon">${icon(iconName, 14)}</span>
       <div class="pf-info-body">
         <div class="pf-info-lbl">${label}</div>
         <div class="pf-info-val">${val}</div>

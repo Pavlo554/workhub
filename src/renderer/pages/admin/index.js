@@ -6,6 +6,7 @@ import {
   collection, collectionGroup, getDocs, getDoc, doc, setDoc,
   updateDoc, deleteDoc, serverTimestamp, query, orderBy, where, limit, addDoc, arrayUnion
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
+import { icon } from '../../utils/icons.js'
 
 const PLAN_META = {
   free:     { label: 'FREE',     color: '#94A3B8', price: 0 },
@@ -13,25 +14,25 @@ const PLAN_META = {
   business: { label: 'BUSINESS', color: '#A78BFA', price: 799 },
 }
 const TABS = [
-  { id: 'overview',       icon: '📊', label: 'Огляд' },
-  { id: 'analytics',      icon: '📈', label: 'Аналітика' },
-  { id: 'users',          icon: '👥', label: 'Користувачі' },
-  { id: 'payments',       icon: '💳', label: 'Платежі' },
-  { id: 'support',        icon: '🎫', label: 'Підтримка' },
-  { id: 'notifications',  icon: '📰', label: 'Новини' },
+  { id: 'overview',       iconName: 'dashboard',    label: 'Огляд' },
+  { id: 'analytics',      iconName: 'bar-chart',    label: 'Аналітика' },
+  { id: 'users',          iconName: 'clients',      label: 'Користувачі' },
+  { id: 'payments',       iconName: 'credit-card',  label: 'Платежі' },
+  { id: 'support',        iconName: 'support',      label: 'Підтримка' },
+  { id: 'notifications',  iconName: 'bell',         label: 'Новини' },
 ]
 
 const TICKET_TYPE_META = {
-  bug:     { icon: '🐛', label: 'Bug Report', color: '#F87171', bg: 'rgba(248,113,113,.12)' },
-  feature: { icon: '💡', label: 'Пропозиція', color: '#A78BFA', bg: 'rgba(167,139,250,.12)' },
-  support: { icon: '💬', label: 'Підтримка',  color: '#4F8EF7', bg: 'rgba(79,142,247,.12)'  },
+  bug:     { label: 'Bug Report', color: '#F87171', bg: 'rgba(248,113,113,.12)', iconName: 'x-circle' },
+  feature: { label: 'Пропозиція', color: '#A78BFA', bg: 'rgba(167,139,250,.12)', iconName: 'zap' },
+  support: { label: 'Підтримка',  color: '#4F8EF7', bg: 'rgba(79,142,247,.12)',  iconName: 'message-circle' },
 }
 const TICKET_STATUS_META = {
-  new:         { icon: '🆕', label: 'Нова',      color: '#94A3B8' },
-  open:        { icon: '🔵', label: 'Відкрита',  color: '#4F8EF7' },
-  in_progress: { icon: '🔄', label: 'В роботі',  color: '#FBBF24' },
-  resolved:    { icon: '✅', label: 'Вирішено',  color: '#34D399' },
-  closed:      { icon: '🔒', label: 'Закрита',   color: '#475569' },
+  new:         { label: 'Нова',      color: '#94A3B8', iconName: 'info' },
+  open:        { label: 'Відкрита',  color: '#4F8EF7', iconName: 'eye' },
+  in_progress: { label: 'В роботі',  color: '#FBBF24', iconName: 'timer' },
+  resolved:    { label: 'Вирішено',  color: '#34D399', iconName: 'check-circle' },
+  closed:      { label: 'Закрита',   color: '#475569', iconName: 'x-circle' },
 }
 const TICKET_PRIORITY_META = {
   low:      { label: 'Низький',   color: '#94A3B8' },
@@ -47,7 +48,7 @@ export async function render(container) {
   if (!profile?.isAdmin) {
     container.innerHTML = `
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;gap:16px">
-        <div style="font-size:48px">🚫</div>
+        <div style="color:var(--text-muted)">${icon('alert-triangle', 48)}</div>
         <div style="font-size:18px;font-weight:700">Доступ заборонено</div>
         <div style="font-size:14px;color:var(--text-muted)">У вас немає прав адміністратора</div>
         <button class="btn btn-secondary" id="back-btn">← Назад</button>
@@ -72,19 +73,19 @@ export async function render(container) {
 
       <div class="adm-header">
         <div>
-          <h1 class="adm-title">🛡 Адмін панель</h1>
+          <h1 class="adm-title">Адмін панель</h1>
           <p class="adm-subtitle">WorkHub · Управління системою</p>
         </div>
         <div class="adm-header-right">
           <button class="adm-refresh-btn" id="adm-refresh">↻ Оновити</button>
-          <span class="adm-badge">👤 ${profile.name || user.email}</span>
+          <span class="adm-badge">${icon('clients', 13)} ${profile.name || user.email}</span>
         </div>
       </div>
 
       <div class="adm-tabs" id="adm-tabs">
         ${TABS.map(t => `
           <button class="adm-tab ${t.id === 'overview' ? 'active' : ''}" data-tab="${t.id}">
-            <span>${t.icon}</span> ${t.label}
+            <span class="adm-tab-icon">${icon(t.iconName, 14)}</span> ${t.label}
           </button>
         `).join('')}
       </div>
@@ -96,15 +97,15 @@ export async function render(container) {
         </div>
         <div class="adm-overview-grid">
           <div class="adm-card" id="recent-regs-card">
-            <div class="adm-card-title">🕐 Нові реєстрації</div>
+            <div class="adm-card-title">${icon('timer', 15)} Нові реєстрації</div>
             <div id="recent-regs-list"><div class="adm-loading"></div></div>
           </div>
           <div class="adm-card">
-            <div class="adm-card-title">📊 По планах</div>
+            <div class="adm-card-title">${icon('bar-chart', 15)} По планах</div>
             <div id="plan-breakdown"></div>
           </div>
           <div class="adm-card" id="adm-activity-card">
-            <div class="adm-card-title">📅 Активність (7 днів)</div>
+            <div class="adm-card-title">${icon('calendar', 15)} Активність (7 днів)</div>
             <div class="adm-activity-bars" id="adm-activity-bars"></div>
           </div>
         </div>
@@ -114,19 +115,19 @@ export async function render(container) {
       <div id="tab-analytics" class="adm-panel" style="display:none">
         <div class="adm-an-grid">
           <div class="adm-card adm-card-wide">
-            <div class="adm-card-title">📅 Реєстрації за останні 30 днів</div>
+            <div class="adm-card-title">${icon('calendar', 15)} Реєстрації за останні 30 днів</div>
             <div class="adm-chart-wrap" id="reg-chart"></div>
           </div>
           <div class="adm-card">
-            <div class="adm-card-title">💰 Дохід по планах</div>
+            <div class="adm-card-title">${icon('finances', 15)} Дохід по планах</div>
             <div id="revenue-breakdown"></div>
           </div>
           <div class="adm-card">
-            <div class="adm-card-title">🔄 Конверсія free → paid</div>
+            <div class="adm-card-title">${icon('refresh', 15)} Конверсія free → paid</div>
             <div id="conversion-stats"></div>
           </div>
           <div class="adm-card">
-            <div class="adm-card-title">🌍 Ніші користувачів</div>
+            <div class="adm-card-title">${icon('globe', 15)} Ніші користувачів</div>
             <div id="niche-breakdown"></div>
           </div>
         </div>
@@ -136,7 +137,7 @@ export async function render(container) {
       <div id="tab-users" class="adm-panel" style="display:none">
         <div class="adm-toolbar">
           <div class="adm-search">
-            <span>🔍</span>
+            <span style="display:flex;align-items:center;color:var(--text-muted)">${icon('search', 14)}</span>
             <input type="text" id="users-search" placeholder="Пошук за іменем, email або бізнесом…">
           </div>
           <select id="plan-filter" class="adm-select">
@@ -161,7 +162,32 @@ export async function render(container) {
 
         <!-- Налаштування способів оплати -->
         <div class="adm-pay-config" id="pay-config-block">
-          <div class="adm-section-title" style="margin-bottom:16px">⚙️ Налаштування способів оплати</div>
+          <div class="adm-section-title" style="margin-bottom:16px">Налаштування способів оплати</div>
+
+          <!-- LiqPay (автоматична оплата) -->
+          <div style="margin-bottom:18px;padding:16px;background:rgba(255,107,53,.06);border:1px solid rgba(255,107,53,.25);border-radius:12px">
+            <div style="font-size:12px;font-weight:700;color:#FF6B35;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">
+              LiqPay — Автоматична оплата картою
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div>
+                <label style="font-size:12px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">Public Key</label>
+                <input class="adm-input" id="cfg-liqpay-pub" placeholder="sandbox_i12345..." type="text">
+              </div>
+              <div>
+                <label style="font-size:12px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">Private Key</label>
+                <input class="adm-input" id="cfg-liqpay-priv" placeholder="sandbox_..." type="password">
+              </div>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:8px">
+              Ключі з кабінету liqpay.ua → Бізнес → Склад
+            </div>
+          </div>
+
+          <!-- Ручна оплата -->
+          <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">
+            Ручна оплата (Monobank / Крипта)
+          </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
             <div>
               <label style="font-size:12px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">USDT TRC20 адреса</label>
@@ -180,15 +206,15 @@ export async function render(container) {
               <input class="adm-input" id="cfg-mono" placeholder="https://send.monobank.ua/jar/..." type="text">
             </div>
           </div>
-          <button class="adm-action-btn adm-btn-approve" id="save-pay-cfg" style="padding:8px 20px">💾 Зберегти реквізити</button>
+          <button class="adm-action-btn adm-btn-approve" id="save-pay-cfg" style="padding:8px 20px">Зберегти реквізити</button>
           <span id="pay-cfg-status" style="font-size:12px;margin-left:12px;color:var(--text-muted)"></span>
         </div>
 
         <div class="adm-toolbar" style="margin-top:20px">
           <div class="adm-filter-pills" id="pay-filter-tabs">
-            <button class="adm-pill active" data-status="pending">⏳ Очікують</button>
-            <button class="adm-pill" data-status="approved">✓ Підтверджені</button>
-            <button class="adm-pill" data-status="rejected">✗ Відхилені</button>
+            <button class="adm-pill active" data-status="pending">Очікують</button>
+            <button class="adm-pill" data-status="approved">Підтверджені</button>
+            <button class="adm-pill" data-status="rejected">Відхилені</button>
           </div>
           <span class="adm-count-label" id="pay-count-label"></span>
         </div>
@@ -200,16 +226,16 @@ export async function render(container) {
         <div class="adm-toolbar">
           <div class="adm-filter-pills" id="ticket-type-pills">
             <button class="adm-pill active" data-type="all">Всі</button>
-            <button class="adm-pill" data-type="bug">🐛 Bug</button>
-            <button class="adm-pill" data-type="feature">💡 Ідея</button>
-            <button class="adm-pill" data-type="support">💬 Підтримка</button>
+            <button class="adm-pill" data-type="bug">Bug</button>
+            <button class="adm-pill" data-type="feature">Ідея</button>
+            <button class="adm-pill" data-type="support">Підтримка</button>
           </div>
           <div class="adm-filter-pills" id="ticket-status-pills">
             <button class="adm-pill active" data-status="all">Всі статуси</button>
-            <button class="adm-pill" data-status="new">🆕 Нові</button>
-            <button class="adm-pill" data-status="open">🔵 Відкриті</button>
-            <button class="adm-pill" data-status="in_progress">🔄 В роботі</button>
-            <button class="adm-pill" data-status="resolved">✅ Вирішені</button>
+            <button class="adm-pill" data-status="new">Нові</button>
+            <button class="adm-pill" data-status="open">Відкриті</button>
+            <button class="adm-pill" data-status="in_progress">В роботі</button>
+            <button class="adm-pill" data-status="resolved">Вирішені</button>
           </div>
           <span class="adm-count-label" id="ticket-count-label"></span>
         </div>
@@ -221,14 +247,14 @@ export async function render(container) {
         <div class="adm-notif-layout">
 
           <div class="adm-card adm-notif-form-card">
-            <div class="adm-card-title">📤 Нове повідомлення</div>
+            <div class="adm-card-title">Нове повідомлення</div>
             <div class="adm-field">
               <label>Тип</label>
               <div class="adm-type-row" id="notif-type-row">
-                <button class="adm-type-btn active" data-type="info">ℹ️ Інфо</button>
-                <button class="adm-type-btn" data-type="success">✅ Успіх</button>
-                <button class="adm-type-btn" data-type="warning">⚠️ Увага</button>
-                <button class="adm-type-btn" data-type="error">🚨 Важливо</button>
+                <button class="adm-type-btn active" data-type="info">Інфо</button>
+                <button class="adm-type-btn" data-type="success">Успіх</button>
+                <button class="adm-type-btn" data-type="warning">Увага</button>
+                <button class="adm-type-btn" data-type="error">Важливо</button>
               </div>
             </div>
             <div class="adm-field">
@@ -249,11 +275,11 @@ export async function render(container) {
                 <option value="paid">Всі платні (PRO + BUSINESS)</option>
               </select>
             </div>
-            <button class="adm-btn adm-btn-primary" id="send-notif-btn">📤 Надіслати</button>
+            <button class="adm-btn adm-btn-primary" id="send-notif-btn">Надіслати</button>
           </div>
 
           <div class="adm-card adm-notif-list-card">
-            <div class="adm-card-title">📋 Попередні повідомлення</div>
+            <div class="adm-card-title">Попередні повідомлення</div>
             <div id="notif-history"><div class="adm-loading"></div></div>
           </div>
 
@@ -337,13 +363,13 @@ export async function render(container) {
       })
       container.querySelector('#notif-title').value = ''
       container.querySelector('#notif-body').value  = ''
-      showToast('Повідомлення надіслано ✓')
+      showToast('Повідомлення надіслано')
       await loadAnnouncements()
       renderAnnouncements()
     } catch (err) {
       console.error(err); showToast('Помилка надсилання', 'error')
     } finally {
-      btn.disabled = false; btn.textContent = '📤 Надіслати'
+      btn.disabled = false; btn.textContent = 'Надіслати'
     }
   })
 
@@ -352,6 +378,8 @@ export async function render(container) {
     const snap = await getDoc(doc(db, 'config', 'payments'))
     if (!snap.exists()) return
     const d = snap.data()
+    container.querySelector('#cfg-liqpay-pub').value  = d.liqpayPublicKey  || ''
+    container.querySelector('#cfg-liqpay-priv').value = d.liqpayPrivateKey || ''
     container.querySelector('#cfg-usdt').value = d.address_usdt || ''
     container.querySelector('#cfg-btc').value  = d.address_btc  || ''
     container.querySelector('#cfg-eth').value  = d.address_eth  || ''
@@ -364,16 +392,18 @@ export async function render(container) {
     btn.disabled = true
     try {
       await setDoc(doc(db, 'config', 'payments'), {
+        liqpayPublicKey:  container.querySelector('#cfg-liqpay-pub').value.trim()  || null,
+        liqpayPrivateKey: container.querySelector('#cfg-liqpay-priv').value.trim() || null,
         address_usdt: container.querySelector('#cfg-usdt').value.trim() || null,
         address_btc:  container.querySelector('#cfg-btc').value.trim()  || null,
         address_eth:  container.querySelector('#cfg-eth').value.trim()  || null,
         monobankJar:  container.querySelector('#cfg-mono').value.trim() || null,
         updatedAt: serverTimestamp(),
       })
-      st.textContent = '✅ Збережено'
+      st.textContent = 'Збережено'
       setTimeout(() => { st.textContent = '' }, 3000)
     } catch (err) {
-      console.error(err); st.textContent = '❌ Помилка'
+      console.error(err); st.textContent = 'Помилка'
     } finally { btn.disabled = false }
   })
 
@@ -451,17 +481,17 @@ export async function render(container) {
     }).length
 
     const stats = [
-      { icon: '👥', value: total,      label: 'Всього юзерів',      color: '' },
-      { icon: '🆕', value: newToday,   label: 'Нових сьогодні',     color: 'blue' },
-      { icon: '⭐', value: paid,        label: 'Платних підписок',   color: 'purple' },
-      { icon: '💰', value: `₴${revenue.toLocaleString()}`, label: 'Місячний дохід', color: 'green' },
-      { icon: '⏳', value: pendingCnt,  label: 'Платежів на перевірці', color: 'orange' },
-      { icon: '📈', value: `${conversion}%`, label: 'Конверсія free→paid', color: '' },
+      { svgIcon: icon('clients', 20),     value: total,      label: 'Всього юзерів',         color: '' },
+      { svgIcon: icon('plus', 20),        value: newToday,   label: 'Нових сьогодні',        color: 'blue' },
+      { svgIcon: icon('upgrade', 20),     value: paid,       label: 'Платних підписок',      color: 'purple' },
+      { svgIcon: icon('finances', 20),    value: `₴${revenue.toLocaleString()}`, label: 'Місячний дохід', color: 'green' },
+      { svgIcon: icon('timer', 20),       value: pendingCnt, label: 'Платежів на перевірці', color: 'orange' },
+      { svgIcon: icon('bar-chart', 20),   value: `${conversion}%`, label: 'Конверсія free→paid', color: '' },
     ]
 
     container.querySelector('#adm-stats').innerHTML = stats.map(s => `
       <div class="adm-stat-card ${s.color ? 'adm-stat-' + s.color : ''}">
-        <div class="adm-stat-icon">${s.icon}</div>
+        <div class="adm-stat-icon">${s.svgIcon}</div>
         <div class="adm-stat-val">${s.value}</div>
         <div class="adm-stat-lbl">${s.label}</div>
       </div>
@@ -589,7 +619,7 @@ export async function render(container) {
     // Niches
     const niches = {}
     allUsers.forEach(u => { const n = u.profession || 'other'; niches[n] = (niches[n] || 0) + 1 })
-    const nicheMap = { freelancer: '💻 Фрілансер', accountant: '📊 Бухгалтер', smm: '📱 SMM', beauty: '💅 Салон', other: '❓ Інша' }
+    const nicheMap = { freelancer: 'Фрілансер', accountant: 'Бухгалтер', smm: 'SMM', beauty: 'Салон краси', other: 'Інша' }
     const nicheTotal = Object.values(niches).reduce((a, b) => a + b, 0) || 1
     container.querySelector('#niche-breakdown').innerHTML = Object.entries(niches)
       .sort((a, b) => b[1] - a[1])
@@ -659,13 +689,13 @@ export async function render(container) {
                 <td style="font-size:13px">${regD}</td>
                 <td>
                   <div class="adm-action-btns" onclick="event.stopPropagation()">
-                    <button class="adm-action-btn" data-uid="${u.id}" data-plan="${u.plan||'free'}" data-action="plan">✏️ План</button>
+                    <button class="adm-action-btn" data-uid="${u.id}" data-plan="${u.plan||'free'}" data-action="plan">План</button>
                     ${!u.isAdmin
-                      ? `<button class="adm-action-btn adm-btn-admin" data-uid="${u.id}" data-action="admin">🛡</button>`
+                      ? `<button class="adm-action-btn adm-btn-admin" data-uid="${u.id}" data-action="admin" title="Зробити адміном">${icon('settings', 13)}</button>`
                       : ''
                     }
                     <button class="adm-action-btn ${banned ? 'adm-btn-unban' : 'adm-btn-ban'}" data-uid="${u.id}" data-banned="${banned}" data-action="ban">
-                      ${banned ? '✓ Розбан' : '🚫'}
+                      ${banned ? 'Розбан' : 'Бан'}
                     </button>
                   </div>
                 </td>
@@ -712,8 +742,8 @@ export async function render(container) {
     modal.innerHTML = `
       <div class="adm-modal adm-modal-lg">
         <div class="adm-modal-head">
-          <h2>👤 Картка користувача</h2>
-          <button class="adm-modal-close" id="ud-close">✕</button>
+          <h2>Картка користувача</h2>
+          <button class="adm-modal-close" id="ud-close">${icon('x', 14)}</button>
         </div>
         <div class="adm-modal-body adm-detail-body">
 
@@ -723,32 +753,32 @@ export async function render(container) {
             <div class="adm-detail-name">${u.name || '—'}</div>
             <div class="adm-detail-email">${u.email || u.id}</div>
             <span class="adm-plan-pill adm-plan-pill-lg" style="color:${pm.color};background:${pm.color}18">${pm.label}</span>
-            ${u.isBanned ? '<div class="adm-banned-badge" style="margin-top:8px">🚫 Забанований</div>' : ''}
+            ${u.isBanned ? '<div class="adm-banned-badge" style="margin-top:8px">Забанований</div>' : ''}
 
             <div class="adm-detail-meta">
-              ${metaRow('📞', 'Телефон', u.phone)}
-              ${metaRow('🏙', 'Місто', u.city)}
-              ${metaRow('💼', 'Бізнес', u.businessName)}
-              ${metaRow('🎯', 'Ніша', profLabel(u.profession))}
-              ${metaRow('📅', 'Зареєстрований', regD)}
-              ${metaRow('🔑', 'UID', `<span style="font-family:monospace;font-size:10px">${u.id}</span>`)}
+              ${metaRow('', 'Телефон', u.phone)}
+              ${metaRow('', 'Місто', u.city)}
+              ${metaRow('', 'Бізнес', u.businessName)}
+              ${metaRow('', 'Ніша', profLabel(u.profession))}
+              ${metaRow('', 'Зареєстрований', regD)}
+              ${metaRow('', 'UID', `<span style="font-family:monospace;font-size:10px">${u.id}</span>`)}
             </div>
 
             <div class="adm-detail-actions">
-              <button class="adm-btn adm-btn-primary" data-uid="${uid}" data-plan="${u.plan||'free'}" id="ud-change-plan">✏️ Змінити план</button>
+              <button class="adm-btn adm-btn-primary" data-uid="${uid}" data-plan="${u.plan||'free'}" id="ud-change-plan">Змінити план</button>
               <button class="adm-btn ${u.isBanned ? 'adm-btn-success' : 'adm-btn-danger'}" id="ud-ban-btn">
-                ${u.isBanned ? '✓ Розбанити' : '🚫 Забанити'}
+                ${u.isBanned ? 'Розбанити' : 'Забанити'}
               </button>
-              ${!u.isAdmin ? `<button class="adm-btn adm-btn-ghost" id="ud-admin-btn">🛡 Зробити адміном</button>` : '<div class="adm-admin-badge" style="margin-top:8px">🛡 Адміністратор</div>'}
+              ${!u.isAdmin ? `<button class="adm-btn adm-btn-ghost" id="ud-admin-btn">Зробити адміном</button>` : '<div class="adm-admin-badge" style="margin-top:8px">Адміністратор</div>'}
             </div>
           </div>
 
           <!-- Right: businesses + modules -->
           <div class="adm-detail-right">
-            <h3 class="adm-detail-section">🏢 Бізнеси (${businesses.length + 1})</h3>
+            <h3 class="adm-detail-section">Бізнеси (${businesses.length + 1})</h3>
             <div class="adm-biz-list">
               <div class="adm-biz-item adm-biz-main">
-                <span class="adm-biz-icon">🏠</span>
+                <span class="adm-biz-icon">${icon('building', 16)}</span>
                 <div>
                   <div class="adm-biz-name">${u.businessName || 'Основний бізнес'}</div>
                   <div class="adm-biz-niche">${profLabel(u.profession)}</div>
@@ -757,7 +787,7 @@ export async function render(container) {
               </div>
               ${businesses.map(b => `
                 <div class="adm-biz-item">
-                  <span class="adm-biz-icon">${nicheIcon(b.profession)}</span>
+                  <span class="adm-biz-icon">${icon('building', 16)}</span>
                   <div>
                     <div class="adm-biz-name">${b.name || '—'}</div>
                     <div class="adm-biz-niche">${profLabel(b.profession)}</div>
@@ -765,20 +795,19 @@ export async function render(container) {
                 </div>`).join('')}
             </div>
 
-            <h3 class="adm-detail-section" style="margin-top:20px">🧩 Активні модулі (${modules.length})</h3>
+            <h3 class="adm-detail-section" style="margin-top:20px">Активні модулі (${modules.length})</h3>
             <div class="adm-modules-wrap">
               ${modules.length ? modules.map(id => {
-                const icons = { dashboard:'⊞',clients:'👥',projects:'📁',invoices:'📄',contracts:'📝',tasks:'✓',timer:'⏱',finances:'💰','tax-calendar':'📅',appointments:'🗓',services:'💅','content-plan':'📱',accounts:'🔗',passwords:'🔑',notes:'🗒',documents:'📁','api-keys':'🔗' }
                 const labels = { dashboard:'Дашборд',clients:'Клієнти',projects:'Проекти',invoices:'Рахунки',contracts:'Договори',tasks:'Задачі',timer:'Таймер',finances:'Фінанси','tax-calendar':'Податки',appointments:'Розклад',services:'Послуги','content-plan':'Контент',accounts:'Акаунти',passwords:'Паролі',notes:'Нотатки',documents:'Документи','api-keys':'API' }
-                return `<span class="adm-mod-chip">${icons[id]||'□'} ${labels[id]||id}</span>`
+                return `<span class="adm-mod-chip">${icon(id, 12)} ${labels[id]||id}</span>`
               }).join('') : '<span style="color:var(--text-muted);font-size:13px">Немає модулів</span>'}
             </div>
 
             ${u.subscriptionEnd ? `
-              <h3 class="adm-detail-section" style="margin-top:20px">💳 Підписка</h3>
+              <h3 class="adm-detail-section" style="margin-top:20px">Підписка</h3>
               <div class="adm-detail-meta">
-                ${metaRow('📅', 'Діє до', new Date(u.subscriptionEnd).toLocaleDateString('uk-UA'))}
-                ${metaRow('🔄', 'Статус', u.subscriptionStatus === 'active' ? '<span style="color:#34D399">Активна</span>' : '<span style="color:#94A3B8">Неактивна</span>')}
+                ${metaRow('', 'Діє до', new Date(u.subscriptionEnd).toLocaleDateString('uk-UA'))}
+                ${metaRow('', 'Статус', u.subscriptionStatus === 'active' ? '<span style="color:#34D399">Активна</span>' : '<span style="color:#94A3B8">Неактивна</span>')}
               </div>` : ''}
           </div>
 
@@ -804,7 +833,7 @@ export async function render(container) {
     try {
       await updateDoc(doc(db, 'users', uid), { isAdmin: true })
       const u = allUsers.find(u => u.id === uid); if (u) u.isAdmin = true
-      renderUsersTable(); showToast('Права адміна надано ✓')
+      renderUsersTable(); showToast('Права адміна надано')
     } catch (err) { console.error(err); showToast('Помилка', 'error') }
   }
 
@@ -816,7 +845,7 @@ export async function render(container) {
       await updateDoc(doc(db, 'users', uid), { isBanned: !isBanned, updatedAt: serverTimestamp() })
       const u = allUsers.find(u => u.id === uid); if (u) u.isBanned = !isBanned
       renderUsersTable(); renderOverview()
-      showToast(isBanned ? 'Користувача розбановано ✓' : 'Користувача забановано 🚫')
+      showToast(isBanned ? 'Користувача розбановано' : 'Користувача забановано')
     } catch (err) { console.error(err); showToast('Помилка', 'error') }
   }
 
@@ -829,8 +858,8 @@ export async function render(container) {
     modal.innerHTML = `
       <div class="adm-modal" style="max-width:420px">
         <div class="adm-modal-head">
-          <h2>✏️ Змінити план</h2>
-          <button class="adm-modal-close" id="cp-close">✕</button>
+          <h2>${icon('edit', 18)} Змінити план</h2>
+          <button class="adm-modal-close" id="cp-close">${icon('x', 14)}</button>
         </div>
         <div class="adm-modal-body" style="gap:14px">
           <div class="adm-user-cell" style="padding:12px;background:var(--bg-tertiary);border-radius:var(--radius-md)">
@@ -891,7 +920,7 @@ export async function render(container) {
         if (idx !== -1) Object.assign(allUsers[idx], upd)
         if (uid === user.uid) updateProfileCache(uid, upd)
         modal.remove(); renderUsersTable(); renderOverview(); renderAnalytics()
-        showToast(`План змінено на ${selectedPlan.toUpperCase()} ✓`)
+        showToast(`План змінено на ${selectedPlan.toUpperCase()}`)
       } catch (err) { console.error(err); btn.disabled = false; btn.textContent = 'Зберегти' }
     })
   }
@@ -939,10 +968,10 @@ export async function render(container) {
                 <td>
                   ${payFilter === 'pending'
                     ? `<div class="adm-action-btns">
-                        <button class="adm-action-btn adm-btn-approve" data-pid="${p.id}" data-uid="${p.userId}" data-plan="${p.planId||'pro'}">✓ Підтвердити</button>
-                        <button class="adm-action-btn adm-btn-rej"     data-pid="${p.id}" data-uid="${p.userId}">✗</button>
+                        <button class="adm-action-btn adm-btn-approve" data-pid="${p.id}" data-uid="${p.userId}" data-plan="${p.planId||'pro'}">${icon('check', 13)} Підтвердити</button>
+                        <button class="adm-action-btn adm-btn-rej"     data-pid="${p.id}" data-uid="${p.userId}">${icon('x', 13)}</button>
                        </div>`
-                    : `<span class="adm-status-chip adm-status-${p.status}">${p.status==='approved'?'✓ Підтверджено':'✗ Відхилено'}</span>`
+                    : `<span class="adm-status-chip adm-status-${p.status}">${p.status==='approved'?icon('check',11)+' Підтверджено':icon('x',11)+' Відхилено'}</span>`
                   }
                 </td>
               </tr>`
@@ -963,8 +992,8 @@ export async function render(container) {
           const p = allPayments.find(p => p.id === btn.dataset.pid); if (p) p.status = 'approved'
           const u = allUsers.find(u => u.id === btn.dataset.uid); if (u) { u.plan = btn.dataset.plan||'pro'; u.subscriptionStatus = 'active' }
           renderPayments(); renderOverview(); renderAnalytics()
-          showToast('Підписку активовано ✓')
-        } catch (err) { console.error(err); btn.disabled = false; btn.textContent = '✓ Підтвердити' }
+          showToast('Підписку активовано')
+        } catch (err) { console.error(err); btn.disabled = false; btn.innerHTML = icon('check', 13) + ' Підтвердити' }
       })
     })
 
@@ -1012,7 +1041,7 @@ export async function render(container) {
             const isNew = t.status === 'new'
             return `
               <tr style="cursor:pointer${isNew ? ';font-weight:600' : ''}" data-tid="${t.id}">
-                <td><span class="adm-plan-pill" style="color:${tm.color};background:${tm.bg}">${tm.icon} ${tm.label}</span></td>
+                <td><span class="adm-plan-pill" style="color:${tm.color};background:${tm.bg}">${icon(tm.iconName, 12)} ${tm.label}</span></td>
                 <td style="max-width:260px">
                   <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t.title)}</div>
                   ${isNew ? '<span style="font-size:10px;color:#4F8EF7;font-weight:800">● НОВА</span>' : ''}
@@ -1022,9 +1051,9 @@ export async function render(container) {
                   <div style="font-size:11px;color:var(--text-muted)">${esc(t.userEmail || '')}</div>
                 </td>
                 <td style="color:${pm.color};font-size:12px;font-weight:700">● ${pm.label}</td>
-                <td style="color:${sm.color};font-size:12px;font-weight:700">${sm.icon} ${sm.label}</td>
+                <td style="color:${sm.color};font-size:12px;font-weight:700">${icon(sm.iconName, 12)} ${sm.label}</td>
                 <td style="font-size:12px">${date}</td>
-                <td style="font-size:12px;color:var(--text-muted)">${replyCnt > 0 ? `💬 ${replyCnt}` : '—'}</td>
+                <td style="font-size:12px;color:var(--text-muted)">${replyCnt > 0 ? `<span style="display:inline-flex;align-items:center;gap:3px">${icon('message-circle', 12)} ${replyCnt}</span>` : '—'}</td>
               </tr>`
           }).join('')}
         </tbody>
@@ -1048,19 +1077,19 @@ export async function render(container) {
     modal.innerHTML = `
       <div class="adm-modal adm-modal-lg" style="max-width:700px">
         <div class="adm-modal-head" style="flex-wrap:wrap;gap:8px">
-          <span class="adm-plan-pill" style="color:${tm.color};background:${tm.bg};font-size:12px">${tm.icon} ${tm.label}</span>
+          <span class="adm-plan-pill" style="color:${tm.color};background:${tm.bg};font-size:12px">${icon(tm.iconName, 12)} ${tm.label}</span>
           <h2 style="font-family:var(--font-display);font-size:17px;font-weight:800;flex:1;min-width:0">${esc(t.title)}</h2>
-          <button class="adm-modal-close" id="tad-close">✕</button>
+          <button class="adm-modal-close" id="tad-close">${icon('x', 14)}</button>
         </div>
 
         <div style="display:flex;align-items:center;gap:12px;padding:10px 24px;border-bottom:1px solid var(--border);flex-wrap:wrap">
-          <span style="color:${sm.color};font-size:12px;font-weight:700">${sm.icon} ${sm.label}</span>
+          <span style="color:${sm.color};font-size:12px;font-weight:700">${icon(sm.iconName, 12)} ${sm.label}</span>
           <span style="color:${pm.color};font-size:12px;font-weight:700">● ${pm.label}</span>
           <span style="font-size:12px;color:var(--text-muted)">${esc(t.userName||'—')} · ${esc(t.userEmail||'')}</span>
           <span style="font-size:12px;color:var(--text-muted)">${date}</span>
           <div style="margin-left:auto;display:flex;gap:6px" id="tad-status-btns">
             ${Object.entries(TICKET_STATUS_META).map(([id, m]) => `
-              <button class="adm-action-btn ${t.status === id ? 'adm-btn-approve' : ''}" data-set-status="${id}" style="font-size:11px">${m.icon} ${m.label}</button>
+              <button class="adm-action-btn ${t.status === id ? 'adm-btn-approve' : ''}" data-set-status="${id}" style="font-size:11px;display:inline-flex;align-items:center;gap:4px">${icon(m.iconName, 11)} ${m.label}</button>
             `).join('')}
           </div>
         </div>
@@ -1074,7 +1103,7 @@ export async function render(container) {
           ${(t.replies || []).map(r => `
             <div style="background:${r.fromAdmin ? 'rgba(79,142,247,.08)' : 'var(--bg-tertiary)'};border:1px solid ${r.fromAdmin ? 'rgba(79,142,247,.2)' : 'var(--border)'};border-radius:var(--radius-lg);padding:14px;${r.fromAdmin ? 'margin-left:24px' : 'margin-right:24px'}">
               <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:${r.fromAdmin ? 'var(--accent-blue)' : 'var(--text-muted)'}">
-                ${r.fromAdmin ? '🛡 ' : ''}${esc(r.authorName || (r.fromAdmin ? 'Адмін' : 'Користувач'))}
+                ${r.fromAdmin ? icon('shield', 12) + ' ' : ''}${esc(r.authorName || (r.fromAdmin ? 'Адмін' : 'Користувач'))}
                 ${r.fromAdmin ? '<span style="font-size:10px;background:rgba(79,142,247,.15);color:var(--accent-blue);padding:1px 6px;border-radius:99px;margin-left:4px">Адмін</span>' : ''}
               </div>
               <div style="font-size:14px;line-height:1.55;white-space:pre-wrap;word-break:break-word">${esc(r.text)}</div>
@@ -1087,7 +1116,7 @@ export async function render(container) {
           <textarea class="adm-input adm-textarea" id="tad-reply" placeholder="Написати відповідь користувачеві…" rows="3" style="min-height:70px"></textarea>
           <div style="display:flex;gap:10px;justify-content:flex-end">
             <button class="adm-btn adm-btn-ghost" id="tad-cancel">Закрити</button>
-            <button class="adm-btn adm-btn-primary" id="tad-send">💬 Надіслати відповідь</button>
+            <button class="adm-btn adm-btn-primary" id="tad-send">${icon('send', 14)} Надіслати відповідь</button>
           </div>
         </div>
       </div>`
@@ -1138,8 +1167,8 @@ export async function render(container) {
         }
         modal.remove()
         renderTickets()
-        showToast('Відповідь надіслано ✓')
-      } catch (err) { console.error(err); btn.disabled = false; btn.textContent = '💬 Надіслати відповідь' }
+        showToast('Відповідь надіслано')
+      } catch (err) { console.error(err); btn.disabled = false; btn.innerHTML = icon('send', 14) + ' Надіслати відповідь' }
     })
   }
 
@@ -1156,18 +1185,18 @@ export async function render(container) {
       el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:16px 0">Повідомлень ще немає</div>'
       return
     }
-    const typeIcon = { info: 'ℹ️', success: '✅', warning: '⚠️', error: '🚨' }
+    const typeIcon = { info: icon('info',14), success: icon('check-circle',14), warning: icon('warning',14), error: icon('x-circle',14) }
     const targetLabel = { all: 'Всі', free: 'FREE', pro: 'PRO', business: 'BUSINESS', paid: 'Платні' }
     el.innerHTML = allAnnouncements.map(n => {
       const date = n.createdAt?.toDate?.()?.toLocaleDateString('uk-UA') || '—'
       return `
         <div class="adm-notif-item adm-notif-${n.type||'info'}">
           <div class="adm-notif-item-head">
-            <span class="adm-notif-type-icon">${typeIcon[n.type]||'ℹ️'}</span>
+            <span class="adm-notif-type-icon">${typeIcon[n.type]||icon('info',14)}</span>
             <span class="adm-notif-item-title">${n.title}</span>
             <span class="adm-notif-target">${targetLabel[n.target]||n.target}</span>
             <span class="adm-notif-date">${date}</span>
-            <button class="adm-notif-del" data-id="${n.id}" title="Видалити">✕</button>
+            <button class="adm-notif-del" data-id="${n.id}" title="Видалити">${icon('x', 12)}</button>
           </div>
           <div class="adm-notif-item-body">${n.body}</div>
           <div class="adm-notif-by">Відправив: ${n.createdByName || '—'}</div>
@@ -1202,15 +1231,15 @@ export async function render(container) {
     const a    = document.createElement('a')
     a.href = url; a.download = `workhub-users-${new Date().toISOString().slice(0,10)}.csv`
     a.click(); URL.revokeObjectURL(url)
-    showToast('CSV експортовано ✓')
+    showToast('CSV експортовано')
   }
 
   // ── Helpers ───────────────────────────────────────────────
   function profLabel(id) {
-    return { freelancer:'💻 Фрілансер', accountant:'📊 Бухгалтер', smm:'📱 SMM', beauty:'💅 Салон' }[id] || '—'
+    return { freelancer:'Фрілансер', accountant:'Бухгалтер', smm:'SMM', beauty:'Салон' }[id] || '—'
   }
   function nicheIcon(id) {
-    return { freelancer:'💻', accountant:'📊', smm:'📱', beauty:'💅' }[id] || '🏢'
+    return icon({ freelancer:'laptop', accountant:'bar-chart', smm:'smartphone', beauty:'sparkles' }[id] || 'briefcase', 14)
   }
   function nextMonth() {
     const d = new Date(); d.setMonth(d.getMonth() + 1); return d.toISOString().split('T')[0]
@@ -1255,7 +1284,7 @@ function injectStyles() {
     .adm-stat-purple { border-color:rgba(167,139,250,.3); }
     .adm-stat-green  { border-color:rgba(52,211,153,.3); }
     .adm-stat-orange { border-color:rgba(245,158,11,.3); }
-    .adm-stat-icon   { font-size:20px; margin-bottom:8px; }
+    .adm-stat-icon   { display:flex; align-items:center; margin-bottom:8px; color:var(--text-secondary); }
     .adm-stat-val    { font-family:var(--font-display); font-size:26px; font-weight:800; margin-bottom:3px; line-height:1; }
     .adm-stat-lbl    { font-size:11px; color:var(--text-muted); }
     .adm-skel        { height:90px; background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-lg); animation:skel-pulse 1.4s ease infinite; }
@@ -1394,7 +1423,7 @@ function injectStyles() {
     .adm-biz-list     { display:flex; flex-direction:column; gap:8px; }
     .adm-biz-item     { display:flex; align-items:center; gap:10px; padding:10px 12px; background:var(--bg-tertiary); border-radius:var(--radius-md); }
     .adm-biz-main     { border:1px solid rgba(79,142,247,.3); }
-    .adm-biz-icon     { font-size:18px; flex-shrink:0; }
+    .adm-biz-icon     { display:flex; align-items:center; flex-shrink:0; color:var(--text-secondary); }
     .adm-biz-name     { font-size:13px; font-weight:600; }
     .adm-biz-niche    { font-size:11px; color:var(--text-muted); }
     .adm-biz-badge    { font-size:10px; font-weight:800; padding:2px 8px; background:rgba(79,142,247,.15); color:var(--accent-blue); border-radius:var(--radius-full); margin-left:auto; }

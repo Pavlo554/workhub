@@ -1,6 +1,7 @@
 // src/renderer/pages/auth/login.js
 import { loginUser, resetPassword, getAuthErrorMessage } from '../../services/auth.js'
 import { navigate } from '../../../core/router.js'
+import { icon } from '../../utils/icons.js'
 
 export async function render(container) {
   container.innerHTML = `
@@ -10,10 +11,10 @@ export async function render(container) {
           <div class="auth-logo-icon">W</div>
           <span class="auth-logo-text">WorkHub</span>
         </div>
-        <h1 class="auth-title">Вітаємо назад 👋</h1>
-        <p class="auth-subtitle">Увійдіть у свій акаунт щоб продовжити</p>
+        <h1 class="auth-title">Вітаємо назад</h1>
+        <p class="auth-subtitle">Увійдіть у свій акаунт, щоб продовжити</p>
 
-        <div id="auth-error" style="display:none" class="auth-error"></div>
+        <div id="auth-msg" style="display:none"></div>
 
         <form class="auth-form" id="login-form" novalidate>
           <div class="field">
@@ -24,7 +25,7 @@ export async function render(container) {
             <label>Пароль</label>
             <div class="input-wrapper">
               <input id="password" type="password" class="input" placeholder="••••••••" autocomplete="current-password" />
-              <button type="button" class="input-action" id="toggle-pass">👁</button>
+              <button type="button" class="auth-eye-btn" id="toggle-pass">${icon('eye', 15)}</button>
             </div>
           </div>
           <div class="auth-forgot">
@@ -46,63 +47,59 @@ export async function render(container) {
   const emailEl   = container.querySelector('#email')
   const passEl    = container.querySelector('#password')
   const submitBtn = container.querySelector('#submit-btn')
-  const errorBox  = container.querySelector('#auth-error')
+  const msgBox    = container.querySelector('#auth-msg')
 
-  // Показати/сховати пароль
   container.querySelector('#toggle-pass').addEventListener('click', () => {
     const show = passEl.type === 'password'
     passEl.type = show ? 'text' : 'password'
-    container.querySelector('#toggle-pass').textContent = show ? '🙈' : '👁'
+    container.querySelector('#toggle-pass').innerHTML = icon(show ? 'eye-off' : 'eye', 15)
   })
 
-  // Забули пароль
   container.querySelector('#forgot-link').addEventListener('click', async (e) => {
     e.preventDefault()
     const email = emailEl.value.trim()
-    if (!email) { showError('Введіть email для скидання пароля'); return }
+    if (!email) { showMsg('Введіть email для скидання пароля'); return }
     try {
       await resetPassword(email)
-      showError('Лист надіслано на ' + email, true)
+      showMsg('Лист надіслано на ' + email, true)
     } catch (err) {
-      showError(getAuthErrorMessage(err.code))
+      showMsg(getAuthErrorMessage(err.code))
     }
   })
 
-  // Перехід на реєстрацію
   container.querySelector('#go-register').addEventListener('click', (e) => {
     e.preventDefault()
     navigate('register')
   })
 
-  // Сабміт
   form.addEventListener('submit', async (e) => {
     e.preventDefault()
-    errorBox.style.display = 'none'
+    msgBox.style.display = 'none'
 
     const email    = emailEl.value.trim()
     const password = passEl.value
-    if (!email || !password) { showError('Заповніть усі поля'); return }
+    if (!email || !password) { showMsg('Заповніть усі поля'); return }
 
     setLoading(true)
     try {
       await loginUser({ email, password })
     } catch (err) {
-      showError(getAuthErrorMessage(err.code))
+      showMsg(getAuthErrorMessage(err.code))
       setLoading(false)
     }
   })
 
-  function showError(msg, success = false) {
-    errorBox.textContent = msg
-    errorBox.style.display = 'flex'
-    errorBox.style.color = success ? '#34D399' : ''
-    errorBox.style.background = success ? 'rgba(52,211,153,0.12)' : ''
-    errorBox.style.borderColor = success ? 'rgba(52,211,153,0.25)' : ''
+  function showMsg(msg, success = false) {
+    msgBox.className = success ? 'auth-success' : 'auth-error'
+    msgBox.innerHTML = `${icon(success ? 'check' : 'x', 14)} <span>${msg}</span>`
+    msgBox.style.display = 'flex'
   }
 
   function setLoading(on) {
     submitBtn.disabled = on
-    submitBtn.innerHTML = on ? '<div class="spinner"></div> Вхід...' : 'Увійти'
+    submitBtn.innerHTML = on
+      ? `<div class="spinner"></div> Вхід…`
+      : 'Увійти'
   }
 
   setTimeout(() => emailEl.focus(), 100)

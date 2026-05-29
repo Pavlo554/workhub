@@ -1,20 +1,21 @@
 // src/renderer/modules/accounts/index.js
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getActivePathSegments } from '../../services/auth.js'
+import { icon } from '../../utils/icons.js'
 import {
   collection, addDoc, getDocs, deleteDoc, doc, updateDoc, serverTimestamp, query, orderBy
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
 const PLATFORMS = [
-  { id: 'instagram', label: 'Instagram',  icon: '📸', color: '#E1306C', gradient: 'linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)' },
-  { id: 'tiktok',    label: 'TikTok',     icon: '🎵', color: '#010101', gradient: 'linear-gradient(135deg,#010101,#69C9D0)' },
-  { id: 'facebook',  label: 'Facebook',   icon: '👥', color: '#1877F2', gradient: 'linear-gradient(135deg,#1877F2,#0d5fd4)' },
-  { id: 'youtube',   label: 'YouTube',    icon: '▶️', color: '#FF0000', gradient: 'linear-gradient(135deg,#FF0000,#cc0000)' },
-  { id: 'telegram',  label: 'Telegram',   icon: '✈️', color: '#2CA5E0', gradient: 'linear-gradient(135deg,#2CA5E0,#1a8cc7)' },
-  { id: 'linkedin',  label: 'LinkedIn',   icon: '💼', color: '#0A66C2', gradient: 'linear-gradient(135deg,#0A66C2,#004182)' },
-  { id: 'twitter',   label: 'Twitter/X',  icon: '🐦', color: '#1DA1F2', gradient: 'linear-gradient(135deg,#1DA1F2,#0d8bd9)' },
-  { id: 'pinterest', label: 'Pinterest',  icon: '📌', color: '#E60023', gradient: 'linear-gradient(135deg,#E60023,#ad081b)' },
-  { id: 'other',     label: 'Інше',       icon: '🌐', color: '#64748B', gradient: 'linear-gradient(135deg,#64748B,#475569)' },
+  { id: 'instagram', label: 'Instagram',  color: '#E1306C', gradient: 'linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)' },
+  { id: 'tiktok',    label: 'TikTok',     color: '#69C9D0', gradient: 'linear-gradient(135deg,#010101,#69C9D0)' },
+  { id: 'facebook',  label: 'Facebook',   color: '#1877F2', gradient: 'linear-gradient(135deg,#1877F2,#0d5fd4)' },
+  { id: 'youtube',   label: 'YouTube',    color: '#FF0000', gradient: 'linear-gradient(135deg,#FF0000,#cc0000)' },
+  { id: 'telegram',  label: 'Telegram',   color: '#2CA5E0', gradient: 'linear-gradient(135deg,#2CA5E0,#1a8cc7)' },
+  { id: 'linkedin',  label: 'LinkedIn',   color: '#0A66C2', gradient: 'linear-gradient(135deg,#0A66C2,#004182)' },
+  { id: 'twitter',   label: 'Twitter/X',  color: '#1DA1F2', gradient: 'linear-gradient(135deg,#1DA1F2,#0d8bd9)' },
+  { id: 'pinterest', label: 'Pinterest',  color: '#E60023', gradient: 'linear-gradient(135deg,#E60023,#ad081b)' },
+  { id: 'other',     label: 'Інше',       color: '#64748B', gradient: 'linear-gradient(135deg,#64748B,#475569)' },
 ]
 
 function getPlatform(id) {
@@ -39,7 +40,7 @@ export async function render(container) {
       <!-- Header -->
       <div class="ac-header">
         <div>
-          <h1 class="ac-title">🔗 Акаунти</h1>
+          <h1 class="ac-title">Акаунти</h1>
           <p class="ac-sub" id="ac-sub">Завантаження...</p>
         </div>
         <button class="btn btn-primary" id="ac-add-btn">+ Додати акаунт</button>
@@ -60,7 +61,7 @@ export async function render(container) {
       <div class="ac-modal">
         <div class="ac-modal-header">
           <h2 class="ac-modal-title" id="ac-modal-title">Новий акаунт</h2>
-          <button class="ac-modal-close" id="ac-modal-close">✕</button>
+          <button class="ac-modal-close" id="ac-modal-close">${icon('x', 14)}</button>
         </div>
         <div class="ac-modal-body">
 
@@ -70,7 +71,7 @@ export async function render(container) {
             <div class="ac-plat-grid" id="ac-plat-grid">
               ${PLATFORMS.map(p => `
                 <button type="button" class="ac-plat-pick" data-plat="${p.id}" style="--pc:${p.color}">
-                  <span class="ac-plat-pick-icon">${p.icon}</span>
+                  <span class="ac-plat-pick-icon" style="color:${p.color}">${icon('accounts', 20)}</span>
                   <span class="ac-plat-pick-label">${p.label}</span>
                 </button>
               `).join('')}
@@ -124,7 +125,7 @@ export async function render(container) {
     } catch (err) {
       console.error(err)
       container.querySelector('#ac-grid').innerHTML =
-        `<div class="ac-empty"><div class="ac-empty-icon">⚠️</div><div class="ac-empty-title">Помилка завантаження</div></div>`
+        `<div class="ac-empty"><div class="ac-empty-icon">${icon('alert-triangle', 40)}</div><div class="ac-empty-title">Помилка завантаження</div></div>`
     }
   }
 
@@ -164,7 +165,7 @@ export async function render(container) {
     if (accounts.length === 0) {
       el.innerHTML = `
         <div class="ac-empty">
-          <div class="ac-empty-icon">🔗</div>
+          <div class="ac-empty-icon">${icon('accounts', 48)}</div>
           <div class="ac-empty-title">Акаунтів ще немає</div>
           <div class="ac-empty-desc">Натисніть "+ Додати акаунт" щоб почати</div>
         </div>
@@ -179,10 +180,10 @@ export async function render(container) {
           <div class="ac-card-stripe"></div>
           <div class="ac-card-body">
             <div class="ac-card-top">
-              <div class="ac-card-icon">${plat.icon}</div>
+              <div class="ac-card-icon" style="color:${plat.color}">${icon('accounts', 26)}</div>
               <div class="ac-card-actions">
-                <button class="ac-icon-btn edit-btn" data-id="${a.id}" title="Редагувати">✏️</button>
-                <button class="ac-icon-btn delete-btn" data-id="${a.id}" title="Видалити">🗑</button>
+                <button class="ac-icon-btn edit-btn" data-id="${a.id}" title="Редагувати">${icon('pencil', 13)}</button>
+                <button class="ac-icon-btn delete-btn" data-id="${a.id}" title="Видалити">${icon('trash', 13)}</button>
               </div>
             </div>
             <div class="ac-card-plat">${plat.label}</div>
@@ -194,7 +195,7 @@ export async function render(container) {
               <span class="ac-fol-num">${fmtNum(Number(a.followers) || 0)}</span>
               <span class="ac-fol-label">підп.</span>
             </div>
-            ${a.note ? `<div class="ac-card-note" title="${a.note}">💬</div>` : ''}
+            ${a.note ? `<div class="ac-card-note" title="${a.note}">${icon('notes', 14)}</div>` : ''}
           </div>
         </div>
       `
@@ -355,7 +356,7 @@ function injectStyles() {
     }
     .ac-card-body  { padding: 16px 16px 12px; flex: 1; }
     .ac-card-top   { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:12px; }
-    .ac-card-icon  { font-size:28px; line-height:1; }
+    .ac-card-icon  { display:flex; align-items:center; }
     .ac-card-actions { display:flex; gap:4px; opacity:0; transition:opacity .2s; }
     .ac-card:hover .ac-card-actions { opacity:1; }
     .ac-icon-btn {
@@ -376,11 +377,11 @@ function injectStyles() {
     }
     .ac-fol-num   { font-family:var(--font-mono); font-size:16px; font-weight:800; color:var(--pc); }
     .ac-fol-label { font-size:11px; color:var(--text-muted); margin-left:4px; }
-    .ac-card-note { font-size:16px; cursor:help; }
+    .ac-card-note { display:flex; align-items:center; color:var(--text-muted); cursor:help; }
 
     /* Empty */
     .ac-empty       { text-align:center; padding:80px 24px; grid-column:1/-1; }
-    .ac-empty-icon  { font-size:52px; margin-bottom:16px; }
+    .ac-empty-icon  { display:flex; align-items:center; justify-content:center; margin-bottom:16px; color:var(--text-muted); }
     .ac-empty-title { font-family:var(--font-display); font-size:18px; font-weight:600; margin-bottom:8px; }
     .ac-empty-desc  { font-size:14px; color:var(--text-muted); }
 
@@ -431,7 +432,7 @@ function injectStyles() {
       border-color:var(--pc); background:var(--bg-secondary);
       box-shadow:0 0 0 3px color-mix(in srgb, var(--pc) 20%, transparent);
     }
-    .ac-plat-pick-icon  { font-size:22px; line-height:1; }
+    .ac-plat-pick-icon  { display:flex; align-items:center; justify-content:center; }
     .ac-plat-pick-label { font-size:11px; font-weight:600; text-align:center; }
 
     @keyframes acModalIn { from{opacity:0;transform:scale(.95)} to{opacity:1;transform:scale(1)} }

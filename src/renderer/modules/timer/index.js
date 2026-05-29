@@ -1,18 +1,19 @@
 // src/renderer/modules/timer/index.js
 import { db } from '../../services/firebase.js'
 import { getCurrentUser } from '../../services/auth.js'
+import { icon } from '../../utils/icons.js'
 import {
   collection, addDoc, getDocs, query,
   orderBy, serverTimestamp,
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
 const BREAK_TYPES = [
-  { id: 'lunch',   icon: '🍕', label: 'Обід' },
-  { id: 'smoke',   icon: '🚬', label: 'Покурити' },
-  { id: 'coffee',  icon: '☕', label: 'Кава' },
-  { id: 'away',    icon: '🚶', label: 'Відійшов' },
-  { id: 'project', icon: '🔄', label: 'Інший проект' },
-  { id: 'pause',   icon: '⏸',  label: 'Пауза' },
+  { id: 'lunch',   iconName: 'coffee',    label: 'Обід'          },
+  { id: 'smoke',   iconName: 'x',         label: 'Покурити'      },
+  { id: 'coffee',  iconName: 'coffee',    label: 'Кава'          },
+  { id: 'away',    iconName: 'user',      label: 'Відійшов'      },
+  { id: 'project', iconName: 'refresh',   label: 'Інший проект'  },
+  { id: 'pause',   iconName: 'timer',     label: 'Пауза'         },
 ]
 
 export async function render(container) {
@@ -24,7 +25,7 @@ export async function render(container) {
       <!-- Left: timer -->
       <div class="tp-left">
         <div class="tp-header">
-          <h1 class="tp-title">⏱ Таймер</h1>
+          <h1 class="tp-title" style="display:flex;align-items:center;gap:8px">${icon('timer', 22)} Таймер</h1>
           <p class="tp-sub">Відслідковуйте час роботи та перерви</p>
         </div>
 
@@ -43,7 +44,7 @@ export async function render(container) {
 
           <!-- Current task (shown when running) -->
           <div class="tp-current-task" id="tp-current-task" style="display:none">
-            <span class="tp-task-icon">📌</span>
+            <span class="tp-task-icon">${icon('pin', 14)}</span>
             <span id="tp-task-display">—</span>
             <button class="tp-change-task-btn" id="tp-change-task-btn">змінити</button>
           </div>
@@ -65,8 +66,8 @@ export async function render(container) {
             <div class="tp-break-label">Перерва:</div>
             <div class="tp-break-btns">
               ${BREAK_TYPES.map(b => `
-                <button class="tp-break-btn" data-break="${b.id}" title="${b.label}">
-                  ${b.icon} <span>${b.label}</span>
+                <button class="tp-break-btn" data-break="${b.id}" title="${b.label}" style="display:inline-flex;align-items:center;gap:4px">
+                  ${icon(b.iconName, 13)} <span>${b.label}</span>
                 </button>
               `).join('')}
             </div>
@@ -74,7 +75,7 @@ export async function render(container) {
 
           <!-- Return from break button (shown on break) -->
           <button class="tp-btn tp-btn--return" id="tp-return-btn" style="display:none">
-            <span>🟢</span>
+            <span style="display:flex;align-items:center;color:#34D399">${icon('check-circle', 16)}</span>
             <span class="tp-btn-label">Повернутись до роботи</span>
           </button>
 
@@ -85,7 +86,7 @@ export async function render(container) {
 
         <!-- Live apps -->
         <div class="tp-live-card" id="tp-live-card" style="display:none">
-          <div class="tp-live-title">📱 Активні зараз</div>
+          <div class="tp-live-title" style="display:flex;align-items:center;gap:6px">${icon('smartphone', 13)} Активні зараз</div>
           <div id="tp-live-list"></div>
         </div>
       </div>
@@ -93,7 +94,7 @@ export async function render(container) {
       <!-- Right: history -->
       <div class="tp-right">
         <div class="tp-hist-head">
-          <div class="tp-hist-title">🗂 Історія сесій</div>
+          <div class="tp-hist-title" style="display:flex;align-items:center;gap:6px">${icon('documents', 14)} Історія сесій</div>
           <div class="tp-hist-sub">Натисніть на сесію щоб переглянути деталі</div>
         </div>
         <div id="tp-history">
@@ -107,13 +108,13 @@ export async function render(container) {
     <div class="tp-overlay" id="tp-modal" style="display:none">
       <div class="tp-modal">
         <div class="tp-modal-head">
-          <h2 class="tp-modal-title">📊 Підсумок сесії</h2>
-          <button class="tp-modal-close" id="tp-modal-close">✕</button>
+          <h2 class="tp-modal-title" style="display:flex;align-items:center;gap:7px">${icon('bar-chart', 16)} Підсумок сесії</h2>
+          <button class="tp-modal-close" id="tp-modal-close">${icon('x', 14)}</button>
         </div>
         <div class="tp-modal-body" id="tp-modal-body"></div>
         <div class="tp-modal-foot">
           <button class="tp-btn-ghost" id="tp-discard">Не зберігати</button>
-          <button class="tp-btn-save"  id="tp-save">💾 Зберегти сесію</button>
+          <button class="tp-btn-save"  id="tp-save" style="display:inline-flex;align-items:center;gap:5px">${icon('check', 14)} Зберегти сесію</button>
         </div>
       </div>
     </div>
@@ -122,8 +123,8 @@ export async function render(container) {
     <div class="tp-overlay" id="tp-view-modal" style="display:none">
       <div class="tp-modal">
         <div class="tp-modal-head">
-          <h2 class="tp-modal-title">📋 Деталі сесії</h2>
-          <button class="tp-modal-close" id="tp-view-close">✕</button>
+          <h2 class="tp-modal-title" style="display:flex;align-items:center;gap:7px">${icon('templates', 16)} Деталі сесії</h2>
+          <button class="tp-modal-close" id="tp-view-close">${icon('x', 14)}</button>
         </div>
         <div class="tp-modal-body" id="tp-view-body"></div>
         <div class="tp-modal-foot">
@@ -136,8 +137,8 @@ export async function render(container) {
     <div class="tp-overlay" id="tp-task-modal" style="display:none">
       <div class="tp-modal tp-modal--sm">
         <div class="tp-modal-head">
-          <h2 class="tp-modal-title">🔄 Змінити задачу</h2>
-          <button class="tp-modal-close" id="tp-task-modal-close">✕</button>
+          <h2 class="tp-modal-title" style="display:flex;align-items:center;gap:7px">${icon('refresh', 16)} Змінити задачу</h2>
+          <button class="tp-modal-close" id="tp-task-modal-close">${icon('x', 14)}</button>
         </div>
         <div class="tp-modal-body">
           <input type="text" class="tp-task-input" id="tp-new-task-input"
@@ -190,7 +191,7 @@ export async function render(container) {
       tracking    = true
       globalStart = status.startTime
       segStart    = status.startTime
-      segments    = [{ type: 'work', icon: '💼', label: 'Робота', startMs: status.startTime }]
+      segments    = [{ type: 'work', iconName: 'briefcase', label: 'Робота', startMs: status.startTime }]
       setWorkingUI()
       startClock(status.startTime)
       startPolling()
@@ -254,7 +255,7 @@ export async function render(container) {
       currentTask = container.querySelector('#tp-task').value.trim()
       globalStart = res.startTime
       segStart    = res.startTime
-      segments    = [{ type: 'work', icon: '💼', label: currentTask || 'Робота', startMs: res.startTime }]
+      segments    = [{ type: 'work', iconName: 'briefcase', label: currentTask || 'Робота', startMs: res.startTime }]
 
       setWorkingUI()
       startClock(res.startTime)
@@ -313,7 +314,7 @@ export async function render(container) {
     if (segments.length) segments[segments.length - 1].endMs = now
 
     // Push break segment
-    segments.push({ type: 'break', icon: bt.icon, label: bt.label, startMs: now })
+    segments.push({ type: 'break', iconName: bt.iconName, label: bt.label, startMs: now })
     currentBreak = bt
     segStart     = now
     onBreak      = true
@@ -329,7 +330,7 @@ export async function render(container) {
     if (segments.length) segments[segments.length - 1].endMs = now
 
     // New work segment
-    segments.push({ type: 'work', icon: '💼', label: currentTask || 'Робота', startMs: now })
+    segments.push({ type: 'work', iconName: 'briefcase', label: currentTask || 'Робота', startMs: now })
     segStart     = now
     currentBreak = null
     onBreak      = false
@@ -359,7 +360,7 @@ export async function render(container) {
     if (last && last.type === 'work') last.label = val || 'Робота'
 
     container.querySelector('#tp-task-modal').style.display = 'none'
-    showToast('Задачу змінено ✓')
+    showToast('Задачу змінено')
   }
 
   // ════════════════════════════════════════════════════════
@@ -392,7 +393,7 @@ export async function render(container) {
         if (!st?.tracking || destroyed) return
         if (st.currentApp && !onBreak) {
           if (!liveApps[st.currentApp]) {
-            liveApps[st.currentApp] = { name: st.currentApp, icon: st.currentIcon || '📱', totalMs: 0 }
+            liveApps[st.currentApp] = { name: st.currentApp, icon: st.currentIcon || icon('smartphone', 14), totalMs: 0 }
           }
           liveApps[st.currentApp].totalMs += 3000
           renderLiveApps()
@@ -435,7 +436,7 @@ export async function render(container) {
 
     card.className = 'tp-card tp-card--running'
     dot.className  = 'tp-dot tp-dot--active'
-    badge.textContent = '🟢 Працюємо'
+    badge.innerHTML = icon('check-circle', 13) + ' Працюємо'
 
     btn.disabled = false
     btn.className = 'tp-btn tp-btn--stop'
@@ -465,7 +466,7 @@ export async function render(container) {
 
     card.className = 'tp-card tp-card--break'
     dot.className  = 'tp-dot tp-dot--break'
-    badge.textContent = `${bt.icon} ${bt.label}`
+    badge.innerHTML = icon(bt.iconName, 13) + ' ' + bt.label
 
     btn.disabled = false
     btn.className = 'tp-btn tp-btn--stop tp-btn--stop-sm'
@@ -479,7 +480,7 @@ export async function render(container) {
 
     clearInterval(breakInterval)
     startBreakClock(Date.now())
-    setHint(`${bt.icon} Перерва. Натисніть "Повернутись" коли готові.`)
+    setHint(`Перерва: ${bt.label}. Натисніть "Повернутись" коли готові.`)
   }
 
   function setIdleUI() {
@@ -553,8 +554,8 @@ export async function render(container) {
           const flex = Math.max(dur / totalMs * 100, 3)
           const from = new Date(seg.startMs).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })
           return `
-            <div class="sum-tl-seg sum-tl-seg--${seg.type}" style="flex:${flex}" title="${seg.icon} ${seg.label} · ${fmtMs(dur)} (${from})">
-              <span class="sum-tl-icon">${seg.icon}</span>
+            <div class="sum-tl-seg sum-tl-seg--${seg.type}" style="flex:${flex}" title="${seg.label} · ${fmtMs(dur)} (${from})">
+              <span class="sum-tl-icon">${icon(seg.iconName || 'briefcase', 11)}</span>
             </div>`
         }).join('')}
       </div>
@@ -565,7 +566,7 @@ export async function render(container) {
           const to   = new Date(seg.endMs || endTime).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })
           return `
             <div class="sum-seg-row">
-              <span class="sum-seg-icon">${seg.icon}</span>
+              <span class="sum-seg-icon">${icon(seg.iconName || 'briefcase', 13)}</span>
               <div class="sum-seg-info">
                 <span class="sum-seg-label">${seg.label}</span>
                 <span class="sum-seg-range">${from} → ${to}</span>
@@ -580,17 +581,17 @@ export async function render(container) {
         <div class="sum-date">${dateStr}</div>
         <div class="sum-total-value">${fmtMs(totalMs)}</div>
         <div class="sum-total-range">${timeFrom} → ${timeTo}</div>
-        ${task ? `<div class="sum-task">📌 ${task}</div>` : ''}
+        ${task ? `<div class="sum-task" style="display:flex;align-items:center;gap:5px">${icon('pin', 12)} ${task}</div>` : ''}
         ${breakMs > 0 ? `
           <div class="sum-stats-row">
             <div class="sum-stat">
               <div class="sum-stat-val sum-stat-val--work">${fmtMs(workMs)}</div>
-              <div class="sum-stat-label">💼 Робота</div>
+              <div class="sum-stat-label" style="display:flex;align-items:center;gap:3px">${icon('briefcase', 11)} Робота</div>
             </div>
             <div class="sum-stat-sep">+</div>
             <div class="sum-stat">
               <div class="sum-stat-val sum-stat-val--break">${fmtMs(breakMs)}</div>
-              <div class="sum-stat-label">⏸ Перерви</div>
+              <div class="sum-stat-label" style="display:flex;align-items:center;gap:3px">${icon('timer', 11)} Перерви</div>
             </div>
           </div>` : ''}
       </div>
@@ -648,7 +649,7 @@ export async function render(container) {
       closeModal()
     } catch (err) {
       console.error(err)
-      btn.textContent = '💾 Зберегти сесію'
+      btn.innerHTML = icon('check', 14) + ' Зберегти сесію'
       btn.disabled = false
     }
   }
@@ -665,7 +666,7 @@ export async function render(container) {
       if (destroyed) return
       renderHistory(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     } catch {
-      if (!destroyed) el.innerHTML = '<div class="tp-err">⚠️ Помилка завантаження</div>'
+      if (!destroyed) el.innerHTML = `<div class="tp-err" style="display:flex;align-items:center;gap:5px">${icon('warning', 14)} Помилка завантаження</div>`
     }
   }
 
@@ -675,7 +676,7 @@ export async function render(container) {
     if (!sessions.length) {
       el.innerHTML = `
         <div class="tp-empty">
-          <div class="tp-empty-icon">⏱</div>
+          <div class="tp-empty-icon">${icon('timer', 36)}</div>
           <div class="tp-empty-title">Сесій ще немає</div>
           <div class="tp-empty-desc">Запустіть таймер щоб почати відстеження</div>
         </div>`
@@ -705,7 +706,7 @@ export async function render(container) {
             <div class="tp-sess-card" data-id="${s.id}">
               <div class="tp-sess-time">
                 <div class="tp-sess-range">${timeFrom} → ${timeTo}</div>
-                ${s.task ? `<div class="tp-sess-task">📌 ${s.task}</div>` : ''}
+                ${s.task ? `<div class="tp-sess-task" style="display:flex;align-items:center;gap:4px">${icon('pin', 11)} ${s.task}</div>` : ''}
                 ${breakCount ? `<div class="tp-sess-breaks">⏸ ${breakCount} перерв${breakCount > 1 ? 'и' : 'а'}</div>` : ''}
               </div>
               <div class="tp-sess-chips">
@@ -830,7 +831,7 @@ function injectStyles() {
       display:flex; align-items:center; justify-content:center; gap:8px;
       font-size:13px; color:var(--text-secondary); margin-bottom:18px;
     }
-    .tp-task-icon { font-size:14px; }
+    .tp-task-icon { display:flex; align-items:center; color:var(--accent-blue); }
     .tp-change-task-btn {
       font-size:11px; color:var(--accent-blue); background:none; border:none;
       cursor:pointer; padding:2px 6px; border-radius:4px; transition:background .15s;
@@ -907,7 +908,7 @@ function injectStyles() {
     .tp-live-title { font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:12px; }
     .tp-live-row { display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid var(--border); }
     .tp-live-row:last-child { border-bottom:none; }
-    .tp-live-icon { font-size:16px; width:22px; text-align:center; flex-shrink:0; }
+    .tp-live-icon { display:flex; align-items:center; justify-content:center; width:22px; flex-shrink:0; }
     .tp-live-name { font-size:12px; font-weight:600; width:100px; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .tp-live-bar-wrap { flex:1; height:4px; background:var(--bg-tertiary); border-radius:2px; overflow:hidden; }
     .tp-live-bar { height:100%; background:linear-gradient(90deg,#4F8EF7,#A78BFA); border-radius:2px; transition:width .6s; }
@@ -944,7 +945,7 @@ function injectStyles() {
     .tp-sess-arrow     { font-size:18px; color:var(--text-muted); margin-top:4px; }
 
     .tp-empty { text-align:center; padding:72px 24px; }
-    .tp-empty-icon  { font-size:48px; margin-bottom:14px; }
+    .tp-empty-icon  { display:flex; align-items:center; justify-content:center; margin-bottom:14px; color:var(--text-muted); }
     .tp-empty-title { font-family:var(--font-display); font-size:18px; font-weight:700; margin-bottom:6px; }
     .tp-empty-desc  { font-size:13px; color:var(--text-muted); }
 
@@ -1024,11 +1025,11 @@ function injectStyles() {
     .sum-tl-seg:hover { opacity:.8; }
     .sum-tl-seg--work  { background:rgba(52,211,153,.25); }
     .sum-tl-seg--break { background:rgba(251,146,60,.25); }
-    .sum-tl-icon { font-size:14px; }
+    .sum-tl-icon { display:flex; align-items:center; justify-content:center; }
 
     .sum-segs { display:flex; flex-direction:column; gap:6px; margin-bottom:18px; }
     .sum-seg-row { display:flex; align-items:center; gap:10px; padding:8px 12px; background:var(--bg-tertiary); border-radius:var(--radius-md); }
-    .sum-seg-icon  { font-size:18px; width:24px; text-align:center; flex-shrink:0; }
+    .sum-seg-icon  { display:flex; align-items:center; justify-content:center; width:24px; flex-shrink:0; }
     .sum-seg-info  { flex:1; }
     .sum-seg-label { font-size:13px; font-weight:600; display:block; }
     .sum-seg-range { font-size:11px; color:var(--text-muted); }
@@ -1042,7 +1043,7 @@ function injectStyles() {
 
     .sum-app-row { display:flex; align-items:center; gap:10px; }
     .sum-rank    { width:18px; font-size:12px; font-weight:700; color:var(--text-muted); flex-shrink:0; text-align:center; }
-    .sum-icon    { font-size:20px; width:26px; text-align:center; flex-shrink:0; }
+    .sum-icon    { display:flex; align-items:center; justify-content:center; width:26px; flex-shrink:0; }
     .sum-info    { flex:1; min-width:0; }
     .sum-name    { font-size:13px; font-weight:600; margin-bottom:4px; }
     .sum-bar-wrap{ height:4px; background:var(--bg-tertiary); border-radius:2px; overflow:hidden; }

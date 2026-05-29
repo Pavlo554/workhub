@@ -1,33 +1,34 @@
 import { db } from '../../services/firebase.js'
 import { getCurrentUser } from '../../services/auth.js'
 import { navigate } from '../../../core/router.js'
+import { icon } from '../../utils/icons.js'
 import { doc, setDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
 const PROFESSIONS = [
-  { id: 'freelancer', icon: '💻', title: 'Фрілансер',        desc: 'Дизайнер, розробник, копірайтер',     color: '#4F8EF7' },
-  { id: 'accountant', icon: '📊', title: 'Бухгалтер / ФОП',  desc: 'Бухгалтер, податковий консультант',    color: '#34D399' },
-  { id: 'smm',        icon: '📱', title: 'SMM / Маркетолог',  desc: 'SMM спеціаліст, таргетолог',           color: '#A78BFA' },
-  { id: 'beauty',     icon: '💅', title: 'Салон краси',       desc: 'Майстер нігтів, перукар, косметолог', color: '#F472B6' },
+  { id: 'freelancer', iconName: 'laptop',     title: 'Фрілансер',        desc: 'Дизайнер, розробник, копірайтер',     color: '#4F8EF7' },
+  { id: 'accountant', iconName: 'bar-chart',  title: 'Бухгалтер / ФОП',  desc: 'Бухгалтер, податковий консультант',    color: '#34D399' },
+  { id: 'smm',        iconName: 'smartphone', title: 'SMM / Маркетолог',  desc: 'SMM спеціаліст, таргетолог',           color: '#A78BFA' },
+  { id: 'beauty',     iconName: 'sparkles',   title: 'Салон краси',       desc: 'Майстер нігтів, перукар, косметолог', color: '#F472B6' },
 ]
 
 // All selectable modules (dashboard always added, not shown)
 const ALL_MODULES = [
-  { id: 'clients',      icon: '👥', label: 'Клієнти',      desc: 'База клієнтів' },
-  { id: 'projects',     icon: '📁', label: 'Проекти',      desc: 'Управління проектами' },
-  { id: 'invoices',     icon: '📄', label: 'Рахунки',      desc: 'Виставлення рахунків' },
-  { id: 'contracts',    icon: '📝', label: 'Договори',     desc: 'Шаблони договорів' },
-  { id: 'tasks',        icon: '✓',  label: 'Задачі',       desc: 'Список завдань' },
-  { id: 'timer',        icon: '⏱', label: 'Таймер',       desc: 'Трекінг часу' },
-  { id: 'finances',     icon: '💰', label: 'Фінанси',      desc: 'Доходи та витрати' },
-  { id: 'tax-calendar', icon: '📅', label: 'Податки',      desc: 'Календар податків' },
-  { id: 'appointments', icon: '🗓', label: 'Розклад',      desc: 'Записи клієнтів' },
-  { id: 'services',     icon: '💅', label: 'Послуги',      desc: 'Каталог послуг' },
-  { id: 'content-plan', icon: '📱', label: 'Контент-план', desc: 'Планування постів' },
-  { id: 'accounts',     icon: '🔗', label: 'Акаунти',      desc: 'Соцмережі та сайти' },
-  { id: 'passwords',    icon: '🔑', label: 'Паролі',       desc: 'Сховище паролів' },
-  { id: 'notes',        icon: '🗒', label: 'Нотатки',       desc: 'Нотатки та ідеї' },
-  { id: 'documents',    icon: '📁', label: 'Документи',    desc: 'Файли та документи' },
-  { id: 'api-keys',    icon: '🔗', label: 'API & Інтеграції', desc: 'Ключі та підключення' },
+  { id: 'clients',      label: 'Клієнти',         desc: 'База клієнтів' },
+  { id: 'projects',     label: 'Проекти',         desc: 'Управління проектами' },
+  { id: 'invoices',     label: 'Рахунки',         desc: 'Виставлення рахунків' },
+  { id: 'contracts',    label: 'Договори',        desc: 'Шаблони договорів' },
+  { id: 'tasks',        label: 'Задачі',          desc: 'Список завдань' },
+  { id: 'timer',        label: 'Таймер',          desc: 'Трекінг часу' },
+  { id: 'finances',     label: 'Фінанси',         desc: 'Доходи та витрати' },
+  { id: 'tax-calendar', label: 'Податки',         desc: 'Календар податків' },
+  { id: 'appointments', label: 'Розклад',         desc: 'Записи клієнтів' },
+  { id: 'services',     label: 'Послуги',         desc: 'Каталог послуг' },
+  { id: 'content-plan', label: 'Контент-план',    desc: 'Планування постів' },
+  { id: 'accounts',     label: 'Акаунти',         desc: 'Соцмережі та сайти' },
+  { id: 'passwords',    label: 'Паролі',          desc: 'Сховище паролів' },
+  { id: 'notes',        label: 'Нотатки',         desc: 'Нотатки та ідеї' },
+  { id: 'documents',    label: 'Документи',       desc: 'Файли та документи' },
+  { id: 'api-keys',     label: 'API & Інтеграції', desc: 'Ключі та підключення' },
 ]
 
 // Default modules per profession (without 'dashboard')
@@ -76,7 +77,7 @@ export async function render(container) {
         border-color: var(--prof-color);
         background: color-mix(in srgb, var(--prof-color) 8%, var(--bg-secondary, #1A1D2E));
       }
-      .prof-card-icon { font-size: 32px; margin-bottom: 10px; }
+      .prof-card-icon { display:flex; align-items:center; justify-content:center; width:52px; height:52px; border-radius:12px; background:color-mix(in srgb,var(--prof-color) 12%,var(--bg-tertiary)); margin-bottom:14px; }
       .prof-card-title { font-size: 15px; font-weight: 700; color: var(--text-primary, #F1F5F9); margin-bottom: 4px; }
       .prof-card-desc  { font-size: 12px; color: var(--text-secondary, #94A3B8); }
       .prof-card-check {
@@ -85,7 +86,6 @@ export async function render(container) {
         border-radius: 50%;
         background: var(--prof-color);
         color: #fff;
-        font-size: 12px;
         display: flex; align-items: center; justify-content: center;
         opacity: 0;
         transform: scale(.5);
@@ -129,18 +129,16 @@ export async function render(container) {
         border-color: var(--mod-color, #4F8EF7);
         background: color-mix(in srgb, var(--mod-color, #4F8EF7) 8%, var(--bg-secondary, #1A1D2E));
       }
-      .ob-mod-icon { font-size: 20px; margin-bottom: 6px; }
+      .ob-mod-icon { display:flex; align-items:center; margin-bottom:6px; color:var(--mod-color,#4F8EF7); }
       .ob-mod-label { font-size: 12px; font-weight: 600; color: var(--text-primary, #F1F5F9); margin-bottom: 2px; }
       .ob-mod-desc  { font-size: 11px; color: var(--text-secondary, #94A3B8); }
       .ob-mod-chk {
-        float: right;
+        flex-shrink: 0;
         width: 16px; height: 16px;
         border-radius: 50%;
         background: var(--mod-color, #4F8EF7);
         color: #fff;
-        font-size: 9px;
         display: flex; align-items: center; justify-content: center;
-        margin-top: -4px;
         opacity: 0;
         transition: opacity .15s;
       }
@@ -177,12 +175,12 @@ export async function render(container) {
           <div class="profession-grid">
             ${PROFESSIONS.map(p => `
               <div class="profession-card" data-id="${p.id}" style="--prof-color:${p.color}">
-                <div class="prof-card-icon">${p.icon}</div>
+                <div class="prof-card-icon" style="color:${p.color}">${icon(p.iconName, 32)}</div>
                 <div class="prof-card-body">
                   <div class="prof-card-title">${p.title}</div>
                   <div class="prof-card-desc">${p.desc}</div>
                 </div>
-                <div class="prof-card-check">✓</div>
+                <div class="prof-card-check">${icon('check', 10)}</div>
               </div>
             `).join('')}
           </div>
@@ -253,8 +251,8 @@ export async function render(container) {
       return `
         <div class="ob-mod-card${checked?' checked':''}" data-mod="${m.id}" style="--mod-color:${color}">
           <div style="display:flex;justify-content:space-between;align-items:flex-start">
-            <div class="ob-mod-icon">${m.icon}</div>
-            <div class="ob-mod-chk">✓</div>
+            <div class="ob-mod-icon">${icon(m.id, 18)}</div>
+            <div class="ob-mod-chk">${icon('check', 8)}</div>
           </div>
           <div class="ob-mod-label">${m.label}</div>
           <div class="ob-mod-desc">${m.desc}</div>

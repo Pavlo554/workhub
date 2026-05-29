@@ -4,6 +4,7 @@ import { getCurrentUser, getActivePathSegments } from '../../services/auth.js'
 import {
   collection, getDocs, query, orderBy, where,
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
+import { icon } from '../../utils/icons.js'
 
 const MONTHS_UK = ['Січень','Лютий','Березень','Квітень','Травень','Червень',
                    'Липень','Серпень','Вересень','Жовтень','Листопад','Грудень']
@@ -15,59 +16,94 @@ export async function render(container) {
   if (!user) return
   const base = getActivePathSegments(user.uid)
 
-  let activeTab = 'metrics'
+  let activeTab  = 'metrics'
   let taskPeriod = 'month'
+  let cache      = null   // loaded once; re-used on tab switches
+
+  const NAV_TABS = [
+    { id: 'metrics', label: 'Метрики',            iconName: 'bar-chart'    },
+    { id: 'clients', label: 'ТОП клієнти',         iconName: 'trophy'       },
+    { id: 'tasks',   label: 'Задачі',              iconName: 'check-circle' },
+    { id: 'compare', label: 'Порівняння місяців',  iconName: 'trending-up'  },
+  ]
 
   container.innerHTML = `
-    <div class="rp-page">
-      <div class="rp-header">
-        <div>
-          <h1 class="rp-title">📊 Звіти та аналітика</h1>
-          <p class="rp-sub">Метрики, рейтинги та порівняння</p>
+    <div class="rp-layout">
+
+      <!-- ══ LEFT NAV ══ -->
+      <div class="rp-nav">
+        <div class="rp-nav-head">
+          <div class="rp-nav-title">${icon('bar-chart', 18)} Звіти</div>
+          <div class="rp-nav-sub">Аналітика та метрики</div>
+          <button class="rp-refresh-btn" id="rp-refresh" title="Оновити дані">↻</button>
+        </div>
+        <nav class="rp-nav-tabs">
+          ${NAV_TABS.map(t => `
+            <button class="rp-tab ${t.id === activeTab ? 'active' : ''}" data-tab="${t.id}">
+              <span class="rp-tab-icon">${icon(t.iconName, 15)}</span>
+              <span>${t.label}</span>
+            </button>
+          `).join('')}
+        </nav>
+      </div>
+
+      <!-- ══ RIGHT CONTENT ══ -->
+      <div class="rp-right">
+        <div id="rp-content" class="rp-content">
+          <div class="rp-loading"><div class="rp-spinner"></div><span>Завантаження…</span></div>
         </div>
       </div>
 
-      <div class="rp-tabs">
-        <button class="rp-tab active" data-tab="metrics">📈 Метрики</button>
-        <button class="rp-tab" data-tab="clients">👥 ТОП клієнти</button>
-        <button class="rp-tab" data-tab="tasks">✅ Задачі</button>
-        <button class="rp-tab" data-tab="compare">🔄 Порівняння місяців</button>
-      </div>
-
-      <div id="rp-content" class="rp-content">
-        <div class="rp-loading"><div class="rp-spinner"></div><span>Завантаження…</span></div>
-      </div>
     </div>
   `
 
-  container.querySelector('.rp-tabs').addEventListener('click', e => {
+  container.querySelector('.rp-nav-tabs').addEventListener('click', e => {
     const btn = e.target.closest('.rp-tab')
     if (!btn) return
     activeTab = btn.dataset.tab
     container.querySelectorAll('.rp-tab').forEach(b => b.classList.remove('active'))
     btn.classList.add('active')
-    loadTab()
+    renderTab()
   })
 
-  async function loadTab() {
+  container.querySelector('#rp-refresh').addEventListener('click', async () => {
+    cache = null
+    await loadData()
+  })
+
+  async function loadData() {
     const el = container.querySelector('#rp-content')
     el.innerHTML = `<div class="rp-loading"><div class="rp-spinner"></div><span>Завантаження…</span></div>`
+    const btn = container.querySelector('#rp-refresh')
+    if (btn) { btn.disabled = true; btn.style.opacity = '.4' }
     try {
       const [invoices, tasks, clients] = await Promise.all([
         getDocs(query(collection(db, ...base, 'invoices'), orderBy('createdAt', 'desc'))).then(s => s.docs.map(d => ({ id: d.id, ...d.data() }))).catch(() => []),
         getDocs(query(collection(db, ...base, 'tasks'),    orderBy('createdAt', 'desc'))).then(s => s.docs.map(d => ({ id: d.id, ...d.data() }))).catch(() => []),
         getDocs(collection(db, ...base, 'clients')).then(s => s.docs.map(d => ({ id: d.id, ...d.data() }))).catch(() => []),
       ])
-
-      if (activeTab === 'metrics') renderMetrics(el, invoices, tasks, clients)
-      if (activeTab === 'clients') renderTopClients(el, invoices, clients)
-      if (activeTab === 'tasks')   renderTasks(el, tasks)
-      if (activeTab === 'compare') renderCompare(el, invoices)
+      cache = { invoices, tasks, clients }
     } catch (err) {
       console.error(err)
-      el.innerHTML = `<div class="rp-empty"><div style="font-size:40px">⚠️</div><div>Помилка завантаження</div></div>`
+      el.innerHTML = `<div class="rp-empty"><div style="color:var(--text-muted)">${icon('alert-triangle', 40)}</div><div>Помилка завантаження</div></div>`
+    } finally {
+      if (btn) { btn.disabled = false; btn.style.opacity = '' }
     }
+    if (cache) renderTab()
   }
+
+  function renderTab() {
+    if (!cache) return
+    const el = container.querySelector('#rp-content')
+    el.innerHTML = ''
+    const { invoices, tasks, clients } = cache
+    if (activeTab === 'metrics') renderMetrics(el, invoices, tasks, clients)
+    if (activeTab === 'clients') renderTopClients(el, invoices, clients)
+    if (activeTab === 'tasks')   renderTasks(el, tasks)
+    if (activeTab === 'compare') renderCompare(el, invoices)
+  }
+
+  function loadTab() { return loadData() }
 
   // ══ TAB 1: МЕТРИКИ ══════════════════════════════════════════
   function renderMetrics(el, invoices, tasks, clients) {
@@ -120,7 +156,7 @@ export async function render(container) {
       <div class="rp-metrics-grid">
 
         <div class="rp-kpi-card rp-kpi--income">
-          <div class="rp-kpi-icon">💰</div>
+          <div class="rp-kpi-icon">${icon('finances', 24)}</div>
           <div class="rp-kpi-body">
             <div class="rp-kpi-label">Дохід цього місяця</div>
             <div class="rp-kpi-value">₴${incomeThis.toLocaleString('uk-UA')}</div>
@@ -132,7 +168,7 @@ export async function render(container) {
         </div>
 
         <div class="rp-kpi-card rp-kpi--unpaid">
-          <div class="rp-kpi-icon">⏳</div>
+          <div class="rp-kpi-icon">${icon('invoices', 24)}</div>
           <div class="rp-kpi-body">
             <div class="rp-kpi-label">Неоплачені рахунки</div>
             <div class="rp-kpi-value">₴${unpaidAmt.toLocaleString('uk-UA')}</div>
@@ -143,7 +179,7 @@ export async function render(container) {
         </div>
 
         <div class="rp-kpi-card rp-kpi--clients">
-          <div class="rp-kpi-icon">👥</div>
+          <div class="rp-kpi-icon">${icon('clients', 24)}</div>
           <div class="rp-kpi-body">
             <div class="rp-kpi-label">Активні клієнти</div>
             <div class="rp-kpi-value">${activeClients}</div>
@@ -154,7 +190,7 @@ export async function render(container) {
         </div>
 
         <div class="rp-kpi-card rp-kpi--tasks">
-          <div class="rp-kpi-icon">✅</div>
+          <div class="rp-kpi-icon">${icon('tasks', 24)}</div>
           <div class="rp-kpi-body">
             <div class="rp-kpi-label">Виконані задачі</div>
             <div class="rp-kpi-value">${doneThis}</div>
@@ -169,7 +205,7 @@ export async function render(container) {
       <!-- Income chart -->
       <div class="rp-section-card">
         <div class="rp-section-head">
-          <div class="rp-section-title">📊 Дохід за 6 місяців</div>
+          <div class="rp-section-title">Дохід за 6 місяців</div>
         </div>
         <div class="rp-chart-wrap">
           <canvas id="rp-income-canvas"></canvas>
@@ -179,7 +215,7 @@ export async function render(container) {
       <!-- Tasks progress -->
       <div class="rp-section-card">
         <div class="rp-section-head">
-          <div class="rp-section-title">✅ Задачі цього місяця</div>
+          <div class="rp-section-title">Задачі цього місяця</div>
         </div>
         <div class="rp-tasks-split">
           ${(() => {
@@ -290,14 +326,14 @@ export async function render(container) {
     const totalPaid = sorted.reduce((s, c) => s + c.paid, 0) || 1
 
     if (!sorted.length) {
-      el.innerHTML = `<div class="rp-empty"><div style="font-size:48px">📭</div><div>Рахунків ще немає</div></div>`
+      el.innerHTML = `<div class="rp-empty"><div style="color:var(--text-muted)">${icon('invoices', 40)}</div><div>Рахунків ще немає</div></div>`
       return
     }
 
     el.innerHTML = `
       <div class="rp-section-card">
         <div class="rp-section-head">
-          <div class="rp-section-title">👥 ТОП клієнти за доходом</div>
+          <div class="rp-section-title">ТОП клієнти за доходом</div>
           <div class="rp-section-sub">Виплачені рахунки</div>
         </div>
         <div class="rp-client-list">
@@ -309,7 +345,7 @@ export async function render(container) {
             return `
               <div class="rp-client-row">
                 <div class="rp-client-rank" style="color:${i < 3 ? col : 'var(--text-muted)'}">
-                  ${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`}
+                  #${i+1}
                 </div>
                 <div class="rp-client-avatar" style="background:${col}">
                   ${c.name[0]?.toUpperCase() || '?'}
@@ -331,7 +367,7 @@ export async function render(container) {
 
       <div class="rp-metrics-grid rp-metrics-grid--2">
         <div class="rp-kpi-card">
-          <div class="rp-kpi-icon">💰</div>
+          <div class="rp-kpi-icon">${icon('finances', 24)}</div>
           <div class="rp-kpi-body">
             <div class="rp-kpi-label">Загальний дохід</div>
             <div class="rp-kpi-value">₴${totalPaid.toLocaleString('uk-UA')}</div>
@@ -339,7 +375,7 @@ export async function render(container) {
           </div>
         </div>
         <div class="rp-kpi-card">
-          <div class="rp-kpi-icon">👤</div>
+          <div class="rp-kpi-icon">${icon('clients', 24)}</div>
           <div class="rp-kpi-body">
             <div class="rp-kpi-label">Середній чек</div>
             <div class="rp-kpi-value">₴${Math.round(totalPaid / (invoices.filter(i=>i.status==='paid').length||1)).toLocaleString('uk-UA')}</div>
@@ -382,7 +418,7 @@ export async function render(container) {
 
       <div class="rp-metrics-grid">
         <div class="rp-kpi-card">
-          <div class="rp-kpi-icon">✅</div>
+          <div class="rp-kpi-icon">${icon('tasks', 24)}</div>
           <div class="rp-kpi-body">
             <div class="rp-kpi-label">Виконано</div>
             <div class="rp-kpi-value" style="color:#34D399">${done.length}</div>
@@ -390,21 +426,21 @@ export async function render(container) {
           </div>
         </div>
         <div class="rp-kpi-card">
-          <div class="rp-kpi-icon">🔄</div>
+          <div class="rp-kpi-icon">${icon('kanban', 24)}</div>
           <div class="rp-kpi-body">
             <div class="rp-kpi-label">В роботі</div>
             <div class="rp-kpi-value" style="color:#FBBF24">${inProg.length}</div>
           </div>
         </div>
         <div class="rp-kpi-card">
-          <div class="rp-kpi-icon">📋</div>
+          <div class="rp-kpi-icon">${icon('plus', 24)}</div>
           <div class="rp-kpi-body">
             <div class="rp-kpi-label">Нових</div>
             <div class="rp-kpi-value" style="color:#94A3B8">${newTasks.length}</div>
           </div>
         </div>
         <div class="rp-kpi-card">
-          <div class="rp-kpi-icon">📦</div>
+          <div class="rp-kpi-icon">${icon('bar-chart', 24)}</div>
           <div class="rp-kpi-body">
             <div class="rp-kpi-label">Всього</div>
             <div class="rp-kpi-value">${filtered.length}</div>
@@ -414,7 +450,7 @@ export async function render(container) {
 
       <div class="rp-section-card">
         <div class="rp-section-head">
-          <div class="rp-section-title">✅ Виконані задачі</div>
+          <div class="rp-section-title">Виконані задачі</div>
           <div class="rp-section-sub">${done.length} задач за період</div>
         </div>
         ${done.length === 0
@@ -426,10 +462,10 @@ export async function render(container) {
                 const p = prio[t.priority] || prio.medium
                 return `
                   <div class="rp-task-row">
-                    <span class="rp-task-check">✓</span>
+                    <span class="rp-task-check">${icon('check', 11)}</span>
                     <div class="rp-task-info">
                       <div class="rp-task-title">${t.title || '—'}</div>
-                      ${t.clientName ? `<div class="rp-task-client">👤 ${t.clientName}</div>` : ''}
+                      ${t.clientName ? `<div class="rp-task-client">${t.clientName}</div>` : ''}
                     </div>
                     <div class="rp-task-right">
                       <span class="rp-task-prio" style="color:${p.color}">● ${p.label}</span>
@@ -493,7 +529,7 @@ export async function render(container) {
 
       <div class="rp-section-card">
         <div class="rp-section-head">
-          <div class="rp-section-title">📊 Доходи по місяцях</div>
+          <div class="rp-section-title">Доходи по місяцях</div>
           <div class="rp-legend">
             <span class="rp-legend-dot" style="background:#34D399"></span> Оплачено
             <span class="rp-legend-dot" style="background:#FBBF24;margin-left:12px"></span> Очікується
@@ -506,7 +542,7 @@ export async function render(container) {
 
       <div class="rp-section-card">
         <div class="rp-section-head">
-          <div class="rp-section-title">📋 Деталі по місяцях</div>
+          <div class="rp-section-title">Деталі по місяцях</div>
         </div>
         <div class="rp-month-table">
           <div class="rp-mt-head">
@@ -574,17 +610,44 @@ function injectStyles() {
   const s = document.createElement('style')
   s.id = 'reports-styles'
   s.textContent = `
-    .rp-page    { padding: 28px 36px; max-width: 1100px; }
-    .rp-header  { margin-bottom: 20px; }
-    .rp-title   { font-family:var(--font-display); font-size:26px; font-weight:800; margin-bottom:4px; }
-    .rp-sub     { font-size:13px; color:var(--text-muted); }
+    /* ── Split layout ─────────────────────────────────────── */
+    .rp-layout { display:flex; height:100%; overflow:hidden; }
 
-    .rp-tabs { display:flex; gap:4px; background:var(--bg-secondary); padding:4px; border-radius:var(--radius-md); border:1px solid var(--border); margin-bottom:24px; width:fit-content; }
-    .rp-tab  { padding:8px 20px; border-radius:var(--radius-sm); font-size:13px; font-weight:600; color:var(--text-muted); cursor:pointer; border:none; background:none; transition:all .15s; white-space:nowrap; }
-    .rp-tab:hover  { color:var(--text-primary); }
-    .rp-tab.active { background:var(--bg-primary); color:var(--text-primary); box-shadow:0 1px 4px rgba(0,0,0,.4); }
+    .rp-nav {
+      width:220px; flex-shrink:0; display:flex; flex-direction:column;
+      border-right:1px solid var(--border); padding:20px 12px; overflow-y:auto;
+    }
+    .rp-nav-head { padding:4px 8px 20px; }
+    .rp-nav-title {
+      font-family:var(--font-display); font-size:19px; font-weight:800;
+      display:flex; align-items:center; gap:8px; margin-bottom:4px;
+    }
+    .rp-nav-sub { font-size:12px; color:var(--text-muted); margin-bottom:8px; }
+    .rp-refresh-btn {
+      background:var(--bg-tertiary); border:1px solid var(--border);
+      border-radius:var(--radius-md); padding:5px 10px; font-size:13px;
+      cursor:pointer; color:var(--text-muted); transition:all .15s;
+    }
+    .rp-refresh-btn:hover:not(:disabled) { color:var(--accent-blue); border-color:var(--accent-blue); }
+    .rp-refresh-btn:disabled { cursor:not-allowed; }
 
-    .rp-content { }
+    .rp-nav-tabs { display:flex; flex-direction:column; gap:3px; }
+    .rp-tab {
+      display:flex; align-items:center; gap:10px;
+      width:100%; padding:10px 12px; border-radius:var(--radius-md);
+      font-size:13px; font-weight:600; color:var(--text-muted);
+      cursor:pointer; border:1.5px solid transparent; background:none; transition:all .15s;
+      text-align:left;
+    }
+    .rp-tab:hover  { color:var(--text-primary); background:var(--bg-secondary); }
+    .rp-tab.active {
+      background:var(--bg-secondary); color:var(--text-primary);
+      border-color:var(--border); box-shadow:0 1px 4px rgba(0,0,0,.25);
+    }
+    .rp-tab-icon { display:flex; align-items:center; flex-shrink:0; }
+
+    .rp-right   { flex:1; overflow-y:auto; }
+    .rp-content { padding:28px 32px; max-width:1100px; }
 
     .rp-loading { display:flex; align-items:center; justify-content:center; gap:12px; padding:80px; color:var(--text-muted); font-size:14px; }
     .rp-spinner { width:24px; height:24px; border:2.5px solid var(--border); border-top-color:var(--accent-blue); border-radius:50%; animation:rp-spin .7s linear infinite; flex-shrink:0; }
@@ -604,7 +667,7 @@ function injectStyles() {
       display:flex; align-items:flex-start; gap:14px; transition:border-color .2s;
     }
     .rp-kpi-card:hover { border-color:rgba(255,255,255,.12); }
-    .rp-kpi-icon  { font-size:28px; flex-shrink:0; }
+    .rp-kpi-icon  { display:flex; align-items:center; flex-shrink:0; color:var(--text-secondary); }
     .rp-kpi-body  { flex:1; min-width:0; }
     .rp-kpi-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin-bottom:6px; }
     .rp-kpi-value { font-family:var(--font-display); font-size:26px; font-weight:800; line-height:1; margin-bottom:6px; }
@@ -637,7 +700,7 @@ function injectStyles() {
     .rp-client-list { display:flex; flex-direction:column; gap:10px; }
     .rp-client-row  { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--border); }
     .rp-client-row:last-child { border:none; }
-    .rp-client-rank   { width:32px; font-size:18px; text-align:center; flex-shrink:0; }
+    .rp-client-rank   { width:32px; font-size:13px; font-weight:800; text-align:center; flex-shrink:0; font-family:var(--font-display); }
     .rp-client-avatar { width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; color:#fff; flex-shrink:0; }
     .rp-client-info   { flex:1; min-width:0; }
     .rp-client-name   { font-size:14px; font-weight:700; margin-bottom:5px; }

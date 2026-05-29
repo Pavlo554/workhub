@@ -6,6 +6,7 @@ import { signOut, updatePassword, EmailAuthProvider, reauthenticateWithCredentia
 import { doc, updateDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 import { t, getLang, setLang, SUPPORTED_LANGS } from '../../../core/i18n.js'
 import { applyTheme, applyAccent, ACCENT_COLORS } from '../../../core/theme.js'
+import { icon } from '../../utils/icons.js'
 
 export async function render(container) {
   injectStyles()
@@ -16,7 +17,6 @@ export async function render(container) {
   let activeTab = 'profile'
 
   function renderPage() {
-    const lang = getLang()
     container.innerHTML = `
       <div class="st-page">
 
@@ -34,17 +34,17 @@ export async function render(container) {
 
           <nav class="st-tabs">
             ${[
-              { id: 'profile',       icon: '👤', key: 'settings.tab.profile' },
-              { id: 'language',      icon: '🌐', key: 'settings.tab.language' },
-              { id: 'appearance',    icon: '🎨', key: 'settings.tab.appearance' },
-              { id: 'notifications', icon: '🔔', label: 'Сповіщення' },
-              { id: 'security',      icon: '🔒', key: 'settings.tab.security' },
-              { id: 'payments',      icon: '💳', label: 'Платежі' },
-              { id: 'subscription',  icon: '💎', key: 'settings.tab.subscription' },
-              { id: 'danger',        icon: '⚠️', key: 'settings.tab.danger' },
+              { id: 'profile',       svgIcon: icon('clients', 16),        key: 'settings.tab.profile' },
+              { id: 'language',      svgIcon: icon('globe', 16),          key: 'settings.tab.language' },
+              { id: 'appearance',    svgIcon: icon('sparkles', 16),       key: 'settings.tab.appearance' },
+              { id: 'notifications', svgIcon: icon('bell', 16),           label: 'Сповіщення' },
+              { id: 'security',      svgIcon: icon('passwords', 16),      key: 'settings.tab.security' },
+              { id: 'payments',      svgIcon: icon('credit-card', 16),    label: 'Платежі' },
+              { id: 'subscription',  svgIcon: icon('upgrade', 16),        key: 'settings.tab.subscription' },
+              { id: 'danger',        svgIcon: icon('alert-triangle', 16), key: 'settings.tab.danger' },
             ].map(tab => `
               <button class="st-tab ${activeTab === tab.id ? 'active' : ''}" data-tab="${tab.id}">
-                <span class="st-tab-icon">${tab.icon}</span>
+                <span class="st-tab-icon">${tab.svgIcon}</span>
                 <span class="st-tab-label">${tab.label || t(tab.key)}</span>
               </button>
             `).join('')}
@@ -65,7 +65,6 @@ export async function render(container) {
       </div>
     `
 
-    // Tab navigation
     container.querySelectorAll('.st-tab').forEach(btn => {
       btn.addEventListener('click', () => {
         activeTab = btn.dataset.tab
@@ -100,11 +99,11 @@ function renderTab(tab, profile, user) {
 }
 
 const NICHES = [
-  { id: 'freelancer', icon: '💻', label: 'Фрілансер',        color: '#4F8EF7', desc: 'Проекти, рахунки, договори, таймер' },
-  { id: 'accountant', icon: '📊', label: 'Бухгалтер / ФОП',  color: '#34D399', desc: 'Фінанси, рахунки, податковий календар' },
-  { id: 'smm',        icon: '📱', label: 'SMM / Маркетолог',  color: '#A78BFA', desc: 'Контент-план, акаунти, клієнти' },
-  { id: 'beauty',     icon: '💅', label: 'Салон краси',       color: '#F472B6', desc: 'Записи, послуги, розклад' },
-  { id: 'custom',     icon: '✦',  label: 'Інша ніша',         color: '#94A3B8', desc: 'Вибрати модулі вручну' },
+  { id: 'freelancer', iconName: 'laptop',     label: 'Фрілансер',       color: '#4F8EF7', desc: 'Проекти, рахунки, договори, таймер' },
+  { id: 'accountant', iconName: 'calculator', label: 'Бухгалтер / ФОП', color: '#34D399', desc: 'Фінанси, рахунки, податковий календар' },
+  { id: 'smm',        iconName: 'smartphone', label: 'SMM / Маркетолог', color: '#A78BFA', desc: 'Контент-план, акаунти, клієнти' },
+  { id: 'beauty',     iconName: 'sparkles',   label: 'Салон краси',     color: '#F472B6', desc: 'Записи, послуги, розклад' },
+  { id: 'custom',     iconName: 'settings2',  label: 'Інша ніша',       color: '#94A3B8', desc: 'Вибрати модулі вручну' },
 ]
 
 // ── Profile tab ───────────────────────────────────────────────
@@ -119,7 +118,6 @@ function renderProfile(profile, user) {
         </div>
       </div>
 
-      <!-- Avatar row -->
       <div class="st-avatar-row">
         <div class="st-big-avatar" style="background:linear-gradient(135deg,#667eea,#764ba2)">
           ${initials(profile?.name)}
@@ -131,8 +129,7 @@ function renderProfile(profile, user) {
         </div>
       </div>
 
-      <!-- ── Особисті дані ── -->
-      <h3 class="st-section-label" style="margin-top:24px">👤 Особиста інформація</h3>
+      <h3 class="st-section-label" style="margin-top:24px">Особиста інформація</h3>
       <div class="st-form-grid">
         <div class="st-field">
           <label class="st-label">${t('profile.name')}</label>
@@ -143,7 +140,7 @@ function renderProfile(profile, user) {
           <label class="st-label">${t('profile.email')}</label>
           <div class="st-input-wrap">
             <input class="st-input st-input-disabled" type="email" value="${esc(user.email)}" disabled>
-            <span class="st-input-lock">🔒</span>
+            <span class="st-input-lock">${icon('passwords', 13)}</span>
           </div>
           <span class="st-hint">${t('profile.email_hint')}</span>
         </div>
@@ -161,14 +158,13 @@ function renderProfile(profile, user) {
 
       <div class="st-actions">
         <button class="st-btn st-btn-primary" id="save-profile-btn">
-          <span class="st-btn-icon">💾</span> ${t('profile.save')}
+          ${icon('download', 15)} ${t('profile.save')}
         </button>
       </div>
 
       <div class="st-divider" style="margin:28px 0"></div>
 
-      <!-- ── Бізнес інформація ── -->
-      <h3 class="st-section-label">💼 Мій бізнес</h3>
+      <h3 class="st-section-label">Мій бізнес</h3>
       <p class="st-panel-subtitle" style="margin-bottom:20px">Використовується в рахунках, договорах та навігації</p>
 
       <div class="st-form-grid">
@@ -204,19 +200,18 @@ function renderProfile(profile, user) {
         </div>
       </div>
 
-      <!-- Ніша -->
       <div class="st-field" style="margin-top:20px">
         <label class="st-label" style="margin-bottom:12px">Сфера діяльності</label>
         <div class="st-niche-grid" id="niche-grid">
           ${NICHES.map(n => `
             <button class="st-niche-card ${currentNiche === n.id || (!currentNiche && n.id === 'custom') ? 'active' : ''}"
               data-niche="${n.id}" style="--nc:${n.color}">
-              <span class="st-niche-icon">${n.icon}</span>
+              <span class="st-niche-icon">${icon(n.iconName, 20)}</span>
               <div class="st-niche-body">
                 <div class="st-niche-title">${n.label}</div>
                 <div class="st-niche-desc">${n.desc}</div>
               </div>
-              <div class="st-niche-check">✓</div>
+              <div class="st-niche-check">${icon('check', 11)}</div>
             </button>
           `).join('')}
         </div>
@@ -224,7 +219,7 @@ function renderProfile(profile, user) {
 
       <div class="st-actions">
         <button class="st-btn st-btn-primary" id="save-business-btn">
-          <span class="st-btn-icon">🏢</span> Зберегти та оновити меню
+          ${icon('business', 15)} Зберегти та оновити меню
         </button>
       </div>
     </div>
@@ -264,7 +259,7 @@ function renderLanguage() {
             </div>
             <div class="st-lang-check">
               <div class="st-check-circle ${current === l.code ? 'checked' : ''}">
-                ${current === l.code ? '✓' : ''}
+                ${current === l.code ? icon('check', 11) : ''}
               </div>
             </div>
           </button>
@@ -278,20 +273,20 @@ function renderLanguage() {
         <div class="st-field">
           <label class="st-label">${t('lang.date_format')}</label>
           <div class="st-input st-input-readonly">
-            <span class="st-input-icon">📅</span> ${DATE_FORMATS[current] || 'дд.мм.рррр'}
+            ${icon('tax-calendar', 14)} ${DATE_FORMATS[current] || 'дд.мм.рррр'}
           </div>
         </div>
         <div class="st-field">
           <label class="st-label">${t('lang.currency')}</label>
           <div class="st-input st-input-readonly">
-            <span class="st-input-icon">💱</span> ${CURRENCIES[current] || '₴ Гривня'}
+            ${icon('finances', 14)} ${CURRENCIES[current] || '₴ Гривня'}
           </div>
         </div>
       </div>
 
       <div class="st-actions">
         <button class="st-btn st-btn-primary" id="save-lang-btn">
-          <span class="st-btn-icon">🌐</span> ${t('lang.apply')}
+          ${icon('globe', 15)} ${t('lang.apply')}
         </button>
       </div>
     </div>
@@ -302,9 +297,9 @@ function renderLanguage() {
 function renderAppearance() {
   const saved = localStorage.getItem('workhub_theme') || 'dark'
   const themes = [
-    { id: 'dark',   label: 'Темна',   icon: '🌙', desc: 'Зручно для очей вночі' },
-    { id: 'light',  label: 'Світла',  icon: '☀️', desc: 'Класичний білий інтерфейс' },
-    { id: 'system', label: 'Системна',icon: '💻', desc: 'Слідує за налаштуваннями ОС' },
+    { id: 'dark',   label: 'Темна',    svgIcon: icon('moon', 14),    desc: 'Зручно для очей вночі' },
+    { id: 'light',  label: 'Світла',   svgIcon: icon('sun', 14),     desc: 'Класичний білий інтерфейс' },
+    { id: 'system', label: 'Системна', svgIcon: icon('monitor', 14), desc: 'Слідує за налаштуваннями ОС' },
   ]
   const accents = [
     { id: 'blue',   color: '#4F8EF7', label: 'Синій' },
@@ -319,7 +314,7 @@ function renderAppearance() {
     <div class="st-panel">
       <div class="st-panel-header">
         <div>
-          <h2 class="st-panel-title">🎨 Зовнішній вигляд</h2>
+          <h2 class="st-panel-title">Зовнішній вигляд</h2>
           <p class="st-panel-subtitle">Тема оформлення та акцентний колір</p>
         </div>
       </div>
@@ -339,7 +334,7 @@ function renderAppearance() {
               </div>
             </div>
             <div class="st-theme-label">
-              <span>${th.icon}</span>
+              ${th.svgIcon}
               <span>${th.label}</span>
             </div>
             <div class="st-theme-desc">${th.desc}</div>
@@ -355,7 +350,7 @@ function renderAppearance() {
         ${accents.map(a => `
           <button class="st-accent-btn ${savedAccent === a.id ? 'active' : ''}" data-accent="${a.id}" style="--ac:${a.color}" title="${a.label}">
             <div class="st-accent-dot" style="background:${a.color}"></div>
-            ${savedAccent === a.id ? '<div class="st-accent-check">✓</div>' : ''}
+            ${savedAccent === a.id ? `<div class="st-accent-check">${icon('check', 10)}</div>` : ''}
           </button>
         `).join('')}
       </div>
@@ -376,7 +371,7 @@ function renderSecurity() {
       </div>
 
       <div class="st-security-alert">
-        <div class="st-security-alert-icon">🔐</div>
+        <div class="st-security-alert-icon">${icon('passwords', 22)}</div>
         <div class="st-security-alert-text">${t('security.warning')}</div>
       </div>
 
@@ -386,14 +381,14 @@ function renderSecurity() {
           <label class="st-label">${t('security.current_pass')}</label>
           <div class="st-input-wrap">
             <input class="st-input" type="password" id="input-current-password" placeholder="••••••••">
-            <button class="st-eye-btn" data-target="input-current-password">👁</button>
+            <button class="st-eye-btn" data-target="input-current-password">${icon('eye', 15)}</button>
           </div>
         </div>
         <div class="st-field">
           <label class="st-label">${t('security.new_pass')}</label>
           <div class="st-input-wrap">
             <input class="st-input" type="password" id="input-new-password" placeholder="••••••••">
-            <button class="st-eye-btn" data-target="input-new-password">👁</button>
+            <button class="st-eye-btn" data-target="input-new-password">${icon('eye', 15)}</button>
           </div>
           <span class="st-hint">${t('security.new_pass_hint')}</span>
           <div class="st-strength-bar" id="strength-bar">
@@ -405,14 +400,14 @@ function renderSecurity() {
           <label class="st-label">${t('security.confirm_pass')}</label>
           <div class="st-input-wrap">
             <input class="st-input" type="password" id="input-confirm-password" placeholder="••••••••">
-            <button class="st-eye-btn" data-target="input-confirm-password">👁</button>
+            <button class="st-eye-btn" data-target="input-confirm-password">${icon('eye', 15)}</button>
           </div>
         </div>
       </div>
 
       <div class="st-actions">
         <button class="st-btn st-btn-primary" id="change-password-btn">
-          <span class="st-btn-icon">🔑</span> ${t('security.change_btn')}
+          ${icon('passwords', 15)} ${t('security.change_btn')}
         </button>
       </div>
 
@@ -420,7 +415,7 @@ function renderSecurity() {
 
       <h3 class="st-section-label">${t('security.sessions')}</h3>
       <div class="st-session-row">
-        <div class="st-session-icon">🖥</div>
+        <div class="st-session-icon">${icon('laptop', 22)}</div>
         <div class="st-session-info">
           <div class="st-session-name">WorkHub Desktop</div>
           <div class="st-session-meta">${t('security.sessions_desc')} · ${new Date().toLocaleDateString('uk-UA')}</div>
@@ -439,13 +434,13 @@ function renderPayments(profile) {
     <div class="st-panel">
       <div class="st-panel-header">
         <div>
-          <h2 class="st-panel-title">💳 Прийом онлайн-оплати</h2>
+          <h2 class="st-panel-title">Прийом онлайн-оплати</h2>
           <p class="st-panel-subtitle">LiqPay — отримуй оплату від клієнтів без ФОП і юридичних формальностей</p>
         </div>
       </div>
 
-      <div class="st-info-card" style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:24px;display:flex;gap:14px;align-items:flex-start">
-        <span style="font-size:22px;flex-shrink:0">ℹ️</span>
+      <div class="st-info-card">
+        <div class="st-info-card-icon">${icon('support', 22)}</div>
         <div style="font-size:13px;color:var(--text-secondary);line-height:1.6">
           <b style="color:var(--text-primary)">Як отримати ключі безкоштовно:</b><br>
           1. Зареєструйся на <b>liqpay.ua</b> зі звичайним акаунтом ПриватБанку — ФОП не потрібен<br>
@@ -471,13 +466,13 @@ function renderPayments(profile) {
       </div>
 
       ${hasPub && hasPriv ? `
-      <div style="display:flex;align-items:center;gap:8px;margin-top:4px;margin-bottom:4px;font-size:13px;color:#34D399">
-        ✅ Ключі налаштовано — кнопка "Посилання на оплату" активна у рахунках
+      <div class="st-keys-active">
+        ${icon('check', 14)} Ключі налаштовано — кнопка "Посилання на оплату" активна у рахунках
       </div>` : ''}
 
       <div class="st-actions">
         <button class="st-btn st-btn-primary" id="save-payments-btn">
-          <span class="st-btn-icon">💾</span> Зберегти ключі
+          ${icon('download', 15)} Зберегти ключі
         </button>
       </div>
     </div>
@@ -488,9 +483,9 @@ function renderPayments(profile) {
 function renderSubscription(profile) {
   const plan = profile?.plan || 'free'
   const plans = [
-    { id: 'free',     icon: '🆓', name: 'FREE',     price: '0 грн',    descKey: 'sub.free_desc',  color: '#94A3B8' },
-    { id: 'pro',      icon: '⭐', name: 'PRO',      price: '299 грн',  descKey: 'sub.pro_desc',   color: '#4F8EF7' },
-    { id: 'business', icon: '🏢', name: 'BUSINESS', price: '799 грн',  descKey: 'sub.biz_desc',   color: '#A78BFA' },
+    { id: 'free',     svgIcon: icon('join', 28),     name: 'FREE',     price: '0 грн',   descKey: 'sub.free_desc',  color: '#94A3B8' },
+    { id: 'pro',      svgIcon: icon('upgrade', 28),  name: 'PRO',      price: '299 грн', descKey: 'sub.pro_desc',   color: '#4F8EF7' },
+    { id: 'business', svgIcon: icon('business', 28), name: 'BUSINESS', price: '799 грн', descKey: 'sub.biz_desc',   color: '#A78BFA' },
   ]
 
   return `
@@ -507,14 +502,14 @@ function renderSubscription(profile) {
 
       ${profile?.subscriptionEnd ? `
         <div class="st-sub-expiry">
-          📅 ${t('sub.expires')} <strong>${new Date(profile.subscriptionEnd).toLocaleDateString('uk-UA')}</strong>
+          ${icon('tax-calendar', 14)} ${t('sub.expires')} <strong>${new Date(profile.subscriptionEnd).toLocaleDateString('uk-UA')}</strong>
         </div>
       ` : ''}
 
       <div class="st-plans-grid">
         ${plans.map(p => `
           <div class="st-plan-card ${plan === p.id ? 'current' : ''}" style="--plan-color:${p.color}">
-            <div class="st-plan-icon">${p.icon}</div>
+            <div class="st-plan-icon">${p.svgIcon}</div>
             <div class="st-plan-name" style="color:${p.color}">${p.name}</div>
             <div class="st-plan-price">${p.price}<span class="st-plan-period">/міс</span></div>
             <div class="st-plan-desc">${t(p.descKey)}</div>
@@ -530,7 +525,7 @@ function renderSubscription(profile) {
 
       <div class="st-actions">
         <button class="st-btn st-btn-primary" id="manage-sub-btn">
-          💳 ${t('sub.manage')}
+          ${icon('credit-card', 15)} ${t('sub.manage')}
         </button>
       </div>
     </div>
@@ -550,7 +545,7 @@ function renderDanger() {
 
       <div class="st-danger-card">
         <div class="st-danger-row">
-          <div class="st-danger-icon">↪</div>
+          <div class="st-danger-icon">${icon('logout', 20)}</div>
           <div class="st-danger-info">
             <div class="st-danger-title">${t('danger.logout_title')}</div>
             <div class="st-danger-desc">${t('danger.logout_desc')}</div>
@@ -561,7 +556,7 @@ function renderDanger() {
         <div class="st-danger-divider"></div>
 
         <div class="st-danger-row">
-          <div class="st-danger-icon st-danger-icon-red">🗑</div>
+          <div class="st-danger-icon st-danger-icon-red">${icon('trash', 20)}</div>
           <div class="st-danger-info">
             <div class="st-danger-title">${t('danger.delete_title')}</div>
             <div class="st-danger-desc">${t('danger.delete_desc')}</div>
@@ -571,7 +566,7 @@ function renderDanger() {
       </div>
 
       <div class="st-notice st-notice-warn" style="margin-top:20px">
-        <span>⚠️</span>
+        ${icon('alert-triangle', 14)}
         <span>Видалення акаунта призведе до безповоротної втрати всіх ваших даних, включаючи клієнтів, проекти, рахунки та інше.</span>
       </div>
     </div>
@@ -588,18 +583,18 @@ function getNotifSettings() {
 function renderNotifications() {
   const s = getNotifSettings()
   const rows = [
-    { id: 'task_due',     icon: '📋', title: 'Дедлайни задач',       desc: 'Нагадування за день до дедлайну' },
-    { id: 'tax_calendar', icon: '📅', title: 'Податковий календар',   desc: 'Нагадування про звіти та платежі' },
-    { id: 'new_client',   icon: '👤', title: 'Новий клієнт',          desc: 'Сповіщення про нові записи клієнтів' },
-    { id: 'invoice_paid', icon: '💰', title: 'Оплата рахунку',        desc: 'Коли рахунок позначено як оплачений' },
-    { id: 'team_updates', icon: '👥', title: 'Оновлення команди',     desc: 'Дії учасників у спільному просторі' },
+    { id: 'task_due',     iconName: 'tasks',        title: 'Дедлайни задач',     desc: 'Нагадування за день до дедлайну' },
+    { id: 'tax_calendar', iconName: 'tax-calendar', title: 'Податковий календар', desc: 'Нагадування про звіти та платежі' },
+    { id: 'new_client',   iconName: 'clients',      title: 'Новий клієнт',        desc: 'Сповіщення про нові записи клієнтів' },
+    { id: 'invoice_paid', iconName: 'invoices',     title: 'Оплата рахунку',      desc: 'Коли рахунок позначено як оплачений' },
+    { id: 'team_updates', iconName: 'team',         title: 'Оновлення команди',   desc: 'Дії учасників у спільному просторі' },
   ]
 
   return `
     <div class="st-panel">
       <div class="st-panel-header">
         <div>
-          <h2 class="st-panel-title">🔔 Сповіщення</h2>
+          <h2 class="st-panel-title">Сповіщення</h2>
           <p class="st-panel-subtitle">Обирайте, про що отримувати нагадування</p>
         </div>
       </div>
@@ -608,7 +603,7 @@ function renderNotifications() {
       <div class="st-notif-list">
         ${rows.map(r => `
           <div class="st-notif-row">
-            <div class="st-notif-icon">${r.icon}</div>
+            <div class="st-notif-icon">${icon(r.iconName, 18)}</div>
             <div class="st-notif-info">
               <div class="st-notif-title">${r.title}</div>
               <div class="st-notif-desc">${r.desc}</div>
@@ -626,7 +621,7 @@ function renderNotifications() {
       <h3 class="st-section-label">Email</h3>
       <div class="st-notif-list">
         <div class="st-notif-row">
-          <div class="st-notif-icon">📧</div>
+          <div class="st-notif-icon">${icon('documents', 18)}</div>
           <div class="st-notif-info">
             <div class="st-notif-title">Email-дайджест</div>
             <div class="st-notif-desc">Щотижневий звіт про активність</div>
@@ -637,7 +632,7 @@ function renderNotifications() {
           </label>
         </div>
         <div class="st-notif-row">
-          <div class="st-notif-icon">🔐</div>
+          <div class="st-notif-icon">${icon('passwords', 18)}</div>
           <div class="st-notif-info">
             <div class="st-notif-title">Безпека акаунта</div>
             <div class="st-notif-desc">Вхід з нового пристрою, зміна пароля</div>
@@ -651,7 +646,7 @@ function renderNotifications() {
 
       <div class="st-actions">
         <button class="st-btn st-btn-primary" id="save-notif-btn">
-          <span class="st-btn-icon">💾</span> Зберегти налаштування
+          ${icon('download', 15)} Зберегти налаштування
         </button>
       </div>
     </div>
@@ -665,7 +660,7 @@ function attachNotifications(content) {
       if (!el.disabled) s[el.dataset.notif] = el.checked
     })
     localStorage.setItem(NOTIF_KEY, JSON.stringify(s))
-    showToast('Налаштування збережено ✓', 'success')
+    showToast('Налаштування збережено', 'success')
   })
 }
 
@@ -684,7 +679,6 @@ function attachTabEvents(content, tab, profile, user) {
 }
 
 function attachProfile(content, profile, user) {
-  // ── Особисті дані ──────────────────────────────────────────
   content.querySelector('#save-profile-btn')?.addEventListener('click', async () => {
     const name  = content.querySelector('#input-name').value.trim()
     const phone = content.querySelector('#input-phone').value.trim()
@@ -693,7 +687,7 @@ function attachProfile(content, profile, user) {
 
     const btn = content.querySelector('#save-profile-btn')
     btn.disabled = true
-    btn.innerHTML = `<span class="st-btn-icon">⏳</span> ${t('common.saving')}`
+    btn.innerHTML = `<div class="spinner" style="width:14px;height:14px"></div> ${t('common.saving')}`
 
     try {
       const data = { name, phone, city, updatedAt: serverTimestamp() }
@@ -705,11 +699,10 @@ function attachProfile(content, profile, user) {
       showToast(t('profile.error'), 'error')
     } finally {
       btn.disabled = false
-      btn.innerHTML = `<span class="st-btn-icon">💾</span> ${t('profile.save')}`
+      btn.innerHTML = `${icon('download', 15)} ${t('profile.save')}`
     }
   })
 
-  // ── Вибір ніші ─────────────────────────────────────────────
   let selectedNiche = profile?.profession || null
 
   content.querySelectorAll('.st-niche-card').forEach(card => {
@@ -720,7 +713,6 @@ function attachProfile(content, profile, user) {
     })
   })
 
-  // ── Бізнес дані ────────────────────────────────────────────
   content.querySelector('#save-business-btn')?.addEventListener('click', async () => {
     const businessName = content.querySelector('#input-business')?.value.trim()
     const website      = content.querySelector('#input-website')?.value.trim()
@@ -731,7 +723,7 @@ function attachProfile(content, profile, user) {
 
     const btn = content.querySelector('#save-business-btn')
     btn.disabled = true
-    btn.innerHTML = `<span class="st-btn-icon">⏳</span> ${t('common.saving')}`
+    btn.innerHTML = `<div class="spinner" style="width:14px;height:14px"></div> ${t('common.saving')}`
 
     try {
       const data = {
@@ -744,19 +736,18 @@ function attachProfile(content, profile, user) {
       await updateDoc(doc(db, 'users', user.uid), data)
       updateProfileCache(user.uid, data)
 
-      // Оновлюємо sidebar з новою нішею
       const { renderNavigation } = await import('../../components/navigation.js')
       const updatedProfile = { ...profile, ...data }
       const sidebar = document.getElementById('sidebar')
       if (sidebar) renderNavigation(sidebar, updatedProfile)
 
-      showToast('Бізнес збережено! Меню оновлено 🎉', 'success')
+      showToast('Бізнес збережено. Меню оновлено', 'success')
     } catch (err) {
       console.error(err)
       showToast(t('profile.error'), 'error')
     } finally {
       btn.disabled = false
-      btn.innerHTML = `<span class="st-btn-icon">🏢</span> Зберегти та оновити меню`
+      btn.innerHTML = `${icon('business', 15)} Зберегти та оновити меню`
     }
   })
 }
@@ -768,26 +759,23 @@ function attachLanguage(content) {
     card.addEventListener('click', () => {
       selectedLang = card.dataset.lang
       content.querySelectorAll('.st-lang-card').forEach(c => c.classList.remove('active'))
-      content.querySelectorAll('.st-check-circle').forEach(c => { c.classList.remove('checked'); c.textContent = '' })
+      content.querySelectorAll('.st-check-circle').forEach(c => { c.classList.remove('checked'); c.innerHTML = '' })
       card.classList.add('active')
       const circle = card.querySelector('.st-check-circle')
       circle.classList.add('checked')
-      circle.textContent = '✓'
+      circle.innerHTML = icon('check', 11)
     })
   })
 
   content.querySelector('#save-lang-btn')?.addEventListener('click', async () => {
     setLang(selectedLang)
 
-    // Save to Firestore
     try {
       const u = getCurrentUser()
       if (u) await updateDoc(doc(db, 'users', u.uid), { language: selectedLang })
     } catch { /* non-critical */ }
 
     showToast(t('lang.saved'), 'success')
-
-    // Re-render the entire settings page after a moment
     setTimeout(() => navigate('settings'), 500)
   })
 }
@@ -807,7 +795,7 @@ function attachAppearance(content) {
       badge.className = 'st-theme-active-badge'
       badge.textContent = 'Активна'
       card.appendChild(badge)
-      showToast('Тему змінено ✓', 'success')
+      showToast('Тему змінено', 'success')
     })
   })
 
@@ -823,16 +811,14 @@ function attachAppearance(content) {
       btn.classList.add('active')
       const chk = document.createElement('div')
       chk.className = 'st-accent-check'
-      chk.textContent = '✓'
+      chk.innerHTML = icon('check', 10)
       btn.appendChild(chk)
-      showToast('Колір акценту змінено ✓', 'success')
+      showToast('Колір акценту змінено', 'success')
     })
   })
-
 }
 
 function attachSecurity(content, user) {
-  // Password strength
   content.querySelector('#input-new-password')?.addEventListener('input', (e) => {
     const val = e.target.value
     const fill  = content.querySelector('#strength-fill')
@@ -861,13 +847,12 @@ function attachSecurity(content, user) {
     label.style.color = lvl.color
   })
 
-  // Show/hide password toggle
   content.querySelectorAll('.st-eye-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const input = content.querySelector(`#${btn.dataset.target}`)
       if (!input) return
       input.type = input.type === 'password' ? 'text' : 'password'
-      btn.textContent = input.type === 'password' ? '👁' : '🙈'
+      btn.innerHTML = input.type === 'password' ? icon('eye', 15) : icon('eye-off', 15)
     })
   })
 
@@ -917,19 +902,19 @@ function attachPayments(content, user) {
 
     const btn = content.querySelector('#save-payments-btn')
     btn.disabled = true
-    btn.innerHTML = '<span class="st-btn-icon">⏳</span> Збереження...'
+    btn.innerHTML = `<div class="spinner" style="width:14px;height:14px"></div> Збереження...`
 
     try {
       const data = { liqpayPublicKey: pub, liqpayPrivateKey: priv, updatedAt: serverTimestamp() }
       await updateDoc(doc(db, 'users', user.uid), data)
       updateProfileCache(user.uid, data)
-      showToast('Ключі збережено ✅', 'success')
+      showToast('Ключі збережено', 'success')
     } catch (err) {
       console.error(err)
       showToast('Помилка збереження', 'error')
     } finally {
       btn.disabled = false
-      btn.innerHTML = '<span class="st-btn-icon">💾</span> Зберегти ключі'
+      btn.innerHTML = `${icon('download', 15)} Зберегти ключі`
     }
   })
 }
@@ -1020,12 +1005,17 @@ function injectStyles() {
       display: flex; align-items: center; gap: 10px;
       padding: 10px 14px; border-radius: var(--radius-md);
       background: none; border: none; cursor: pointer;
-      font-size: 14px; font-weight: 500; color: var(--text-secondary);
+      font-size: 13.5px; font-weight: 500; color: var(--text-secondary);
       text-align: left; transition: all .15s; width: 100%;
     }
     .st-tab:hover { background: var(--bg-tertiary); color: var(--text-primary); }
-    .st-tab.active { background: rgba(79,142,247,.12); color: var(--accent-blue); font-weight: 700; }
-    .st-tab-icon  { font-size: 16px; width: 22px; text-align: center; flex-shrink: 0; }
+    .st-tab.active { background: rgba(91,141,239,.12); color: var(--accent-blue); font-weight: 700; }
+    .st-tab-icon {
+      width: 22px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .st-tab-icon svg { opacity: 0.8; }
+    .st-tab.active .st-tab-icon svg { opacity: 1; }
     .st-tab-label { flex: 1; }
 
     .st-sidebar-footer { padding: 16px 20px 0; border-top: 1px solid var(--border); margin-top: 16px; }
@@ -1034,7 +1024,7 @@ function injectStyles() {
       font-size: 11px; font-weight: 800; letter-spacing: .06em;
     }
     .st-plan-free     { background: rgba(148,163,184,.15); color: #94A3B8; }
-    .st-plan-pro      { background: rgba(79,142,247,.15);  color: var(--accent-blue); }
+    .st-plan-pro      { background: rgba(91,141,239,.15);  color: var(--accent-blue); }
     .st-plan-business { background: rgba(167,139,250,.15); color: #A78BFA; }
 
     /* ── Content panel ── */
@@ -1045,15 +1035,14 @@ function injectStyles() {
       height: calc(100vh - 40px);
       box-sizing: border-box;
     }
-    .st-panel {}
     .st-panel-header {
       display: flex; align-items: flex-start;
       justify-content: space-between; gap: 12px;
       margin-bottom: 28px;
     }
     .st-panel-title {
-      font-family: var(--font-display); font-size: 24px; font-weight: 800;
-      margin-bottom: 4px;
+      font-family: var(--font-display); font-size: 22px; font-weight: 800;
+      margin-bottom: 4px; letter-spacing: -0.02em;
     }
     .st-panel-subtitle { font-size: 13px; color: var(--text-muted); }
 
@@ -1076,12 +1065,12 @@ function injectStyles() {
     /* ── Form ── */
     .st-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
     .st-field { display: flex; flex-direction: column; gap: 6px; }
-    .st-label { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+    .st-label { font-size: 12.5px; font-weight: 600; color: var(--text-secondary); }
     .st-input {
       width: 100%; box-sizing: border-box;
-      padding: 11px 14px; background: var(--bg-secondary);
+      padding: 10px 14px; background: var(--bg-secondary);
       border: 1.5px solid var(--border); border-radius: var(--radius-md);
-      font-size: 14px; color: var(--text-primary);
+      font-size: 13.5px; color: var(--text-primary);
       transition: border-color .15s; outline: none;
       font-family: inherit;
     }
@@ -1092,18 +1081,22 @@ function injectStyles() {
       font-size: 13px; color: var(--text-secondary);
       background: var(--bg-tertiary); cursor: default;
     }
-    .st-input-icon { font-size: 14px; }
+    .st-input-readonly svg { color: var(--text-muted); flex-shrink: 0; }
     .st-input-wrap { position: relative; }
     .st-input-wrap .st-input { width: 100%; padding-right: 44px; box-sizing: border-box; }
     .st-input-lock {
       position: absolute; right: 12px; top: 50%;
-      transform: translateY(-50%); font-size: 14px; pointer-events: none;
+      transform: translateY(-50%); pointer-events: none;
+      display: flex; align-items: center; color: var(--text-muted);
     }
     .st-eye-btn {
       position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
-      background: none; border: none; cursor: pointer; font-size: 15px;
-      padding: 4px; line-height: 1;
+      background: none; border: none; cursor: pointer;
+      padding: 4px; display: flex; align-items: center;
+      color: var(--text-muted); border-radius: var(--radius-sm);
+      transition: color .15s, background .15s;
     }
+    .st-eye-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
     .st-hint { font-size: 11px; color: var(--text-muted); }
     .st-divider { height: 1px; background: var(--border); }
     .st-section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-muted); margin-bottom: 14px; }
@@ -1112,16 +1105,15 @@ function injectStyles() {
     .st-actions { margin-top: 24px; display: flex; gap: 10px; }
     .st-btn {
       display: inline-flex; align-items: center; gap: 8px;
-      padding: 11px 22px; border-radius: var(--radius-md);
-      font-size: 14px; font-weight: 700; cursor: pointer;
+      padding: 10px 20px; border-radius: var(--radius-md);
+      font-size: 13.5px; font-weight: 700; cursor: pointer;
       border: none; transition: all .18s;
     }
-    .st-btn-icon { font-size: 15px; }
     .st-btn-primary {
-      background: linear-gradient(135deg,#667eea,#4F8EF7);
+      background: linear-gradient(135deg,#667eea,#5B8DEF);
       color: #fff;
     }
-    .st-btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(79,142,247,.4); }
+    .st-btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(91,141,239,.4); }
     .st-btn-primary:disabled { opacity: .6; transform: none; box-shadow: none; }
     .st-btn-ghost {
       background: var(--bg-secondary); border: 1.5px solid var(--border);
@@ -1146,7 +1138,7 @@ function injectStyles() {
       cursor: pointer; transition: all .15s; text-align: left; width: 100%;
     }
     .st-lang-card:hover { border-color: rgba(255,255,255,.2); }
-    .st-lang-card.active { border-color: var(--accent-blue); background: rgba(79,142,247,.07); }
+    .st-lang-card.active { border-color: var(--accent-blue); background: rgba(91,141,239,.07); }
     .st-lang-flag  { font-size: 28px; flex-shrink: 0; }
     .st-lang-info  { flex: 1; }
     .st-lang-name  { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
@@ -1155,8 +1147,7 @@ function injectStyles() {
     .st-check-circle {
       width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--border);
       display: flex; align-items: center; justify-content: center;
-      font-size: 12px; font-weight: 800; color: transparent;
-      transition: all .15s;
+      transition: all .15s; color: transparent;
     }
     .st-check-circle.checked {
       background: var(--accent-blue); border-color: var(--accent-blue);
@@ -1176,8 +1167,8 @@ function injectStyles() {
       height: 80px; border-radius: var(--radius-md); overflow: hidden;
       display: flex; margin-bottom: 10px;
     }
-    .st-theme-preview-dark  { background: #0F1117; }
-    .st-theme-preview-light { background: #F8FAFC; }
+    .st-theme-preview-dark   { background: #0F1117; }
+    .st-theme-preview-light  { background: #F8FAFC; }
     .st-theme-preview-system { background: linear-gradient(to right, #0F1117 50%, #F8FAFC 50%); }
     .st-preview-sidebar { width: 26px; background: rgba(255,255,255,.08); flex-shrink: 0; }
     .st-theme-preview-light .st-preview-sidebar { background: rgba(0,0,0,.06); }
@@ -1187,7 +1178,8 @@ function injectStyles() {
     .st-preview-cards   { display: flex; gap: 4px; flex: 1; }
     .st-preview-card    { flex: 1; border-radius: 4px; background: rgba(255,255,255,.07); }
     .st-theme-preview-light .st-preview-card { background: rgba(0,0,0,.07); }
-    .st-theme-label { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; margin-bottom: 3px; }
+    .st-theme-label { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; margin-bottom: 3px; color: var(--text-primary); }
+    .st-theme-label svg { color: var(--text-muted); }
     .st-theme-desc  { font-size: 11px; color: var(--text-muted); }
     .st-theme-active-badge {
       position: absolute; top: 8px; right: 8px;
@@ -1206,8 +1198,9 @@ function injectStyles() {
     .st-accent-btn.active { border-color: var(--ac, #fff); }
     .st-accent-dot  { width: 22px; height: 22px; border-radius: 50%; }
     .st-accent-check {
-      position: absolute; font-size: 11px; font-weight: 800; color: #fff;
-      text-shadow: 0 1px 2px rgba(0,0,0,.6); pointer-events: none;
+      position: absolute; display: flex; align-items: center; justify-content: center;
+      color: #fff; pointer-events: none;
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,.5));
     }
 
     /* ── Security ── */
@@ -1217,7 +1210,7 @@ function injectStyles() {
       border-radius: var(--radius-md); padding: 14px 16px;
       margin-bottom: 24px;
     }
-    .st-security-alert-icon { font-size: 22px; flex-shrink: 0; }
+    .st-security-alert-icon { flex-shrink: 0; display: flex; align-items: center; color: #FBBF24; }
     .st-security-alert-text { font-size: 13px; line-height: 1.5; }
     .st-strength-bar {
       height: 4px; background: var(--bg-tertiary); border-radius: 2px;
@@ -1230,7 +1223,7 @@ function injectStyles() {
       padding: 14px 16px; background: var(--bg-secondary);
       border: 1px solid var(--border); border-radius: var(--radius-md);
     }
-    .st-session-icon  { font-size: 22px; }
+    .st-session-icon  { display: flex; align-items: center; color: var(--text-muted); }
     .st-session-info  { flex: 1; }
     .st-session-name  { font-size: 14px; font-weight: 600; }
     .st-session-meta  { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
@@ -1238,6 +1231,19 @@ function injectStyles() {
       font-size: 11px; font-weight: 800; padding: 3px 10px;
       border-radius: var(--radius-full); background: rgba(52,211,153,.15); color: #34D399;
     }
+
+    /* ── Payments ── */
+    .st-info-card {
+      background: var(--bg-tertiary); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 16px 20px;
+      margin-bottom: 24px; display: flex; gap: 14px; align-items: flex-start;
+    }
+    .st-info-card-icon { flex-shrink: 0; display: flex; align-items: center; color: var(--accent-blue); }
+    .st-keys-active {
+      display: flex; align-items: center; gap: 8px;
+      margin: 8px 0; font-size: 13px; color: #34D399; font-weight: 500;
+    }
+    .st-keys-active svg { flex-shrink: 0; }
 
     /* ── Subscription ── */
     .st-plans-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; margin-bottom: 24px; }
@@ -1248,9 +1254,9 @@ function injectStyles() {
       transition: all .2s; position: relative;
     }
     .st-plan-card.current { border-color: var(--plan-color); background: color-mix(in srgb, var(--plan-color) 6%, var(--bg-secondary)); }
-    .st-plan-icon { font-size: 28px; }
+    .st-plan-icon { display: flex; align-items: center; color: var(--plan-color, var(--text-muted)); }
     .st-plan-name { font-size: 11px; font-weight: 800; letter-spacing: .08em; }
-    .st-plan-price { font-family: var(--font-display); font-size: 28px; font-weight: 800; line-height: 1; }
+    .st-plan-price { font-family: var(--font-display); font-size: 26px; font-weight: 800; line-height: 1; }
     .st-plan-period { font-size: 13px; font-weight: 400; color: var(--text-muted); }
     .st-plan-desc { font-size: 12px; color: var(--text-muted); line-height: 1.5; flex: 1; }
     .st-plan-current-badge {
@@ -1266,10 +1272,12 @@ function injectStyles() {
     }
     .st-plan-status-badge.active { background: rgba(52,211,153,.15); color: #34D399; }
     .st-sub-expiry {
+      display: flex; align-items: center; gap: 8px;
       padding: 10px 14px; background: var(--bg-secondary);
       border: 1px solid var(--border); border-radius: var(--radius-md);
-      font-size: 13px; margin-bottom: 20px;
+      font-size: 13px; margin-bottom: 20px; color: var(--text-secondary);
     }
+    .st-sub-expiry svg { color: var(--text-muted); flex-shrink: 0; }
 
     /* ── Danger ── */
     .st-danger-card {
@@ -1279,8 +1287,11 @@ function injectStyles() {
     }
     .st-danger-row { display: flex; align-items: center; gap: 14px; padding: 20px 22px; }
     .st-danger-divider { height: 1px; background: rgba(239,68,68,.15); }
-    .st-danger-icon { font-size: 22px; flex-shrink: 0; width: 32px; text-align: center; }
-    .st-danger-icon-red { filter: hue-rotate(0deg); }
+    .st-danger-icon {
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; width: 32px; color: var(--text-muted);
+    }
+    .st-danger-icon-red { color: var(--accent-red); }
     .st-danger-info { flex: 1; }
     .st-danger-title { font-size: 14px; font-weight: 700; margin-bottom: 3px; }
     .st-danger-desc { font-size: 12px; color: var(--text-muted); }
@@ -1288,12 +1299,14 @@ function injectStyles() {
     /* ── Notice ── */
     .st-notice {
       display: flex; align-items: flex-start; gap: 10px;
-      padding: 12px 14px; background: rgba(79,142,247,.08);
-      border: 1px solid rgba(79,142,247,.2); border-radius: var(--radius-md);
+      padding: 12px 14px; background: rgba(91,141,239,.08);
+      border: 1px solid rgba(91,141,239,.2); border-radius: var(--radius-md);
       font-size: 12px; color: var(--text-secondary); line-height: 1.5;
     }
+    .st-notice svg { flex-shrink: 0; margin-top: 1px; }
     .st-notice-warn {
       background: rgba(251,191,36,.08); border-color: rgba(251,191,36,.25);
+      color: #FBBF24;
     }
 
     /* ── Toast ── */
@@ -1301,13 +1314,13 @@ function injectStyles() {
       position: fixed; bottom: 24px; right: 24px; z-index: 9999;
       padding: 12px 20px; border-radius: var(--radius-md);
       background: var(--bg-secondary); border: 1px solid var(--border);
-      box-shadow: var(--shadow-xl); font-size: 14px; font-weight: 600;
+      box-shadow: var(--shadow-xl); font-size: 13.5px; font-weight: 600;
       transform: translateY(20px); opacity: 0; transition: all .25s;
     }
     .st-toast-show { transform: translateY(0); opacity: 1; }
     .st-toast-success { border-left: 4px solid #34D399; }
     .st-toast-error   { border-left: 4px solid #F87171; }
-    .st-toast-info    { border-left: 4px solid #4F8EF7; }
+    .st-toast-info    { border-left: 4px solid #5B8DEF; }
 
     /* ── Niche cards ── */
     .st-niche-grid { display: flex; flex-direction: column; gap: 8px; }
@@ -1322,7 +1335,11 @@ function injectStyles() {
       border-color: var(--nc);
       background: color-mix(in srgb, var(--nc) 8%, var(--bg-secondary));
     }
-    .st-niche-icon  { font-size: 22px; flex-shrink: 0; width: 28px; text-align: center; }
+    .st-niche-icon {
+      flex-shrink: 0; width: 28px;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--nc);
+    }
     .st-niche-body  { flex: 1; min-width: 0; }
     .st-niche-title { font-size: 14px; font-weight: 700; margin-bottom: 2px; }
     .st-niche-desc  { font-size: 11px; color: var(--text-muted); }
@@ -1330,7 +1347,7 @@ function injectStyles() {
       width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
       background: var(--bg-tertiary); border: 2px solid var(--border);
       display: flex; align-items: center; justify-content: center;
-      font-size: 11px; font-weight: 800; color: transparent; transition: all .2s;
+      color: transparent; transition: all .2s;
     }
     .st-niche-card.active .st-niche-check {
       background: var(--nc); border-color: var(--nc); color: #fff;
@@ -1348,7 +1365,11 @@ function injectStyles() {
       transition: background .15s;
     }
     .st-notif-row:hover { background: var(--bg-secondary); }
-    .st-notif-icon  { font-size: 20px; flex-shrink: 0; width: 28px; text-align: center; }
+    .st-notif-icon {
+      flex-shrink: 0; width: 28px;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-muted);
+    }
     .st-notif-info  { flex: 1; min-width: 0; }
     .st-notif-title { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
     .st-notif-desc  { font-size: 12px; color: var(--text-muted); }
@@ -1382,7 +1403,7 @@ function injectStyles() {
       .st-tabs { flex-direction: row; gap: 4px; flex: none; padding: 0; }
       .st-tab-label { display: none; }
       .st-sidebar-footer { display: none; }
-      .st-content { padding: 20px; }
+      .st-content { padding: 20px; height: auto; }
       .st-form-grid { grid-template-columns: 1fr; }
       .st-theme-grid { grid-template-columns: 1fr; }
       .st-plans-grid { grid-template-columns: 1fr; }

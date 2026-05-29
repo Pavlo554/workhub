@@ -1,4 +1,5 @@
 // src/renderer/modules/appointments/index.js
+import { icon } from '../../utils/icons.js'
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getActivePathSegments } from '../../services/auth.js'
 import {
@@ -369,7 +370,7 @@ function injectStyles() {
       color: var(--text-secondary, #94A3B8);
       font-size: 14px;
     }
-    .ap-empty-icon { font-size: 40px; margin-bottom: 12px; }
+    .ap-empty-icon { display: flex; align-items: center; justify-content: center; margin-bottom: 12px; color: var(--text-muted, #64748B); opacity: .4; }
 
     /* ── Right panel (detail) ── */
     .ap-right {
@@ -401,7 +402,7 @@ function injectStyles() {
       color: var(--text-secondary, #94A3B8);
       text-align: center;
     }
-    .ap-right-empty-icon { font-size: 48px; opacity: .4; }
+    .ap-right-empty-icon { display: flex; align-items: center; justify-content: center; opacity: .4; color: var(--text-muted, #64748B); }
     .ap-right-empty p { font-size: 14px; margin: 0; }
 
     /* ── Detail panel ── */
@@ -456,7 +457,7 @@ function injectStyles() {
       margin-bottom: 6px;
     }
     .ap-d-row-icon {
-      font-size: 16px;
+      display: flex; align-items: center; justify-content: center; color: var(--text-muted, #64748B);
       width: 22px;
       text-align: center;
       flex-shrink: 0;
@@ -663,7 +664,7 @@ export async function render(container) {
       </div>
       <div class="ap-right">
         <div class="ap-right-empty">
-          <div class="ap-right-empty-icon">🗓</div>
+          <div class="ap-right-empty-icon">${icon('calendar', 36)}</div>
           <p>Завантаження...</p>
         </div>
       </div>
@@ -757,7 +758,7 @@ export async function render(container) {
     const list = filtered()
     if (!list.length) return `
       <div class="ap-empty">
-        <div class="ap-empty-icon">📭</div>
+        <div class="ap-empty-icon">${icon('calendar', 40)}</div>
         <div>Записів не знайдено</div>
       </div>`
 
@@ -809,14 +810,14 @@ export async function render(container) {
           <div class="ap-d-title">${escHtml(ap.clientName || '—')}</div>
           <div class="ap-d-sub">${fmtDateTime(ap.date, ap.time)}</div>
         </div>
-        <button class="ap-d-close" id="ap-d-close">✕</button>
+        <button class="ap-d-close" id="ap-d-close">${icon('x', 14)}</button>
       </div>
 
       <span class="ap-d-badge" style="background:${sm.bg};color:${sm.color}">${sm.label}</span>
 
       <div class="ap-d-section">
         <div class="ap-d-row">
-          <div class="ap-d-row-icon">📅</div>
+          <div class="ap-d-row-icon">${icon('calendar', 14)}</div>
           <div class="ap-d-row-body">
             <div class="ap-d-row-label">Дата та час</div>
             <div class="ap-d-row-value">${fmtDateTime(ap.date, ap.time)}</div>
@@ -824,7 +825,7 @@ export async function render(container) {
         </div>
         ${ap.duration ? `
         <div class="ap-d-row">
-          <div class="ap-d-row-icon">⏱</div>
+          <div class="ap-d-row-icon">${icon('timer', 14)}</div>
           <div class="ap-d-row-body">
             <div class="ap-d-row-label">Тривалість</div>
             <div class="ap-d-row-value">${ap.duration} хв</div>
@@ -832,7 +833,7 @@ export async function render(container) {
         </div>` : ''}
         ${ap.service ? `
         <div class="ap-d-row">
-          <div class="ap-d-row-icon">💅</div>
+          <div class="ap-d-row-icon">${icon('briefcase', 14)}</div>
           <div class="ap-d-row-body">
             <div class="ap-d-row-label">Послуга</div>
             <div class="ap-d-row-value">${escHtml(ap.service)}</div>
@@ -840,7 +841,7 @@ export async function render(container) {
         </div>` : ''}
         ${ap.phone ? `
         <div class="ap-d-row">
-          <div class="ap-d-row-icon">📞</div>
+          <div class="ap-d-row-icon">${icon('phone', 14)}</div>
           <div class="ap-d-row-body">
             <div class="ap-d-row-label">Телефон</div>
             <div class="ap-d-row-value">${escHtml(ap.phone)}</div>
@@ -848,7 +849,7 @@ export async function render(container) {
         </div>` : ''}
         ${ap.price ? `
         <div class="ap-d-row">
-          <div class="ap-d-row-icon">💰</div>
+          <div class="ap-d-row-icon">${icon('finances', 14)}</div>
           <div class="ap-d-row-body">
             <div class="ap-d-row-label">Вартість</div>
             <div class="ap-d-row-value">₴${Number(ap.price).toLocaleString('uk-UA')}</div>
@@ -856,7 +857,7 @@ export async function render(container) {
         </div>` : ''}
         ${ap.notes ? `
         <div class="ap-d-row">
-          <div class="ap-d-row-icon">📝</div>
+          <div class="ap-d-row-icon">${icon('notes', 14)}</div>
           <div class="ap-d-row-body">
             <div class="ap-d-row-label">Нотатки</div>
             <div class="ap-d-row-value">${escHtml(ap.notes)}</div>
@@ -872,9 +873,9 @@ export async function render(container) {
 
       <div class="ap-d-actions">
         ${ap.status === 'scheduled' ? `
-        <button class="ap-d-btn ap-d-btn-complete" data-complete="${ap.id}">✓ Позначити завершеним</button>` : ''}
-        <button class="ap-d-btn ap-d-btn-edit" data-edit="${ap.id}">✏ Редагувати</button>
-        <button class="ap-d-btn ap-d-btn-delete" data-delete="${ap.id}">🗑 Видалити запис</button>
+        <button class="ap-d-btn ap-d-btn-complete" data-complete="${ap.id}">${icon('check-circle', 13)} Позначити завершеним</button>` : ''}
+        <button class="ap-d-btn ap-d-btn-edit" data-edit="${ap.id}">${icon('pencil', 13)} Редагувати</button>
+        <button class="ap-d-btn ap-d-btn-delete" data-delete="${ap.id}">${icon('trash', 13)} Видалити запис</button>
       </div>
     `
   }
@@ -906,8 +907,8 @@ export async function render(container) {
 
             <div class="ap-toolbar">
               <div class="ap-view-tabs">
-                <button class="ap-view-tab${viewMode==='week'?' active':''}" data-view="week">📅 Тиждень</button>
-                <button class="ap-view-tab${viewMode==='list'?' active':''}" data-view="list">☰ Список</button>
+                <button class="ap-view-tab${viewMode==='week'?' active':''}" data-view="week">${icon('calendar', 12)} Тиждень</button>
+                <button class="ap-view-tab${viewMode==='list'?' active':''}" data-view="list">${icon('list', 12)} Список</button>
               </div>
               ${viewMode === 'week' ? `
               <div class="ap-week-nav">
@@ -937,7 +938,7 @@ export async function render(container) {
           ${selectedId && appointments.find(a=>a.id===selectedId)
             ? `<div class="ap-right-scroll">${renderDetail(appointments.find(a=>a.id===selectedId))}</div>`
             : `<div class="ap-right-empty">
-                <div class="ap-right-empty-icon">🗓</div>
+                <div class="ap-right-empty-icon">${icon('calendar', 36)}</div>
                 <p>Виберіть запис зі списку<br>або створіть новий</p>
                </div>`}
         </div>

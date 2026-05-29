@@ -1,5 +1,6 @@
 // src/renderer/pages/team/index.js
 import { getCurrentUser, getUserProfile, updateProfileCache } from '../../services/auth.js'
+import { icon } from '../../utils/icons.js'
 import {
   ensureWorkspace, getWorkspace, getMembers, getPendingInvites,
   createInvite, deleteInvite, removeMember, updateMember, updateWorkspaceName,
@@ -7,21 +8,21 @@ import {
 
 // Всі доступні модулі для призначення
 const ALL_MODULES = [
-  { id: 'dashboard',    icon: '⊞', label: 'Дашборд' },
-  { id: 'clients',      icon: '👥', label: 'Клієнти' },
-  { id: 'projects',     icon: '📁', label: 'Проекти' },
-  { id: 'invoices',     icon: '📄', label: 'Рахунки' },
-  { id: 'contracts',    icon: '📝', label: 'Договори' },
-  { id: 'tasks',        icon: '✓',  label: 'Задачі' },
-  { id: 'timer',        icon: '⏱',  label: 'Таймер' },
-  { id: 'finances',     icon: '💰', label: 'Фінанси' },
-  { id: 'tax-calendar', icon: '📅', label: 'Податки' },
-  { id: 'appointments', icon: '🗓', label: 'Розклад' },
-  { id: 'services',     icon: '💅', label: 'Послуги' },
-  { id: 'content-plan', icon: '📱', label: 'Контент' },
-  { id: 'accounts',     icon: '🔗', label: 'Акаунти' },
-  { id: 'passwords',    icon: '🔑', label: 'Паролі' },
-  { id: 'notes',        icon: '🗒', label: 'Нотатки' },
+  { id: 'dashboard',    label: 'Дашборд' },
+  { id: 'clients',      label: 'Клієнти' },
+  { id: 'projects',     label: 'Проекти' },
+  { id: 'invoices',     label: 'Рахунки' },
+  { id: 'contracts',    label: 'Договори' },
+  { id: 'tasks',        label: 'Задачі' },
+  { id: 'timer',        label: 'Таймер' },
+  { id: 'finances',     label: 'Фінанси' },
+  { id: 'tax-calendar', label: 'Податки' },
+  { id: 'appointments', label: 'Розклад' },
+  { id: 'services',     label: 'Послуги' },
+  { id: 'content-plan', label: 'Контент' },
+  { id: 'accounts',     label: 'Акаунти' },
+  { id: 'passwords',    label: 'Паролі' },
+  { id: 'notes',        label: 'Нотатки' },
 ]
 
 export async function render(container) {
@@ -43,7 +44,7 @@ export async function render(container) {
     <div class="tm-page">
       <div class="tm-header">
         <div>
-          <h1 class="tm-title">👥 Команда</h1>
+          <h1 class="tm-title">${icon('team', 22)} Команда</h1>
           <p class="tm-sub">Керуйте учасниками та їх доступом до розділів</p>
         </div>
         <button class="btn btn-primary" id="tm-invite-btn">+ Запросити учасника</button>
@@ -58,7 +59,7 @@ export async function render(container) {
       <div class="tm-modal">
         <div class="tm-modal-head">
           <h2>Запросити учасника</h2>
-          <button class="tm-close" id="tm-invite-close">✕</button>
+          <button class="tm-close" id="tm-invite-close">${icon('x', 14)}</button>
         </div>
         <div class="tm-modal-body">
           <label class="tm-label">Посада / роль <span class="tm-req">*</span></label>
@@ -69,7 +70,7 @@ export async function render(container) {
               <label class="tm-module-check">
                 <input type="checkbox" value="${m.id}" checked>
                 <span class="tm-module-box">
-                  <span class="tm-module-icon">${m.icon}</span>
+                  <span class="tm-module-icon">${icon(m.id, 13)}</span>
                   <span>${m.label}</span>
                 </span>
               </label>
@@ -80,7 +81,7 @@ export async function render(container) {
               <div class="tm-code-label">Код запрошення</div>
               <div class="tm-code-row">
                 <div class="tm-code" id="tm-code-display">------</div>
-                <button class="btn btn-secondary" id="tm-copy-btn">📋 Скопіювати</button>
+                <button class="btn btn-secondary" id="tm-copy-btn">${icon('copy', 14)} Скопіювати</button>
               </div>
               <div class="tm-code-hint">Поділіться цим кодом з учасником. Він вводить його в розділі «Приєднатись до команди».</div>
             </div>
@@ -98,7 +99,7 @@ export async function render(container) {
       <div class="tm-modal">
         <div class="tm-modal-head">
           <h2>Редагувати доступ</h2>
-          <button class="tm-close" id="tm-edit-close">✕</button>
+          <button class="tm-close" id="tm-edit-close">${icon('x', 14)}</button>
         </div>
         <div class="tm-modal-body">
           <label class="tm-label">Посада / роль</label>
@@ -134,9 +135,9 @@ export async function render(container) {
       <!-- Workspace name -->
       <div class="tm-ws-row">
         <div class="tm-ws-name-wrap">
-          <span class="tm-ws-icon">🏢</span>
+          <span class="tm-ws-icon">${icon('briefcase', 18)}</span>
           <span class="tm-ws-name" id="tm-ws-name">${workspace?.name || 'Моя команда'}</span>
-          <button class="tm-ws-edit" id="tm-ws-edit-btn" title="Перейменувати">✏️</button>
+          <button class="tm-ws-edit" id="tm-ws-edit-btn" title="Перейменувати">${icon('pencil', 13)}</button>
         </div>
         <div class="tm-ws-meta">${members.length} учасник${plural(members.length)}</div>
       </div>
@@ -157,8 +158,8 @@ export async function render(container) {
               <div class="tm-invite-code">${i.code}</div>
               <div class="tm-invite-role">${i.role}</div>
               <div class="tm-invite-mods">${(i.modules || []).length} розділів</div>
-              <button class="tm-invite-copy" data-code="${i.code}" title="Скопіювати код">📋</button>
-              <button class="tm-invite-del"  data-code="${i.code}" title="Видалити запрошення">✕</button>
+              <button class="tm-invite-copy" data-code="${i.code}" title="Скопіювати код">${icon('copy', 13)}</button>
+              <button class="tm-invite-del"  data-code="${i.code}" title="Видалити запрошення">${icon('x', 13)}</button>
             </div>
           `).join('')}
         </div>
@@ -211,7 +212,7 @@ export async function render(container) {
           <div class="tm-member-mods">${mods}</div>
         </div>
         <div class="tm-member-actions">
-          <button class="btn btn-secondary tm-member-edit" data-uid="${m.id}">✏️ Доступ</button>
+          <button class="btn btn-secondary tm-member-edit" data-uid="${m.id}">${icon('edit', 13)} Доступ</button>
           <button class="btn btn-ghost tm-member-remove" data-uid="${m.id}" data-name="${m.name}">Видалити</button>
         </div>
       </div>
@@ -280,7 +281,7 @@ export async function render(container) {
       <label class="tm-module-check">
         <input type="checkbox" value="${m.id}" ${(member.modules || []).includes(m.id) ? 'checked' : ''}>
         <span class="tm-module-box">
-          <span class="tm-module-icon">${m.icon}</span>
+          <span class="tm-module-icon">${icon(m.id, 13)}</span>
           <span>${m.label}</span>
         </span>
       </label>
@@ -358,9 +359,9 @@ function injectStyles() {
 
     .tm-ws-row      { display: flex; align-items: center; justify-content: space-between; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 20px; margin-bottom: 24px; }
     .tm-ws-name-wrap { display: flex; align-items: center; gap: 10px; }
-    .tm-ws-icon     { font-size: 20px; }
+    .tm-ws-icon     { display:flex; align-items:center; color:var(--accent-blue); }
     .tm-ws-name     { font-size: 17px; font-weight: 700; }
-    .tm-ws-edit     { background: none; border: none; cursor: pointer; font-size: 14px; opacity: .5; transition: opacity .2s; }
+    .tm-ws-edit     { display:flex; align-items:center; background: none; border: none; cursor: pointer; color:var(--text-muted); opacity: .5; transition: opacity .2s; }
     .tm-ws-edit:hover { opacity: 1; }
     .tm-ws-meta     { font-size: 13px; color: var(--text-secondary); }
 
@@ -396,8 +397,9 @@ function injectStyles() {
     .tm-invite-role  { flex: 1; font-size: 13px; font-weight: 600; }
     .tm-invite-mods  { font-size: 12px; color: var(--text-muted); }
     .tm-invite-copy, .tm-invite-del {
+      display:flex; align-items:center;
       background: none; border: 1px solid var(--border); border-radius: 6px;
-      padding: 4px 8px; cursor: pointer; font-size: 13px; transition: all .2s;
+      padding: 5px 8px; cursor: pointer; color:var(--text-secondary); transition: all .2s;
     }
     .tm-invite-copy:hover { background: var(--bg-tertiary); }
     .tm-invite-del:hover  { background: rgba(239,68,68,.1); border-color: #F87171; color: #F87171; }

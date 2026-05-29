@@ -2,6 +2,7 @@
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getUserProfile, updateProfileCache } from '../../services/auth.js'
 import { navigate } from '../../../core/router.js'
+import { icon } from '../../utils/icons.js'
 import { doc, updateDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
 export async function render(container) {
@@ -21,7 +22,7 @@ export async function render(container) {
         <div class="role-grid">
 
           <div class="role-card" data-role="owner">
-            <div class="role-card-icon">🏢</div>
+            <div class="role-card-icon">${icon('briefcase', 36)}</div>
             <div class="role-card-body">
               <div class="role-card-title">Я власник бізнесу</div>
               <div class="role-card-desc">
@@ -35,11 +36,11 @@ export async function render(container) {
                 <span class="role-tag">ФОП</span>
               </div>
             </div>
-            <div class="role-card-check">✓</div>
+            <div class="role-card-check">${icon('check', 11)}</div>
           </div>
 
           <div class="role-card" data-role="worker">
-            <div class="role-card-icon">👤</div>
+            <div class="role-card-icon">${icon('user', 36)}</div>
             <div class="role-card-body">
               <div class="role-card-title">Я учасник команди</div>
               <div class="role-card-desc">
@@ -53,7 +54,7 @@ export async function render(container) {
                 <span class="role-tag">Співробітник</span>
               </div>
             </div>
-            <div class="role-card-check">✓</div>
+            <div class="role-card-check">${icon('check', 11)}</div>
           </div>
 
         </div>
@@ -158,9 +159,18 @@ function injectStyles() {
     }
 
     .role-card-icon {
-      font-size: 40px;
-      margin-bottom: 16px;
-      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 56px; height: 56px;
+      border-radius: 14px;
+      background: var(--bg-tertiary);
+      color: var(--accent-blue);
+      margin-bottom: 18px;
+    }
+    .role-card.selected .role-card-icon {
+      background: rgba(91,141,239,.15);
+      color: var(--accent-blue);
     }
     .role-card-title {
       font-family: var(--font-display);
@@ -204,8 +214,6 @@ function injectStyles() {
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 12px;
-      font-weight: 700;
       color: transparent;
       transition: all .2s;
     }

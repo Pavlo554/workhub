@@ -1,15 +1,16 @@
 // src/renderer/modules/templates/index.js
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getActivePathSegments } from '../../services/auth.js'
+import { icon } from '../../utils/icons.js'
 import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
 const CATS = [
-  { id: 'invoice',  label: 'Рахунок',   icon: '📄', color: '#4F8EF7' },
-  { id: 'contract', label: 'Договір',   icon: '📝', color: '#A78BFA' },
-  { id: 'proposal', label: 'КП',        icon: '💼', color: '#34D399' },
-  { id: 'email',    label: 'Email',     icon: '📧', color: '#F59E0B' },
-  { id: 'message',  label: 'Повідомлення', icon: '💬', color: '#F472B6' },
-  { id: 'other',    label: 'Інше',      icon: '📋', color: '#94A3B8' },
+  { id: 'invoice',  label: 'Рахунок',      color: '#4F8EF7' },
+  { id: 'contract', label: 'Договір',      color: '#A78BFA' },
+  { id: 'proposal', label: 'КП',           color: '#34D399' },
+  { id: 'email',    label: 'Email',        color: '#F59E0B' },
+  { id: 'message',  label: 'Повідомлення', color: '#F472B6' },
+  { id: 'other',    label: 'Інше',         color: '#94A3B8' },
 ]
 
 export async function render(container) {
@@ -36,7 +37,7 @@ export async function render(container) {
       <div class="tpl-page">
         <div class="tpl-header">
           <div>
-            <h1 class="tpl-title">📋 Шаблони</h1>
+            <h1 class="tpl-title">Шаблони</h1>
             <p class="tpl-subtitle">${templates.length} шаблонів · швидке копіювання тексту</p>
           </div>
           <button class="tpl-add-btn" id="tpl-add">+ Шаблон</button>
@@ -47,12 +48,12 @@ export async function render(container) {
           ${CATS.map(c => {
             const cnt = templates.filter(t => t.category === c.id).length
             if (!cnt && activeCat !== c.id) return ''
-            return `<button class="tpl-cat ${activeCat === c.id ? 'active' : ''}" data-cat="${c.id}" style="${activeCat === c.id ? `--cc:${c.color}` : ''}">${c.icon} ${c.label} (${cnt})</button>`
+            return `<button class="tpl-cat ${activeCat === c.id ? 'active' : ''}" data-cat="${c.id}" style="${activeCat === c.id ? `--cc:${c.color}` : ''}">${c.label} (${cnt})</button>`
           }).join('')}
           ${CATS.map(c => {
             const cnt = templates.filter(t => t.category === c.id).length
             if (cnt) return ''
-            return `<button class="tpl-cat ${activeCat === c.id ? 'active' : ''}" data-cat="${c.id}">${c.icon} ${c.label}</button>`
+            return `<button class="tpl-cat ${activeCat === c.id ? 'active' : ''}" data-cat="${c.id}">${c.label}</button>`
           }).join('')}
         </div>
 
@@ -63,12 +64,12 @@ export async function render(container) {
             return `
               <div class="tpl-card">
                 <div class="tpl-card-head" style="border-left:3px solid ${cat.color}">
-                  <div class="tpl-card-cat" style="color:${cat.color};background:${cat.color}15">${cat.icon} ${cat.label}</div>
+                  <div class="tpl-card-cat" style="color:${cat.color};background:${cat.color}15">${cat.label}</div>
                   <div class="tpl-card-btns">
-                    <button class="tpl-cb tpl-copy" data-id="${t.id}" title="Копіювати">📋</button>
-                    <button class="tpl-cb tpl-view" data-id="${t.id}" title="Переглянути">👁</button>
-                    <button class="tpl-cb tpl-edit" data-id="${t.id}" title="Редагувати">✏️</button>
-                    <button class="tpl-cb tpl-del"  data-id="${t.id}" title="Видалити">🗑</button>
+                    <button class="tpl-cb tpl-copy" data-id="${t.id}" title="Копіювати">${icon('copy', 12)}</button>
+                    <button class="tpl-cb tpl-view" data-id="${t.id}" title="Переглянути">${icon('eye', 12)}</button>
+                    <button class="tpl-cb tpl-edit" data-id="${t.id}" title="Редагувати">${icon('pencil', 12)}</button>
+                    <button class="tpl-cb tpl-del"  data-id="${t.id}" title="Видалити">${icon('trash', 12)}</button>
                   </div>
                 </div>
                 <div class="tpl-card-name">${t.name}</div>
@@ -79,7 +80,7 @@ export async function render(container) {
           }).join('')}
         </div>` : `
         <div class="tpl-empty">
-          <div style="font-size:52px;margin-bottom:12px">📋</div>
+          <div style="display:flex;align-items:center;justify-content:center;margin-bottom:12px;color:var(--text-muted)">${icon('templates', 48)}</div>
           <div class="tpl-empty-title">Шаблонів ще немає</div>
           <div class="tpl-empty-desc">Створіть перший шаблон — текст договору, рахунку або листа</div>
           <button class="tpl-add-btn" id="tpl-add-empty">+ Створити шаблон</button>
@@ -92,8 +93,8 @@ export async function render(container) {
           <div class="tpl-modal-head">
             <h2 id="tpl-view-title">—</h2>
             <div style="display:flex;gap:8px">
-              <button class="tpl-btn-pri" id="tpl-view-copy">📋 Копіювати</button>
-              <button class="tpl-modal-close" id="tpl-view-close">✕</button>
+              <button class="tpl-btn-pri" id="tpl-view-copy">${icon('copy', 14)} Копіювати</button>
+              <button class="tpl-modal-close" id="tpl-view-close">${icon('x', 14)}</button>
             </div>
           </div>
           <div class="tpl-modal-body">
@@ -107,7 +108,7 @@ export async function render(container) {
         <div class="tpl-modal">
           <div class="tpl-modal-head">
             <h2 id="tpl-edit-title">Новий шаблон</h2>
-            <button class="tpl-modal-close" id="tpl-edit-close">✕</button>
+            <button class="tpl-modal-close" id="tpl-edit-close">${icon('x', 14)}</button>
           </div>
           <div class="tpl-modal-body">
             <div class="tpl-field">
@@ -117,7 +118,7 @@ export async function render(container) {
             <div class="tpl-field">
               <label>Категорія</label>
               <select id="tpl-f-cat" class="tpl-input">
-                ${CATS.map(c => `<option value="${c.id}">${c.icon} ${c.label}</option>`).join('')}
+                ${CATS.map(c => `<option value="${c.id}">${c.label}</option>`).join('')}
               </select>
             </div>
             <div class="tpl-field">
@@ -133,7 +134,7 @@ export async function render(container) {
         </div>
       </div>
 
-      <div class="tpl-copy-toast" id="tpl-toast">✓ Скопійовано!</div>
+      <div class="tpl-copy-toast" id="tpl-toast">${icon('check', 14)} Скопійовано!</div>
     `
 
     attachEvents()
@@ -258,10 +259,10 @@ export async function render(container) {
       <div class="tpl-modal tpl-fill-modal">
         <div class="tpl-modal-head">
           <div>
-            <div class="tpl-fill-cat" style="color:${cat.color}">${cat.icon} ${cat.label}</div>
+            <div class="tpl-fill-cat" style="color:${cat.color}">${cat.label}</div>
             <h2 style="font-size:16px;margin-top:4px">${tpl.name}</h2>
           </div>
-          <button class="tpl-modal-close" id="tpl-fill-close">✕</button>
+          <button class="tpl-modal-close" id="tpl-fill-close">${icon('x', 14)}</button>
         </div>
 
         <div class="tpl-modal-body">
@@ -286,7 +287,7 @@ export async function render(container) {
 
         <div class="tpl-modal-foot">
           <button class="tpl-btn-sec" id="tpl-fill-skip">Копіювати без змін</button>
-          <button class="tpl-btn-pri" id="tpl-fill-copy">📋 Скопіювати</button>
+          <button class="tpl-btn-pri" id="tpl-fill-copy">${icon('copy', 14)} Скопіювати</button>
         </div>
       </div>
     `
@@ -357,11 +358,11 @@ function injectStyles() {
   const s = document.createElement('style')
   s.id = 'tpl-styles'
   s.textContent = `
-    .tpl-page { padding:28px 32px; max-width:1100px; }
+    .tpl-page { padding:28px 32px; }
     .tpl-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; }
-    .tpl-title { font-family:var(--font-display); font-size:24px; font-weight:800; margin-bottom:4px; }
+    .tpl-title { font-family:var(--font-display); font-size:26px; font-weight:800; margin-bottom:4px; }
     .tpl-subtitle { font-size:13px; color:var(--text-muted); }
-    .tpl-add-btn { padding:9px 20px; background:linear-gradient(135deg,#667eea,#4F8EF7); color:#fff; border:none; border-radius:var(--radius-md); font-size:13px; font-weight:700; cursor:pointer; }
+    .tpl-add-btn { padding:9px 22px; background:linear-gradient(135deg,#667eea,#4F8EF7); color:#fff; border:none; border-radius:var(--radius-md); font-size:13px; font-weight:700; cursor:pointer; transition:all .15s; }
     .tpl-add-btn:hover { transform:translateY(-1px); box-shadow:0 4px 14px rgba(79,142,247,.4); }
 
     .tpl-cats { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:20px; }
@@ -370,13 +371,16 @@ function injectStyles() {
     .tpl-cat.active { background:var(--cc,var(--accent-blue)); border-color:var(--cc,var(--accent-blue)); color:#fff; }
 
     .tpl-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px; }
-    .tpl-card { background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-xl); overflow:hidden; transition:all .15s; }
-    .tpl-card:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,.2); }
+    .tpl-card { background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-xl); overflow:hidden; transition:all .18s; }
+    .tpl-card:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,.2); border-color:rgba(255,255,255,.12); }
     .tpl-card-head { display:flex; justify-content:space-between; align-items:center; padding:12px 16px; background:var(--bg-tertiary); }
     .tpl-card-cat { font-size:11px; font-weight:700; padding:3px 9px; border-radius:var(--radius-full); }
-    .tpl-card-btns { display:flex; gap:4px; }
-    .tpl-cb { width:26px; height:26px; border-radius:6px; background:var(--bg-secondary); border:1px solid var(--border); cursor:pointer; font-size:12px; display:flex; align-items:center; justify-content:center; transition:all .15s; }
-    .tpl-cb:hover { background:var(--accent-blue); border-color:var(--accent-blue); }
+    .tpl-card-btns { display:flex; gap:4px; opacity:0; transition:opacity .15s; }
+    .tpl-card:hover .tpl-card-btns { opacity:1; }
+    .tpl-cb { width:28px; height:28px; border-radius:7px; background:var(--bg-secondary); border:1px solid var(--border); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all .15s; color:var(--text-muted); }
+    .tpl-cb:hover { background:var(--accent-blue); border-color:var(--accent-blue); color:#fff; }
+    .tpl-copy:hover { background:#34D399; border-color:#34D399; }
+    .tpl-del:hover  { background:#F87171; border-color:#F87171; }
     .tpl-card-name { font-size:14px; font-weight:700; padding:12px 16px 6px; }
     .tpl-card-preview { font-size:12px; color:var(--text-secondary); padding:0 16px 10px; line-height:1.5; white-space:pre-wrap; }
     .tpl-card-vars { display:flex; flex-wrap:wrap; gap:4px; padding:0 16px 12px; }
@@ -392,7 +396,7 @@ function injectStyles() {
     @keyframes tpl-in { from{opacity:0;transform:scale(.95)} to{opacity:1;transform:scale(1)} }
     .tpl-modal-head { display:flex; justify-content:space-between; align-items:center; padding:20px 22px 0; flex-shrink:0; }
     .tpl-modal-head h2 { font-family:var(--font-display); font-size:18px; font-weight:800; }
-    .tpl-modal-close { background:none; border:none; font-size:16px; color:var(--text-muted); cursor:pointer; padding:4px 8px; border-radius:6px; }
+    .tpl-modal-close { background:none; border:none; display:flex; align-items:center; justify-content:center; width:32px; height:32px; color:var(--text-muted); cursor:pointer; border-radius:6px; }
     .tpl-modal-close:hover { background:var(--bg-tertiary); color:var(--text-primary); }
     .tpl-modal-body { padding:18px 22px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:14px; }
     .tpl-modal-foot { padding:14px 22px; border-top:1px solid var(--border); display:flex; gap:8px; justify-content:flex-end; flex-shrink:0; }

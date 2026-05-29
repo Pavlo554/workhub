@@ -8,41 +8,42 @@ import {
   ensureWorkspace, getWorkspace, getMembers, getPendingInvites,
   createInvite, deleteInvite, removeMember, updateMember,
 } from '../../services/workspace.js'
+import { icon } from '../../utils/icons.js'
 
 const NICHES = [
-  { id: 'freelancer', icon: '💻', label: 'Фрілансер',        color: '#4F8EF7' },
-  { id: 'accountant', icon: '📊', label: 'Бухгалтер / ФОП',  color: '#34D399' },
-  { id: 'smm',        icon: '📱', label: 'SMM / Маркетолог',  color: '#A78BFA' },
-  { id: 'beauty',     icon: '💅', label: 'Салон краси',       color: '#F472B6' },
+  { id: 'freelancer', iconName: 'laptop',     label: 'Фрілансер',        color: '#4F8EF7' },
+  { id: 'accountant', iconName: 'bar-chart',  label: 'Бухгалтер / ФОП',  color: '#34D399' },
+  { id: 'smm',        iconName: 'smartphone', label: 'SMM / Маркетолог',  color: '#A78BFA' },
+  { id: 'beauty',     iconName: 'sparkles',   label: 'Салон краси',       color: '#F472B6' },
 ]
 
 const ALL_MODULES = [
-  { id: 'dashboard',        icon: '⊞', label: 'Дашборд' },
-  { id: 'clients',          icon: '👥', label: 'Клієнти' },
-  { id: 'projects',         icon: '📁', label: 'Проекти' },
-  { id: 'invoices',         icon: '📄', label: 'Рахунки' },
-  { id: 'contracts',        icon: '📝', label: 'Договори' },
-  { id: 'tasks',            icon: '✓',  label: 'Задачі' },
-  { id: 'timer',            icon: '⏱',  label: 'Таймер' },
-  { id: 'finances',         icon: '💰', label: 'Фінанси' },
-  { id: 'tax-calendar',     icon: '📅', label: 'Податки' },
-  { id: 'appointments',     icon: '🗓', label: 'Розклад' },
-  { id: 'services',         icon: '💅', label: 'Послуги' },
-  { id: 'content-plan',     icon: '📱', label: 'Контент' },
-  { id: 'accounts',         icon: '🔗', label: 'Акаунти' },
-  { id: 'passwords',        icon: '🔑', label: 'Паролі' },
-  { id: 'notes',            icon: '🗒', label: 'Нотатки' },
-  { id: 'documents',        icon: '📁', label: 'Документи' },
-  { id: 'api-keys',         icon: '🔗', label: 'API & Інтеграції' },
-  { id: 'kanban',           icon: '🗂', label: 'Kanban' },
-  { id: 'templates',        icon: '📋', label: 'Шаблони' },
-  { id: 'warehouse',        icon: '📦', label: 'Склад' },
-  { id: 'portfolio',        icon: '🖼', label: 'Портфоліо' },
-  { id: 'hr',               icon: '👔', label: 'Персонал' },
-  { id: 'client-analytics', icon: '📈', label: 'Аналітика' },
-  { id: 'currency',         icon: '💱', label: 'Валюти' },
-  { id: 'reports',          icon: '📊', label: 'Звіти' },
-  { id: 'support',          icon: '💬', label: 'Підтримка' },
+  { id: 'dashboard',        label: 'Дашборд' },
+  { id: 'clients',          label: 'Клієнти' },
+  { id: 'projects',         label: 'Проекти' },
+  { id: 'invoices',         label: 'Рахунки' },
+  { id: 'contracts',        label: 'Договори' },
+  { id: 'tasks',            label: 'Задачі' },
+  { id: 'timer',            label: 'Таймер' },
+  { id: 'finances',         label: 'Фінанси' },
+  { id: 'tax-calendar',     label: 'Податки' },
+  { id: 'appointments',     label: 'Розклад' },
+  { id: 'services',         label: 'Послуги' },
+  { id: 'content-plan',     label: 'Контент' },
+  { id: 'accounts',         label: 'Акаунти' },
+  { id: 'passwords',        label: 'Паролі' },
+  { id: 'notes',            label: 'Нотатки' },
+  { id: 'documents',        label: 'Документи' },
+  { id: 'api-keys',         label: 'API & Інтеграції' },
+  { id: 'kanban',           label: 'Kanban' },
+  { id: 'templates',        label: 'Шаблони' },
+  { id: 'warehouse',        label: 'Склад' },
+  { id: 'portfolio',        label: 'Портфоліо' },
+  { id: 'hr',               label: 'Персонал' },
+  { id: 'client-analytics', label: 'Аналітика' },
+  { id: 'currency',         label: 'Валюти' },
+  { id: 'reports',          label: 'Звіти' },
+  { id: 'support',          label: 'Підтримка' },
 ]
 
 // Modules that we load full docs for (to compute rich stats)
@@ -58,7 +59,7 @@ export async function render(container) {
   const profile = await getUserProfile(user.uid)
 
   if (profile?.accountType !== 'owner' && profile?.accountType !== undefined && !profile?.isWorkspaceOwner) {
-    container.innerHTML = `<div class="biz-empty-access"><div>🔒</div><p>Ця сторінка доступна тільки власнику бізнесу</p></div>`
+    container.innerHTML = `<div class="biz-empty-access"><div style="display:flex;justify-content:center;color:var(--text-muted)">${icon('x-circle', 40)}</div><p>Ця сторінка доступна тільки власнику бізнесу</p></div>`
     return
   }
 
@@ -220,12 +221,12 @@ function renderPage(container, ctx) {
           <div>
             <div class="biz-company-name">${profile?.businessName || 'Мій бізнес'}</div>
             <div class="biz-niche-badge" style="color:${niche.color};background:${niche.color}18;border-color:${niche.color}33">
-              ${niche.icon} ${niche.label}
+              ${icon(niche.iconName, 12)} ${niche.label}
             </div>
           </div>
         </div>
         <div class="biz-topbar-actions">
-          <button class="btn btn-secondary" id="biz-edit-btn">✏️ Редагувати</button>
+          <button class="btn btn-secondary" id="biz-edit-btn">${icon('edit', 14)} Редагувати</button>
           ${!profile?._isSecondary ? `<button class="btn btn-primary" id="biz-invite-btn">+ Запросити</button>` : `<button class="btn btn-primary" id="biz-invite-btn" style="display:none"></button>`}
         </div>
       </div>
@@ -233,7 +234,7 @@ function renderPage(container, ctx) {
       <!-- ── KPI рядок ── -->
       <div class="biz-kpi-row">
         <div class="biz-kpi-card biz-kpi--revenue">
-          <div class="biz-kpi-icon">💰</div>
+          <div class="biz-kpi-icon">${icon('finances', 24)}</div>
           <div class="biz-kpi-body">
             <div class="biz-kpi-label">Дохід цього місяця</div>
             <div class="biz-kpi-value">₴${stats.invoices.paidThisMonth.toLocaleString('uk-UA')}</div>
@@ -241,7 +242,7 @@ function renderPage(container, ctx) {
           </div>
         </div>
         <div class="biz-kpi-card biz-kpi--clients">
-          <div class="biz-kpi-icon">👥</div>
+          <div class="biz-kpi-icon">${icon('clients', 24)}</div>
           <div class="biz-kpi-body">
             <div class="biz-kpi-label">Клієнти</div>
             <div class="biz-kpi-value">${stats.clients.total}</div>
@@ -249,7 +250,7 @@ function renderPage(container, ctx) {
           </div>
         </div>
         <div class="biz-kpi-card biz-kpi--tasks">
-          <div class="biz-kpi-icon">✅</div>
+          <div class="biz-kpi-icon">${icon('check-circle', 24)}</div>
           <div class="biz-kpi-body">
             <div class="biz-kpi-label">${ownerModules.includes('tasks') ? 'Задачі' : 'Проекти'}</div>
             <div class="biz-kpi-value">${ownerModules.includes('tasks') ? `${stats.tasks.done} / ${stats.tasks.total}` : `${stats.projects.active} / ${stats.projects.total}`}</div>
@@ -257,7 +258,7 @@ function renderPage(container, ctx) {
           </div>
         </div>
         <div class="biz-kpi-card biz-kpi--team">
-          <div class="biz-kpi-icon">🏢</div>
+          <div class="biz-kpi-icon">${icon('team', 24)}</div>
           <div class="biz-kpi-body">
             <div class="biz-kpi-label">Команда & план</div>
             <div class="biz-kpi-value">${members.length + 1} осіб</div>
@@ -269,7 +270,7 @@ function renderPage(container, ctx) {
       <!-- ── Панель керування ── -->
       <div class="bcp-section">
         <div class="bcp-section-head">
-          <div class="bcp-section-title">📊 Панель керування</div>
+          <div class="bcp-section-title">${icon('bar-chart', 16)} Панель керування</div>
           <div class="bcp-section-sub">${ownerModules.length} активних модулів</div>
         </div>
         <div class="bcp-grid">
@@ -283,50 +284,41 @@ function renderPage(container, ctx) {
         <!-- Ліва: інфо + модулі -->
         <div class="biz-col-left">
           <div class="biz-card">
-            <div class="biz-card-title">📋 Інформація</div>
+            <div class="biz-card-title">${icon('info', 15)} Інформація</div>
             <div class="biz-info-list">
-              ${infoRow('👤', 'Власник', profile?.name || '—')}
-              ${infoRow('📧', 'Email',   profile?.email || '—')}
+              ${infoRow('user', 'Власник', profile?.name || '—')}
+              ${infoRow('mail', 'Email',   profile?.email || '—')}
               ${!profile?._isSecondary ? `
-                ${infoRow('📞', 'Телефон',   profile?.phone || '—')}
-                ${infoRow('🏙', 'Місто',     profile?.city || '—')}
-                ${infoRow('🌐', 'Сайт',      profile?.website || '—')}
-                ${infoRow('📸', 'Instagram', profile?.instagram ? '@' + profile.instagram : '—')}
-                ${profile?.tgChannel ? infoRow('✈️', 'Telegram', `<a href="https://t.me/${profile.tgChannel.replace(/^@/, '')}" target="_blank" class="biz-link">@${profile.tgChannel.replace(/^@/, '')}</a>`) : infoRow('✈️', 'Telegram', '—')}
+                ${infoRow('phone', 'Телефон',   profile?.phone || '—')}
+                ${infoRow('map-pin', 'Місто',     profile?.city || '—')}
+                ${infoRow('globe', 'Сайт',      profile?.website || '—')}
+                ${infoRow('globe', 'Instagram', profile?.instagram ? '@' + profile.instagram : '—')}
+                ${profile?.tgChannel ? infoRow('send', 'Telegram', `<a href="https://t.me/${profile.tgChannel.replace(/^@/, '')}" target="_blank" class="biz-link">@${profile.tgChannel.replace(/^@/, '')}</a>`) : infoRow('send', 'Telegram', '—')}
+                ${(() => {
+                  const cur = profile?.workingCurrency || 'uah'
+                  const labels = { usd: '$ Долари (USD)', eur: '€ Євро (EUR)', uah: '₴ Гривня (UAH)', crypto: `₿ Крипта${profile?.cryptoType ? ' · ' + profile.cryptoType : ''}` }
+                  return infoRow('finances', 'Валюта', labels[cur] || '₴ Гривня (UAH)')
+                })()}
               ` : `
                 <div class="biz-secondary-note">
-                  💡 Це окремий бізнес — контактні дані зберігаються в Редагувати
+                  Це окремий бізнес — контактні дані зберігаються в Редагувати
                 </div>
               `}
             </div>
           </div>
 
-          <div class="biz-card">
-            <div class="biz-card-title">🗂 Активні модулі</div>
-            <div class="biz-modules-list">
-              ${ownerModules.map(id => {
-                const m = ALL_MODULES.find(x => x.id === id)
-                if (!m) return ''
-                return `<div class="biz-module-row" data-route="${id}">
-                  <span class="biz-module-icon">${m.icon}</span>
-                  <span class="biz-module-label">${m.label}</span>
-                  <span class="biz-module-arrow">→</span>
-                </div>`
-              }).join('')}
-            </div>
-          </div>
         </div>
 
         <!-- Права: команда + telegram -->
         <div class="biz-col-right">
           <div class="biz-card">
             <div class="biz-card-header">
-              <div class="biz-card-title">👥 Команда</div>
+              <div class="biz-card-title">${icon('team', 15)} Команда</div>
               ${!profile?._isSecondary ? `<span class="biz-member-count">${members.length + 1} осіб</span>` : ''}
             </div>
             ${profile?._isSecondary
               ? `<div class="biz-secondary-team-note">
-                  <div class="biz-stn-icon">🏢</div>
+                  <div class="biz-stn-icon">${icon('briefcase', 22)}</div>
                   <div>
                     <div class="biz-stn-title">Окремий бізнес</div>
                     <div class="biz-stn-sub">Цей бізнес має власний ізольований простір. Команда управляється через головний акаунт.</div>
@@ -338,7 +330,7 @@ function renderPage(container, ctx) {
                   </div>
                   <div class="biz-member-info">
                     <div class="biz-member-name">${profile?.name || 'Власник'}</div>
-                    <div class="biz-member-role">🏢 Власник бізнесу</div>
+                    <div class="biz-member-role">${icon('briefcase', 12)} Власник бізнесу</div>
                   </div>
                   <div class="biz-member-access">
                     <span class="biz-access-badge biz-access-owner">Повний доступ</span>
@@ -350,7 +342,7 @@ function renderPage(container, ctx) {
                   </div>
                   <div class="biz-member-info">
                     <div class="biz-member-name">${profile?.name || 'Власник'}</div>
-                    <div class="biz-member-role">🏢 Власник бізнесу</div>
+                    <div class="biz-member-role">${icon('briefcase', 12)} Власник бізнесу</div>
                   </div>
                   <div class="biz-member-access">
                     <span class="biz-access-badge biz-access-owner">Повний доступ</span>
@@ -364,7 +356,7 @@ function renderPage(container, ctx) {
 
           ${invites.length > 0 ? `
             <div class="biz-card" style="margin-top:14px">
-              <div class="biz-card-title">⏳ Очікують вступу</div>
+              <div class="biz-card-title">${icon('timer', 15)} Очікують вступу</div>
               ${invites.map(i => `
                 <div class="biz-invite-row">
                   <div class="biz-invite-code">${i.code}</div>
@@ -372,8 +364,8 @@ function renderPage(container, ctx) {
                     <div class="biz-invite-role">${i.role}</div>
                     <div class="biz-invite-mods">${(i.modules || []).length} розділів</div>
                   </div>
-                  <button class="biz-invite-copy" data-code="${i.code}" title="Скопіювати">📋</button>
-                  <button class="biz-invite-del"  data-code="${i.code}" title="Видалити">✕</button>
+                  <button class="biz-invite-copy" data-code="${i.code}" title="Скопіювати">${icon('copy', 13)}</button>
+                  <button class="biz-invite-del"  data-code="${i.code}" title="Видалити">${icon('x', 13)}</button>
                 </div>
               `).join('')}
             </div>
@@ -381,7 +373,7 @@ function renderPage(container, ctx) {
 
           ${members.length === 0 ? `
             <div class="biz-card biz-tips-card" style="margin-top:14px">
-              <div class="biz-card-title">💡 Поради для старту</div>
+              <div class="biz-card-title">${icon('zap', 15)} Поради для старту</div>
               <div class="biz-tips-list">
                 <div class="biz-tip-row"><span class="biz-tip-num">1</span><div><div class="biz-tip-title">Заповніть інформацію</div><div class="biz-tip-desc">Додайте телефон, сайт та соцмережі</div></div></div>
                 <div class="biz-tip-row"><span class="biz-tip-num">2</span><div><div class="biz-tip-title">Запросіть команду</div><div class="biz-tip-desc">Натисніть «+ Запросити» і поділіться кодом</div></div></div>
@@ -390,19 +382,6 @@ function renderPage(container, ctx) {
             </div>
           ` : ''}
 
-          ${profile?.tgChannel ? `
-            <div class="biz-card tg-analytics-card" id="tg-analytics-card" style="margin-top:14px">
-              <div class="biz-card-header">
-                <div class="biz-card-title">✈️ Telegram канал</div>
-                <button class="tg-refresh-btn" id="tg-refresh-btn" title="Оновити">↻</button>
-              </div>
-              <div id="tg-analytics-body">
-                ${profile?.tgBotToken
-                  ? `<div class="tg-loading"><div class="spinner"></div></div>`
-                  : `<div class="tg-no-token"><p>Для аналітики потрібен токен бота Telegram.</p><p class="tg-hint">1. Створіть бота через @BotFather<br>2. Додайте бота до каналу як адміна<br>3. Вставте токен нижче і збережіть</p></div>`}
-              </div>
-            </div>
-          ` : ''}
         </div>
       </div>
     </div>
@@ -411,8 +390,8 @@ function renderPage(container, ctx) {
     <div class="biz-overlay" id="biz-edit-modal" style="display:none">
       <div class="biz-modal">
         <div class="biz-modal-head">
-          <h2>✏️ Редагувати бізнес</h2>
-          <button class="biz-modal-close" id="biz-edit-close">✕</button>
+          <h2>${icon('edit', 18)} Редагувати бізнес</h2>
+          <button class="biz-modal-close" id="biz-edit-close">${icon('x', 14)}</button>
         </div>
         <div class="biz-modal-body">
           <div class="biz-form-row">
@@ -442,23 +421,48 @@ function renderPage(container, ctx) {
           </div>
           <div class="biz-form-row2">
             <div>
-              <label class="biz-label">✈️ Telegram канал</label>
+              <label class="biz-label">Telegram канал</label>
               <input type="text" class="input" id="edit-biz-tgchannel" value="${profile?.tgChannel || ''}" placeholder="@mychannel">
             </div>
             <div>
-              <label class="biz-label">🤖 Токен бота</label>
+              <label class="biz-label">Токен бота</label>
               <input type="text" class="input" id="edit-biz-tgtoken" value="${profile?.tgBotToken || ''}" placeholder="123456:ABC-DEF...">
             </div>
           </div>
           ` : ''}
+          <div class="biz-form-section">
+            <label class="biz-label">Валюта розрахунків</label>
+            <div class="biz-currency-grid" id="edit-currency-grid">
+              ${[
+                { id: 'usd',    sym: '$',  label: 'Долари',   code: 'USD' },
+                { id: 'eur',    sym: '€',  label: 'Євро',     code: 'EUR' },
+                { id: 'uah',    sym: '₴',  label: 'Гривня',   code: 'UAH' },
+                { id: 'crypto', sym: '₿',  label: 'Крипта',   code: 'CRYPTO' },
+              ].map(c => `
+                <button class="biz-currency-btn ${(profile?.workingCurrency || 'uah') === c.id ? 'selected' : ''}" data-currency="${c.id}">
+                  <span class="biz-currency-sym">${c.sym}</span>
+                  <span class="biz-currency-name">${c.label}</span>
+                  <span class="biz-currency-code">${c.code}</span>
+                </button>
+              `).join('')}
+            </div>
+            <div class="biz-crypto-row" id="edit-crypto-row" style="display:${profile?.workingCurrency === 'crypto' ? 'flex' : 'none'}">
+              <label class="biz-label" style="margin-bottom:6px">Тип криптовалюти</label>
+              <div class="biz-crypto-grid" id="edit-crypto-grid">
+                ${['USDT TRC20','USDT ERC20','BTC','ETH','BNB','SOL','TON'].map(ct => `
+                  <button class="biz-crypto-btn ${(profile?.cryptoType || 'USDT TRC20') === ct ? 'selected' : ''}" data-crypto="${ct}">${ct}</button>
+                `).join('')}
+              </div>
+            </div>
+          </div>
           <label class="biz-label" style="margin-top:16px">Сфера діяльності</label>
           <div class="biz-niche-grid" id="edit-niche-grid">
             ${NICHES.map(n => `
               <div class="biz-niche-card ${profile?.profession === n.id ? 'selected' : ''}" data-niche="${n.id}" style="--nc:${n.color}">
-                <span>${n.icon}</span><span>${n.label}</span>
+                <span>${icon(n.iconName, 14)}</span><span>${n.label}</span>
               </div>`).join('')}
             <div class="biz-niche-card biz-niche-custom ${!profile?.profession || !NICHES.find(n=>n.id===profile?.profession) ? 'selected' : ''}" data-niche="custom" style="--nc:#A78BFA;grid-column:span 2">
-              <span>✦</span><span>Інша ніша — вибрати модулі вручну</span>
+              <span>${icon('settings', 14)}</span><span>Інша ніша — вибрати модулі вручну</span>
             </div>
           </div>
           <label class="biz-label" style="margin-top:16px">Активні модулі</label>
@@ -466,7 +470,7 @@ function renderPage(container, ctx) {
             ${ALL_MODULES.filter(m => m.id !== 'dashboard').map(m => {
               const active = profile?.selectedModules?.includes(m.id) || config.modules.includes(m.id)
               return `<label class="biz-mod-toggle ${active ? 'active' : ''}" data-mod="${m.id}">
-                <span>${m.icon}</span><span>${m.label}</span><span class="biz-mod-chk">✓</span>
+                <span>${icon(m.id, 12)}</span><span>${m.label}</span><span class="biz-mod-chk">${icon('check', 9)}</span>
               </label>`
             }).join('')}
           </div>
@@ -482,8 +486,8 @@ function renderPage(container, ctx) {
     <div class="biz-overlay" id="biz-invite-modal" style="display:none">
       <div class="biz-modal">
         <div class="biz-modal-head">
-          <h2>👥 Запросити учасника</h2>
-          <button class="biz-modal-close" id="biz-invite-close">✕</button>
+          <h2>${icon('team', 18)} Запросити учасника</h2>
+          <button class="biz-modal-close" id="biz-invite-close">${icon('x', 14)}</button>
         </div>
         <div class="biz-modal-body">
           <div class="biz-form-row">
@@ -495,14 +499,14 @@ function renderPage(container, ctx) {
             ${ownerModules.map(id => ALL_MODULES.find(x => x.id === id)).filter(Boolean).map(m => `
               <label class="biz-check-item">
                 <input type="checkbox" value="${m.id}" checked>
-                <span class="biz-check-box"><span>${m.icon}</span><span>${m.label}</span></span>
+                <span class="biz-check-box"><span>${icon(m.id, 12)}</span><span>${m.label}</span></span>
               </label>`).join('')}
           </div>
           <div id="inv-code-result" style="display:none">
             <div class="biz-code-block">
               <div class="biz-code-label">Код запрошення</div>
               <div class="biz-code-display" id="inv-code-val">------</div>
-              <button class="btn btn-secondary" id="inv-copy-btn">📋 Скопіювати</button>
+              <button class="btn btn-secondary" id="inv-copy-btn">${icon('copy', 13)} Скопіювати</button>
               <div class="biz-code-hint">Поділіться цим кодом з учасником.</div>
             </div>
           </div>
@@ -518,8 +522,8 @@ function renderPage(container, ctx) {
     <div class="biz-overlay" id="biz-member-modal" style="display:none">
       <div class="biz-modal">
         <div class="biz-modal-head">
-          <h2>✏️ Редагувати учасника</h2>
-          <button class="biz-modal-close" id="biz-member-close">✕</button>
+          <h2>${icon('edit', 18)} Редагувати учасника</h2>
+          <button class="biz-modal-close" id="biz-member-close">${icon('x', 14)}</button>
         </div>
         <div class="biz-modal-body">
           <div class="biz-form-row">
@@ -530,7 +534,7 @@ function renderPage(container, ctx) {
           <div class="biz-modules-check" id="member-modules-grid"></div>
         </div>
         <div class="biz-modal-foot">
-          <button class="btn btn-ghost biz-remove-btn" id="member-remove-btn">🗑 Видалити з команди</button>
+          <button class="btn btn-ghost biz-remove-btn" id="member-remove-btn">${icon('x-circle', 14)} Видалити з команди</button>
           <button class="btn btn-secondary" id="biz-member-cancel">Скасувати</button>
           <button class="btn btn-primary"   id="biz-member-save">Зберегти</button>
         </div>
@@ -675,7 +679,7 @@ function renderModuleCard(id, stats, counts, richData) {
     <div class="bcp-card" data-route="${id}" style="--bcp-color:${color}">
       <div class="bcp-card-top">
         <div class="bcp-header">
-          <span class="bcp-icon">${meta.icon}</span>
+          <span class="bcp-icon">${icon(meta.id, 16)}</span>
           <span class="bcp-title">${meta.label}</span>
         </div>
         <div class="bcp-main-value">${mainValue}</div>
@@ -700,7 +704,7 @@ function renderModuleCard(id, stats, counts, richData) {
 function memberRow(m) {
   const mods = (m.modules || []).slice(0, 4).map(id => {
     const meta = ALL_MODULES.find(x => x.id === id)
-    return meta ? `<span class="biz-mod-chip" title="${meta.label}">${meta.icon}</span>` : ''
+    return meta ? `<span class="biz-mod-chip" title="${meta.label}">${icon(id, 14)}</span>` : ''
   }).join('')
   const extra = (m.modules || []).length > 4 ? `<span class="biz-mod-more">+${m.modules.length - 4}</span>` : ''
   return `
@@ -711,14 +715,14 @@ function memberRow(m) {
         <div class="biz-member-role">${m.role || '—'}</div>
       </div>
       <div class="biz-member-mods">${mods}${extra}</div>
-      <button class="biz-member-edit-btn" data-uid="${m.id}" title="Редагувати">✏️</button>
+      <button class="biz-member-edit-btn" data-uid="${m.id}" title="Редагувати">${icon('edit', 13)}</button>
     </div>`
 }
 
-function infoRow(icon, label, value) {
+function infoRow(iconName, label, value) {
   return `
     <div class="biz-info-row">
-      <span class="biz-info-icon">${icon}</span>
+      <span class="biz-info-icon">${icon(iconName, 14)}</span>
       <span class="biz-info-label">${label}</span>
       <span class="biz-info-value">${value}</span>
     </div>`
@@ -770,6 +774,22 @@ function bindEvents(container, ctxIn) {
     el.addEventListener('click', () => el.classList.toggle('active'))
   })
 
+  container.querySelector('#edit-currency-grid')?.addEventListener('click', e => {
+    const btn = e.target.closest('.biz-currency-btn')
+    if (!btn) return
+    container.querySelectorAll('#edit-currency-grid .biz-currency-btn').forEach(b => b.classList.remove('selected'))
+    btn.classList.add('selected')
+    const cryptoRow = container.querySelector('#edit-crypto-row')
+    if (cryptoRow) cryptoRow.style.display = btn.dataset.currency === 'crypto' ? 'flex' : 'none'
+  })
+
+  container.querySelector('#edit-crypto-grid')?.addEventListener('click', e => {
+    const btn = e.target.closest('.biz-crypto-btn')
+    if (!btn) return
+    container.querySelectorAll('#edit-crypto-grid .biz-crypto-btn').forEach(b => b.classList.remove('selected'))
+    btn.classList.add('selected')
+  })
+
   container.querySelector('#biz-edit-save').addEventListener('click', async () => {
     const businessName = container.querySelector('#edit-biz-name').value.trim()
     if (!businessName) { showToast('Введіть назву бізнесу'); return }
@@ -789,7 +809,7 @@ function bindEvents(container, ctxIn) {
         await updateDoc(doc(db, 'users', user.uid, 'businesses', profile._bizId), bizData)
         updateProfileCache(user.uid, { activeBusinessName: businessName, activeBusinessProfession: newProfession, activeBusinessModules: activeMods })
         closeEdit()
-        showToast('Збережено ✓')
+        showToast('Збережено')
         const newNiche  = NICHES.find(n => n.id === newProfession) || niche
         const newConfig = (await import('../../../core/profession-config.js')).getProfessionConfig(newProfession)
         renderPage(container, { ...ctx, profile: { ...profile, businessName, profession: newProfession }, niche: newNiche, config: newConfig })
@@ -803,8 +823,10 @@ function bindEvents(container, ctxIn) {
         city:       container.querySelector('#edit-biz-city')?.value.trim()      || null,
         website:    container.querySelector('#edit-biz-website')?.value.trim()   || null,
         instagram:  container.querySelector('#edit-biz-instagram')?.value.trim() || null,
-        tgChannel:  container.querySelector('#edit-biz-tgchannel')?.value.trim() || null,
-        tgBotToken: container.querySelector('#edit-biz-tgtoken')?.value.trim()   || null,
+        tgChannel:       container.querySelector('#edit-biz-tgchannel')?.value.trim() || null,
+        tgBotToken:      container.querySelector('#edit-biz-tgtoken')?.value.trim()   || null,
+        workingCurrency: container.querySelector('#edit-currency-grid .biz-currency-btn.selected')?.dataset.currency || 'uah',
+        cryptoType:      container.querySelector('#edit-crypto-grid .biz-crypto-btn.selected')?.dataset.crypto       || null,
         accountType: 'owner', onboardingDone: true, updatedAt: serverTimestamp(),
       }
       await updateDoc(doc(db, 'users', user.uid), data)
@@ -817,7 +839,7 @@ function bindEvents(container, ctxIn) {
       if (sidebar) renderNavigation(sidebar, freshProfile)
 
       closeEdit()
-      showToast('Збережено ✓')
+      showToast('Збережено')
 
       const newNiche  = NICHES.find(n => n.id === newProfession) || niche
       const newConfig = (await import('../../../core/profession-config.js')).getProfessionConfig(newProfession)
@@ -946,7 +968,7 @@ async function loadTgAnalytics(container, profile) {
   if (!body) return
   body.innerHTML = `<div class="tg-loading"><div class="spinner"></div></div>`
   const result = await window.electron.tg.fetchChannel(profile.tgBotToken, profile.tgChannel)
-  if (result.error) { body.innerHTML = `<div class="tg-error">⚠️ ${result.error}</div>`; return }
+  if (result.error) { body.innerHTML = `<div class="tg-error">${icon('alert-triangle', 14)} ${result.error}</div>`; return }
   const fmt = n => n >= 1000 ? (n / 1000).toFixed(1) + 'K' : n
   body.innerHTML = `
     <div class="tg-stats-row">
@@ -1002,20 +1024,20 @@ function injectStyles() {
       display: flex; align-items: flex-start; gap: 14px; transition: border-color .2s;
     }
     .biz-kpi-card:hover { border-color: rgba(255,255,255,.12); }
-    .biz-kpi-icon  { font-size: 28px; flex-shrink: 0; }
+    .biz-kpi-icon  { display:flex; align-items:center; justify-content:center; width:44px; height:44px; border-radius:12px; background:var(--bg-tertiary); color:var(--text-secondary); flex-shrink: 0; }
     .biz-kpi-body  { flex: 1; min-width: 0; }
     .biz-kpi-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin-bottom: 5px; }
     .biz-kpi-value { font-family: var(--font-display); font-size: 26px; font-weight: 800; line-height: 1.1; margin-bottom: 5px; }
     .biz-kpi-sub   { font-size: 11px; color: var(--text-muted); font-weight: 500; }
-    .biz-kpi--revenue { border-left: 3px solid #34D399; }
-    .biz-kpi--clients { border-left: 3px solid #4F8EF7; }
-    .biz-kpi--tasks   { border-left: 3px solid #F472B6; }
-    .biz-kpi--team    { border-left: 3px solid #A78BFA; }
+    .biz-kpi--revenue { border-left: 3px solid #34D399; } .biz-kpi--revenue .biz-kpi-icon { color:#34D399; background:rgba(52,211,153,.1); }
+    .biz-kpi--clients { border-left: 3px solid #4F8EF7; } .biz-kpi--clients .biz-kpi-icon { color:#4F8EF7; background:rgba(79,142,247,.1); }
+    .biz-kpi--tasks   { border-left: 3px solid #F472B6; } .biz-kpi--tasks .biz-kpi-icon   { color:#F472B6; background:rgba(244,114,182,.1); }
+    .biz-kpi--team    { border-left: 3px solid #A78BFA; } .biz-kpi--team .biz-kpi-icon    { color:#A78BFA; background:rgba(167,139,250,.1); }
 
     /* Control Panel section */
     .bcp-section      { margin-bottom: 28px; }
     .bcp-section-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-    .bcp-section-title { font-family: var(--font-display); font-size: 17px; font-weight: 800; }
+    .bcp-section-title { font-family: var(--font-display); font-size: 17px; font-weight: 800; display:flex; align-items:center; gap:8px; }
     .bcp-section-sub   { font-size: 12px; color: var(--text-muted); background: var(--bg-tertiary); padding: 3px 10px; border-radius: var(--radius-full); }
 
     .bcp-grid {
@@ -1042,7 +1064,7 @@ function injectStyles() {
     }
     .bcp-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
     .bcp-header   { display: flex; align-items: center; gap: 7px; }
-    .bcp-icon     { font-size: 18px; flex-shrink: 0; }
+    .bcp-icon     { display:flex; align-items:center; color:var(--bcp-color); flex-shrink: 0; }
     .bcp-title    { font-size: 13px; font-weight: 700; color: var(--text-secondary); }
     .bcp-main-value {
       font-family: var(--font-display); font-size: 24px; font-weight: 800;
@@ -1072,7 +1094,7 @@ function injectStyles() {
     /* Card */
     .biz-card         { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-xl); padding: 20px; margin-bottom: 14px; }
     .biz-card:last-child { margin-bottom: 0; }
-    .biz-card-title   { font-family: var(--font-display); font-size: 15px; font-weight: 700; margin-bottom: 16px; }
+    .biz-card-title   { font-family: var(--font-display); font-size: 15px; font-weight: 700; margin-bottom: 16px; display:flex; align-items:center; gap:7px; }
     .biz-card-header  { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
     .biz-member-count { font-size: 12px; color: var(--text-muted); }
 
@@ -1080,7 +1102,7 @@ function injectStyles() {
     .biz-info-list  { display: flex; flex-direction: column; }
     .biz-info-row   { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); }
     .biz-info-row:last-child { border-bottom: none; }
-    .biz-info-icon  { font-size: 15px; width: 22px; text-align: center; flex-shrink: 0; }
+    .biz-info-icon  { display:flex; align-items:center; justify-content:center; width: 22px; color:var(--text-muted); flex-shrink: 0; }
     .biz-info-label { font-size: 12px; color: var(--text-muted); width: 70px; flex-shrink: 0; }
     .biz-info-value { font-size: 13px; font-weight: 500; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -1088,7 +1110,7 @@ function injectStyles() {
     .biz-modules-list { display: flex; flex-direction: column; gap: 2px; }
     .biz-module-row   { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: var(--radius-md); cursor: pointer; transition: background .15s; }
     .biz-module-row:hover { background: var(--bg-tertiary); }
-    .biz-module-icon  { font-size: 16px; width: 22px; text-align: center; }
+    .biz-module-icon  { display:flex; align-items:center; justify-content:center; width: 22px; color: var(--text-secondary); }
     .biz-module-label { flex: 1; font-size: 13px; font-weight: 500; }
     .biz-module-arrow { font-size: 12px; color: var(--text-muted); opacity: 0; transition: opacity .15s; }
     .biz-module-row:hover .biz-module-arrow { opacity: 1; }
@@ -1100,11 +1122,11 @@ function injectStyles() {
     .biz-member-avatar { width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0; background: var(--bg-tertiary); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; }
     .biz-member-info   { flex: 1; min-width: 0; }
     .biz-member-name   { font-size: 14px; font-weight: 600; }
-    .biz-member-role   { font-size: 11px; color: var(--text-secondary); margin-top: 1px; }
+    .biz-member-role   { font-size: 11px; color: var(--text-secondary); margin-top: 1px; display:flex; align-items:center; gap:4px; }
     .biz-member-mods   { display: flex; gap: 4px; align-items: center; }
-    .biz-mod-chip      { font-size: 15px; opacity: .75; }
+    .biz-mod-chip      { display:flex; align-items:center; color:var(--text-muted); }
     .biz-mod-more      { font-size: 11px; color: var(--text-muted); }
-    .biz-member-edit-btn { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 4px 7px; cursor: pointer; font-size: 12px; opacity: 0; transition: opacity .2s; }
+    .biz-member-edit-btn { display:flex; align-items:center; background: none; border: 1px solid var(--border); border-radius: 6px; padding: 5px 7px; cursor: pointer; opacity: 0; transition: opacity .2s; color: var(--text-secondary); }
     .biz-member-row:hover .biz-member-edit-btn { opacity: 1; }
     .biz-access-badge  { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: var(--radius-full); }
     .biz-access-owner  { background: rgba(79,142,247,.15); color: var(--accent-blue); }
@@ -1117,7 +1139,7 @@ function injectStyles() {
     .biz-invite-info   { flex: 1; }
     .biz-invite-role   { font-size: 13px; font-weight: 600; }
     .biz-invite-mods   { font-size: 11px; color: var(--text-muted); }
-    .biz-invite-copy, .biz-invite-del { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 12px; transition: all .2s; }
+    .biz-invite-copy, .biz-invite-del { display:flex; align-items:center; background: none; border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; cursor: pointer; color: var(--text-secondary); transition: all .2s; }
     .biz-invite-del:hover { border-color: #F87171; color: #F87171; }
 
     /* Modals */
@@ -1126,7 +1148,7 @@ function injectStyles() {
     @keyframes biz-in { from{opacity:0;transform:scale(.94)} to{opacity:1;transform:scale(1)} }
     .biz-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 22px 24px 0; flex-shrink: 0; }
     .biz-modal-head h2 { font-family: var(--font-display); font-size: 20px; font-weight: 700; }
-    .biz-modal-close { background: none; border: none; font-size: 15px; color: var(--text-muted); cursor: pointer; width: 30px; height: 30px; border-radius: 8px; transition: all .2s; }
+    .biz-modal-close { display:flex; align-items:center; justify-content:center; background: none; border: none; color: var(--text-muted); cursor: pointer; width: 30px; height: 30px; border-radius: 8px; transition: all .2s; }
     .biz-modal-close:hover { background: rgba(239,68,68,.12); color: #F87171; }
     .biz-modal-body { padding: 20px 24px; overflow-y: auto; flex: 1; }
     .biz-modal-foot { display: flex; gap: 10px; justify-content: flex-end; padding: 14px 24px 20px; border-top: 1px solid var(--border); flex-shrink: 0; }
@@ -1136,6 +1158,33 @@ function injectStyles() {
     .biz-form-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
 
     /* Niche selector */
+    /* Currency selector */
+    .biz-form-section { margin-top: 16px; }
+    .biz-currency-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; margin-top: 8px; margin-bottom: 12px; }
+    .biz-currency-btn {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      padding: 12px 8px; border-radius: var(--radius-lg);
+      border: 1.5px solid var(--border); background: var(--bg-tertiary);
+      cursor: pointer; transition: all .15s;
+    }
+    .biz-currency-btn:hover { border-color: var(--accent-blue); }
+    .biz-currency-btn.selected { border-color: var(--accent-blue); background: rgba(79,142,247,.12); }
+    .biz-currency-sym  { font-size: 20px; font-weight: 800; font-family: var(--font-display); color: var(--text-primary); }
+    .biz-currency-name { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+    .biz-currency-code { font-size: 10px; font-weight: 700; color: var(--text-muted); letter-spacing: .06em; }
+    .biz-currency-btn.selected .biz-currency-sym,
+    .biz-currency-btn.selected .biz-currency-name { color: var(--accent-blue); }
+
+    .biz-crypto-row  { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; padding: 12px; background: var(--bg-tertiary); border-radius: var(--radius-md); border: 1px solid var(--border); }
+    .biz-crypto-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+    .biz-crypto-btn  {
+      padding: 5px 12px; border-radius: var(--radius-full); font-size: 12px; font-weight: 700;
+      border: 1.5px solid var(--border); background: var(--bg-secondary); color: var(--text-secondary);
+      cursor: pointer; transition: all .15s;
+    }
+    .biz-crypto-btn:hover   { border-color: #F59E0B; color: var(--text-primary); }
+    .biz-crypto-btn.selected { border-color: #F59E0B; background: rgba(245,158,11,.12); color: #F59E0B; }
+
     .biz-niche-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
     .biz-niche-card { display: flex; align-items: center; gap: 8px; background: var(--bg-tertiary); border: 2px solid var(--border); border-radius: var(--radius-md); padding: 10px 12px; cursor: pointer; font-size: 13px; font-weight: 600; transition: all .15s; }
     .biz-niche-card:hover  { border-color: var(--nc); }
@@ -1175,7 +1224,7 @@ function injectStyles() {
       background: rgba(79,142,247,.06); border: 1px solid rgba(79,142,247,.15);
       border-radius: var(--radius-md);
     }
-    .biz-stn-icon  { font-size: 22px; flex-shrink: 0; }
+    .biz-stn-icon  { display:flex; align-items:center; color:var(--accent-blue); flex-shrink: 0; }
     .biz-stn-title { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
     .biz-stn-sub   { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
 

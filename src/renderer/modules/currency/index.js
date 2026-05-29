@@ -1,18 +1,40 @@
 // src/renderer/modules/currency/index.js
+import { icon } from '../../utils/icons.js'
 
 const CACHE_KEY = 'workhub_fx_rates'
 const CACHE_TTL = 3600_000 // 1 hour
 
-const CURRENCIES = [
-  { code: 'UAH', name: 'Гривня',          flag: '🇺🇦', symbol: '₴' },
-  { code: 'USD', name: 'Долар США',        flag: '🇺🇸', symbol: '$' },
-  { code: 'EUR', name: 'Євро',             flag: '🇪🇺', symbol: '€' },
-  { code: 'GBP', name: 'Фунт стерлінгів', flag: '🇬🇧', symbol: '£' },
-  { code: 'PLN', name: 'Польський злотий', flag: '🇵🇱', symbol: 'zł' },
-  { code: 'CHF', name: 'Швейцарський франк', flag: '🇨🇭', symbol: '₣' },
-  { code: 'CZK', name: 'Чеська крона',     flag: '🇨🇿', symbol: 'Kč' },
-  { code: 'CAD', name: 'Канадський долар', flag: '🇨🇦', symbol: 'C$' },
+// Converter dropdown — popular currencies
+const CONVERTER_CONVERTER_CURRENCIES = [
+  { code: 'UAH', name: 'Гривня',             flag: '🇺🇦', symbol: '₴' },
+  { code: 'USD', name: 'Долар США',           flag: '🇺🇸', symbol: '$' },
+  { code: 'EUR', name: 'Євро',               flag: '🇪🇺', symbol: '€' },
+  { code: 'GBP', name: 'Фунт стерлінгів',    flag: '🇬🇧', symbol: '£' },
+  { code: 'PLN', name: 'Злотий',             flag: '🇵🇱', symbol: 'zł' },
+  { code: 'CHF', name: 'Франк',              flag: '🇨🇭', symbol: '₣' },
+  { code: 'CZK', name: 'Чеська крона',       flag: '🇨🇿', symbol: 'Kč' },
+  { code: 'CAD', name: 'Канадський долар',   flag: '🇨🇦', symbol: 'C$' },
+  { code: 'JPY', name: 'Японська єна',       flag: '🇯🇵', symbol: '¥' },
+  { code: 'CNY', name: 'Китайський юань',    flag: '🇨🇳', symbol: '¥' },
+  { code: 'AED', name: 'Дирхам ОАЕ',        flag: '🇦🇪', symbol: 'د.إ' },
+  { code: 'TRY', name: 'Турецька ліра',      flag: '🇹🇷', symbol: '₺' },
+  { code: 'GEL', name: 'Грузинський ларі',   flag: '🇬🇪', symbol: '₾' },
+  { code: 'MDL', name: 'Молдовський лей',    flag: '🇲🇩', symbol: 'L' },
+  { code: 'AZN', name: 'Азербайджанський манат', flag: '🇦🇿', symbol: '₼' },
 ]
+
+// Flag overrides for NBU currencies not in the converter list
+const FLAGS = {
+  UAH:'🇺🇦',
+  DZD:'🇩🇿', AUD:'🇦🇺', BDT:'🇧🇩', CAD:'🇨🇦', CNY:'🇨🇳', CZK:'🇨🇿',
+  DKK:'🇩🇰', HKD:'🇭🇰', HUF:'🇭🇺', INR:'🇮🇳', IDR:'🇮🇩', ILS:'🇮🇱',
+  JPY:'🇯🇵', KZT:'🇰🇿', KRW:'🇰🇷', LBP:'🇱🇧', MYR:'🇲🇾', MXN:'🇲🇽',
+  MDL:'🇲🇩', NZD:'🇳🇿', NOK:'🇳🇴', SAR:'🇸🇦', SGD:'🇸🇬', VND:'🇻🇳',
+  ZAR:'🇿🇦', SEK:'🇸🇪', CHF:'🇨🇭', THB:'🇹🇭', AED:'🇦🇪', TND:'🇹🇳',
+  EGP:'🇪🇬', GBP:'🇬🇧', USD:'🇺🇸', RSD:'🇷🇸', AZN:'🇦🇿', RON:'🇷🇴',
+  TRY:'🇹🇷', XDR:'🌐', EUR:'🇪🇺', GEL:'🇬🇪', PLN:'🇵🇱',
+  XAU:'🥇', XAG:'🥈', XPT:'⚪', XPD:'⚫',
+}
 
 export async function render(container) {
   injectStyles()
@@ -22,7 +44,7 @@ export async function render(container) {
       <div class="fx-header">
         <div>
           <h1 class="fx-title">Валютний конвертер</h1>
-          <p class="fx-sub" id="fx-rates-ts">Завантаження курсів...</p>
+          <p class="fx-sub" id="fx-rates-ts">Завантаження курсів НБУ...</p>
         </div>
         <button class="fx-refresh-btn" id="fx-refresh" title="Оновити курси">↻ Оновити</button>
       </div>
@@ -35,7 +57,7 @@ export async function render(container) {
             <div class="fx-amount-wrap">
               <input type="number" class="fx-amount-input" id="fx-from-amount" value="100" min="0" step="any">
               <select class="fx-currency-select" id="fx-from-cur">
-                ${CURRENCIES.map(c => `<option value="${c.code}" ${c.code === 'USD' ? 'selected' : ''}>${c.flag} ${c.code} — ${c.name}</option>`).join('')}
+                ${CONVERTER_CONVERTER_CURRENCIES.map(c => `<option value="${c.code}" ${c.code === 'USD' ? 'selected' : ''}>${c.flag} ${c.code} — ${c.name}</option>`).join('')}
               </select>
             </div>
           </div>
@@ -47,7 +69,7 @@ export async function render(container) {
             <div class="fx-amount-wrap">
               <input type="number" class="fx-amount-input fx-result" id="fx-to-amount" readonly>
               <select class="fx-currency-select" id="fx-to-cur">
-                ${CURRENCIES.map(c => `<option value="${c.code}" ${c.code === 'UAH' ? 'selected' : ''}>${c.flag} ${c.code} — ${c.name}</option>`).join('')}
+                ${CONVERTER_CONVERTER_CURRENCIES.map(c => `<option value="${c.code}" ${c.code === 'UAH' ? 'selected' : ''}>${c.flag} ${c.code} — ${c.name}</option>`).join('')}
               </select>
             </div>
           </div>
@@ -58,14 +80,17 @@ export async function render(container) {
         </div>
       </div>
 
-      <!-- Rates table -->
+      <!-- Rates table — all NBU currencies -->
       <div class="fx-card">
         <div class="fx-card-head">
-          <span class="fx-card-title">📊 Курси НБУ до гривні</span>
-          <span class="fx-rates-date" id="fx-rates-date"></span>
+          <span class="fx-card-title">${icon('bar-chart', 14)} Всі курси НБУ до гривні</span>
+          <div style="display:flex;align-items:center;gap:10px">
+            <input class="fx-search" id="fx-search" placeholder="Пошук валюти..." type="text">
+            <span class="fx-rates-date" id="fx-rates-date"></span>
+          </div>
         </div>
         <div id="fx-rates-grid" class="fx-rates-grid">
-          ${CURRENCIES.filter(c => c.code !== 'UAH').map(() => `
+          ${Array(12).fill(0).map(() => `
             <div class="fx-rate-card fx-rate-loading"><div class="fx-shimmer"></div></div>
           `).join('')}
         </div>
@@ -74,7 +99,7 @@ export async function render(container) {
       <!-- Cross rates -->
       <div class="fx-card">
         <div class="fx-card-head">
-          <span class="fx-card-title">🔄 Крос-курси</span>
+          <span class="fx-card-title">${icon('refresh', 14)} Крос-курси</span>
         </div>
         <div id="fx-cross-table" class="fx-cross-wrap">
           <div class="fx-loading"><div class="spinner"></div></div>
@@ -83,12 +108,16 @@ export async function render(container) {
     </div>
   `
 
-  const rates = await loadRates()
-  updateUI(container, rates)
+  const { rates, allItems, exchangeDate } = await loadRates()
+  updateUI(container, rates, allItems, exchangeDate)
 
   container.querySelector('#fx-from-amount').addEventListener('input', () => convert(container, rates))
   container.querySelector('#fx-from-cur').addEventListener('change',  () => convert(container, rates))
   container.querySelector('#fx-to-cur').addEventListener('change',    () => convert(container, rates))
+
+  container.querySelector('#fx-search').addEventListener('input', e => {
+    renderRatesGrid(container, rates, allItems, e.target.value.trim())
+  })
 
   container.querySelector('#fx-swap').addEventListener('click', () => {
     const fromSel = container.querySelector('#fx-from-cur')
@@ -108,60 +137,99 @@ export async function render(container) {
     btn.textContent = '⌛ Оновлення...'
     localStorage.removeItem(CACHE_KEY)
     const fresh = await loadRates()
-    updateUI(container, fresh)
+    updateUI(container, fresh.rates, fresh.allItems, fresh.exchangeDate)
     btn.disabled = false
     btn.textContent = '↻ Оновити'
   })
 }
 
 async function loadRates() {
+  const FALLBACK = {
+    rates: { UAH: 1, USD: 44.26, EUR: 51.33, GBP: 59.40, PLN: 12.10, CHF: 56.29, CZK: 2.11, CAD: 32.07, JPY: 0.278, CNY: 6.51, AED: 12.05, TRY: 0.968, GEL: 16.56, MDL: 2.55, AZN: 26.05 },
+    allItems: [],
+    exchangeDate: null,
+  }
+
   try {
     const cached = localStorage.getItem(CACHE_KEY)
     if (cached) {
-      const { ts, data } = JSON.parse(cached)
-      if (Date.now() - ts < CACHE_TTL) return data
+      const parsed = JSON.parse(cached)
+      // Validate new format: must have nested rates object
+      if (Date.now() - parsed.ts < CACHE_TTL && parsed.data?.rates) {
+        return parsed.data
+      }
     }
   } catch { /* skip */ }
 
   try {
     const resp = await fetch('https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json')
-    if (!resp.ok) throw new Error('NBU error')
+    if (!resp.ok) throw new Error('NBU HTTP ' + resp.status)
     const list = await resp.json()
-    // Build map: code → UAH rate
+
     const rates = { UAH: 1 }
-    for (const item of list) {
-      rates[item.cc] = item.rate / (item.units || 1)
-    }
-    try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: rates })) } catch { /* quota */ }
-    return rates
-  } catch {
-    // Fallback static approximate rates
-    return { UAH: 1, USD: 41.5, EUR: 45.0, GBP: 52.5, PLN: 10.2, CHF: 47.3, CZK: 1.82, CAD: 30.6 }
+    for (const item of list) rates[item.cc] = item.rate
+
+    const exchangeDate = list[0]?.exchangedate || null
+
+    const result = { rates, allItems: list, exchangeDate }
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: result }))
+    } catch { /* quota */ }
+    return result
+  } catch (err) {
+    console.warn('NBU fetch failed, using fallback:', err.message)
+    return FALLBACK
   }
 }
 
-function updateUI(container, rates) {
-  renderRatesGrid(container, rates)
+function updateUI(container, rates, allItems, exchangeDate) {
+  renderRatesGrid(container, rates, allItems, '')
   renderCrossTable(container, rates)
   convert(container, rates)
-  updateTimestamp(container, rates)
+  updateTimestamp(container, rates, exchangeDate)
 }
 
-function renderRatesGrid(container, rates) {
+function renderRatesGrid(container, rates, allItems, search) {
   const grid = container.querySelector('#fx-rates-grid')
+  const dateEl = container.querySelector('#fx-rates-date')
   if (!grid) return
 
-  const displayCurrencies = CURRENCIES.filter(c => c.code !== 'UAH')
-  grid.innerHTML = displayCurrencies.map(c => {
-    const rate = rates[c.code]
+  // Use live NBU items if available, else fall back to converter currencies
+  const safeRates = rates || {}
+  let items = allItems && allItems.length > 0
+    ? allItems
+    : CONVERTER_CONVERTER_CURRENCIES.filter(c => c.code !== 'UAH').map(c => ({
+        cc: c.code, txt: c.name, rate: safeRates[c.code] || 0, exchangedate: ''
+      }))
+
+  if (search) {
+    const q = search.toLowerCase()
+    items = items.filter(i =>
+      i.cc.toLowerCase().includes(q) || i.txt.toLowerCase().includes(q)
+    )
+  }
+
+  if (dateEl && items[0]?.exchangedate) {
+    dateEl.textContent = 'Дані на ' + items[0].exchangedate
+  }
+
+  if (!items.length) {
+    grid.innerHTML = `<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--text-muted);font-size:13px">Нічого не знайдено</div>`
+    return
+  }
+
+  grid.innerHTML = items.map(item => {
+    const rate = item.rate
     if (!rate) return ''
+    const flag = FLAGS[item.cc] || '🏳️'
+    const inv  = rate > 0 ? (1 / rate).toFixed(rate < 0.01 ? 6 : rate < 1 ? 4 : 2) : '—'
     return `
       <div class="fx-rate-card">
-        <div class="fx-rate-flag">${c.flag}</div>
-        <div class="fx-rate-code">${c.code}</div>
-        <div class="fx-rate-name">${c.name}</div>
-        <div class="fx-rate-val">₴ ${rate.toFixed(2)}</div>
-        <div class="fx-rate-inv">${c.symbol}${(1 / rate * 100).toFixed(2)} = ₴100</div>
+        <div class="fx-rate-flag">${flag}</div>
+        <div class="fx-rate-code">${item.cc}</div>
+        <div class="fx-rate-name">${item.txt}</div>
+        <div class="fx-rate-val">₴ ${rate >= 1 ? rate.toFixed(2) : rate.toFixed(4)}</div>
+        <div class="fx-rate-inv">${inv} ${item.cc} = ₴1</div>
       </div>
     `
   }).join('')
@@ -177,13 +245,13 @@ function renderCrossTable(container, rates) {
       <thead>
         <tr>
           <th></th>
-          ${pairs.map(c => `<th>${CURRENCIES.find(x=>x.code===c)?.flag} ${c}</th>`).join('')}
+          ${pairs.map(c => `<th>${FLAGS[c] || ''} ${c}</th>`).join('')}
         </tr>
       </thead>
       <tbody>
         ${pairs.map(from => `
           <tr>
-            <td class="fx-cross-from">${CURRENCIES.find(x=>x.code===from)?.flag} ${from}</td>
+            <td class="fx-cross-from">${FLAGS[from] || ''} ${from}</td>
             ${pairs.map(to => {
               if (from === to) return `<td class="fx-cross-same">—</td>`
               const rate = rates[to] / rates[from]
@@ -210,20 +278,26 @@ function convert(container, rates) {
   toAmtEl.value = result.toFixed(2)
 
   const crossRate = rateFrom / rateTo
-  const fFrom = CURRENCIES.find(c => c.code === fromCur)
-  const fTo   = CURRENCIES.find(c => c.code === toCur)
+  const flagFrom = FLAGS[fromCur] || ''
+  const flagTo   = FLAGS[toCur]   || ''
 
   rateEl.innerHTML = `
-    <span class="fx-rate-eq">1 ${fFrom?.flag || ''} ${fromCur} = <strong>${crossRate.toFixed(4)}</strong> ${fTo?.flag || ''} ${toCur}</span>
-    <span class="fx-rate-eq-inv">&nbsp;·&nbsp; 1 ${fTo?.flag || ''} ${toCur} = ${(1 / crossRate).toFixed(4)} ${fromCur}</span>
+    <span class="fx-rate-eq">1 ${flagFrom} ${fromCur} = <strong>${crossRate.toFixed(4)}</strong> ${flagTo} ${toCur}</span>
+    <span class="fx-rate-eq-inv">&nbsp;·&nbsp; 1 ${flagTo} ${toCur} = ${(1 / crossRate).toFixed(4)} ${fromCur}</span>
   `
 }
 
-function updateTimestamp(container, rates) {
+function updateTimestamp(container, rates, exchangeDate) {
   const ts = container.querySelector('#fx-rates-ts')
   if (!ts) return
-  const isLive = !!rates.USD && rates.USD !== 41.5
-  ts.textContent = isLive ? `Курси НБУ · Оновлено ${new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}` : 'Курси НБУ · Приблизні значення (офлайн)'
+  const isLive = !!rates.USD && Math.abs(rates.USD - 44.26) > 0.5
+  if (isLive && exchangeDate) {
+    ts.textContent = `Офіційний курс НБУ · Дані на ${exchangeDate}`
+  } else if (isLive) {
+    ts.textContent = `Офіційний курс НБУ · Завантажено ${new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}`
+  } else {
+    ts.textContent = 'Офлайн — приблизні значення'
+  }
 }
 
 function injectStyles() {
@@ -231,7 +305,7 @@ function injectStyles() {
   const style = document.createElement('style')
   style.id = 'fx-styles'
   style.textContent = `
-  .fx-page { padding: 28px 32px; max-width: 1000px; display: flex; flex-direction: column; gap: 22px; }
+  .fx-page { padding: 28px 32px; display: flex; flex-direction: column; gap: 22px; }
 
   .fx-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
   .fx-title { font-family: var(--font-display); font-size: 26px; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 6px; }
@@ -257,7 +331,8 @@ function injectStyles() {
     background: radial-gradient(circle, rgba(79,142,247,.08) 0%, transparent 70%);
   }
   .fx-converter-row { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: end; margin-bottom: 20px; }
-  @media (max-width: 700px) { .fx-converter-row { grid-template-columns: 1fr; } .fx-swap-btn { transform: rotate(90deg); } }
+  @media (max-width: 800px) { .fx-converter-row { grid-template-columns: 1fr; } .fx-swap-btn { transform: rotate(90deg); margin:0 auto; } }
+  @media (max-width: 600px) { .fx-page { padding: 16px; } .fx-rates-grid { grid-template-columns: repeat(auto-fill,minmax(110px,1fr)); } }
 
   .fx-input-group { display: flex; flex-direction: column; gap: 8px; }
   .fx-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
@@ -312,6 +387,15 @@ function injectStyles() {
   .fx-rate-name { font-size: 10px; color: var(--text-muted); margin-bottom: 8px; }
   .fx-rate-val  { font-family: var(--font-display); font-size: 18px; font-weight: 800; color: var(--accent-blue); }
   .fx-rate-inv  { font-size: 10px; color: var(--text-muted); margin-top: 3px; }
+
+  /* Search */
+  .fx-search {
+    background: var(--bg-tertiary); border: 1.5px solid var(--border);
+    border-radius: var(--radius-md); padding: 6px 12px;
+    font-size: 12px; color: var(--text-primary); outline: none; width: 160px;
+    transition: border-color .15s;
+  }
+  .fx-search:focus { border-color: var(--accent-blue); }
 
   /* Cross table */
   .fx-cross-wrap { overflow-x: auto; padding: 14px; }

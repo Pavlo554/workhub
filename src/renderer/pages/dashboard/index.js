@@ -5,6 +5,7 @@ import { db } from '../../services/firebase.js'
 import { collection, getDocs, query, orderBy, limit, where, doc, getDoc, updateDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 import { navigate } from '../../../core/router.js'
 import { clearProfileCache } from '../../services/auth.js'
+import { icon } from '../../utils/icons.js'
 
 export async function render(container) {
   const user    = getCurrentUser()
@@ -33,13 +34,13 @@ function renderWorkerDashboard(container, profile) {
   if (!profile?.workspaceId) {
     container.innerHTML = `
       <div class="worker-welcome">
-        <div class="worker-welcome-icon">👋</div>
+        <div class="worker-welcome-icon">${icon('team', 56)}</div>
         <h1 class="worker-welcome-title">${getGreeting()}, ${name}!</h1>
         <p class="worker-welcome-sub">
           Щоб почати роботу, вам потрібен код запрошення від вашого менеджера або власника бізнесу.
         </p>
         <button class="btn btn-primary worker-join-btn" id="go-join">
-          👥 Ввести код запрошення
+          ${icon('join', 16)} Ввести код запрошення
         </button>
         <div class="worker-welcome-hint">
           Зверніться до вашого керівника, він надішле вам 6-значний код
@@ -110,7 +111,7 @@ function renderWorkerDashboard(container, profile) {
         </div>
 
         <div class="wdb-leave-card">
-          <div class="wdb-leave-icon">🚪</div>
+          <div class="wdb-leave-icon">${icon('logout', 22)}</div>
           <div class="wdb-leave-title">Покинути компанію</div>
           <div class="wdb-leave-desc">
             Ви більше не матимете доступу до даних і модулів цього воркспейсу.
@@ -127,25 +128,25 @@ function renderWorkerDashboard(container, profile) {
       <div class="wdb-stats-row">
         ${modules.includes('tasks') ? `
         <div class="wdb-stat-card" data-route="tasks" style="--sc:#A78BFA">
-          <div class="wdb-stat-icon">✅</div>
+          <div class="wdb-stat-icon">${icon('tasks', 20)}</div>
           <div class="wdb-stat-val" id="wdb-task-count"><span class="wdb-stat-spin"></span></div>
           <div class="wdb-stat-label">Відкритих задач</div>
         </div>` : ''}
         ${modules.includes('projects') ? `
         <div class="wdb-stat-card" data-route="projects" style="--sc:#34D399">
-          <div class="wdb-stat-icon">📁</div>
+          <div class="wdb-stat-icon">${icon('projects', 20)}</div>
           <div class="wdb-stat-val" id="wdb-proj-count"><span class="wdb-stat-spin"></span></div>
           <div class="wdb-stat-label">Активних проектів</div>
         </div>` : ''}
         ${modules.includes('clients') ? `
         <div class="wdb-stat-card" data-route="clients" style="--sc:#4F8EF7">
-          <div class="wdb-stat-icon">👥</div>
+          <div class="wdb-stat-icon">${icon('clients', 20)}</div>
           <div class="wdb-stat-val" id="wdb-client-count"><span class="wdb-stat-spin"></span></div>
           <div class="wdb-stat-label">Клієнтів</div>
         </div>` : ''}
         ${modules.includes('invoices') ? `
         <div class="wdb-stat-card" data-route="invoices" style="--sc:#F59E0B">
-          <div class="wdb-stat-icon">💸</div>
+          <div class="wdb-stat-icon">${icon('invoices', 20)}</div>
           <div class="wdb-stat-val" id="wdb-inv-count"><span class="wdb-stat-spin"></span></div>
           <div class="wdb-stat-label">Неоплачених</div>
         </div>` : ''}
@@ -160,7 +161,7 @@ function renderWorkerDashboard(container, profile) {
             if (!m) return ''
             return `
               <button class="wdb-mod-tile" data-route="${id}" style="--mc:${m.color || '#4F8EF7'}">
-                <div class="wdb-mod-tile-icon">${m.icon}</div>
+                <div class="wdb-mod-tile-icon">${icon(id, 18)}</div>
                 <div class="wdb-mod-tile-label">${m.label}</div>
               </button>
             `
@@ -216,7 +217,7 @@ function showLeaveConfirm(uid, workspaceId) {
   overlay.className = 'wdb-confirm-overlay'
   overlay.innerHTML = `
     <div class="wdb-confirm-dialog">
-      <div class="wdb-confirm-icon">🚪</div>
+      <div class="wdb-confirm-icon">${icon('logout', 28)}</div>
       <div class="wdb-confirm-title">Покинути воркспейс?</div>
       <div class="wdb-confirm-desc">
         Ви втратите доступ до всіх даних цього бізнесу.<br>
@@ -301,7 +302,7 @@ async function renderDashboard(container, profile, user) {
     <div class="db-page">
       <div class="db-header">
         <div class="db-header-left">
-          <div class="db-greeting">${getGreeting()}, ${name} ${config.icon}</div>
+          <div class="db-greeting">${getGreeting()}, ${name}</div>
           <div class="db-meta">
             <span class="db-biz">${profile?.businessName || 'Мій бізнес'}</span>
             <span class="db-sep">·</span>
@@ -313,7 +314,7 @@ async function renderDashboard(container, profile, user) {
         <div class="db-quick-actions" id="db-quick-actions">
           ${config.quickActions.map(a => `
             <button class="db-qa-btn" data-route="${actionToRoute(a.action)}">
-              ${a.icon} ${a.label}
+              ${a.label}
             </button>
           `).join('')}
         </div>
@@ -330,7 +331,7 @@ async function renderDashboard(container, profile, user) {
           <!-- Recent clients -->
           <div class="db-section" id="db-recent-clients">
             <div class="db-section-header">
-              <span class="db-section-title">👥 Останні клієнти</span>
+              <span class="db-section-title">${icon('clients', 14)} Останні клієнти</span>
               <button class="db-section-link" data-route="clients">Всі →</button>
             </div>
             <div class="db-section-body db-loading-rows">
@@ -342,7 +343,7 @@ async function renderDashboard(container, profile, user) {
           ${config.modules.includes('invoices') ? `
           <div class="db-section" id="db-recent-invoices">
             <div class="db-section-header">
-              <span class="db-section-title">📄 Останні рахунки</span>
+              <span class="db-section-title">${icon('invoices', 14)} Останні рахунки</span>
               <button class="db-section-link" data-route="invoices">Всі →</button>
             </div>
             <div class="db-section-body db-loading-rows">
@@ -354,7 +355,7 @@ async function renderDashboard(container, profile, user) {
           ${config.modules.includes('invoices') ? `
           <div class="db-section" id="db-revenue-chart">
             <div class="db-section-header">
-              <span class="db-section-title">📊 Дохід (6 міс.)</span>
+              <span class="db-section-title">${icon('reports', 14)} Дохід (6 міс.)</span>
               <button class="db-section-link" data-route="reports">Детальніше →</button>
             </div>
             <div class="db-section-body" style="padding:16px 18px;position:relative;height:170px">
@@ -366,7 +367,7 @@ async function renderDashboard(container, profile, user) {
           ${config.modules.includes('content-plan') ? `
           <div class="db-section" id="db-recent-posts">
             <div class="db-section-header">
-              <span class="db-section-title">📱 Контент-план</span>
+              <span class="db-section-title">${icon('content-plan', 14)} Контент-план</span>
               <button class="db-section-link" data-route="content-plan">Всі →</button>
             </div>
             <div class="db-section-body db-loading-rows">
@@ -398,7 +399,7 @@ async function renderDashboard(container, profile, user) {
                 const meta = MODULE_NAV[m]
                 if (!meta) return ''
                 return `<button class="db-modtile" data-route="${m}" style="--mc:${meta.color||'#4F8EF7'}">
-                  <span class="db-modtile-icon">${meta.icon}</span>
+                  <span class="db-modtile-icon">${icon(m, 18)}</span>
                   <span class="db-modtile-label">${meta.label}</span>
                 </button>`
               }).join('')}
@@ -408,7 +409,7 @@ async function renderDashboard(container, profile, user) {
           <!-- ── Tasks compact ── -->
           <div class="db-section" id="db-tasks-section">
             <div class="db-section-header">
-              <span class="db-section-title">✅ Задачі</span>
+              <span class="db-section-title">${icon('tasks', 14)} Задачі</span>
               <button class="db-section-link" data-route="tasks">Всі →</button>
             </div>
             <div class="db-section-body" id="db-tasks-body">
@@ -420,7 +421,7 @@ async function renderDashboard(container, profile, user) {
           ${config.modules.includes('projects') ? `
           <div class="db-section" id="db-projects-section">
             <div class="db-section-header">
-              <span class="db-section-title">📁 Проекти</span>
+              <span class="db-section-title">${icon('projects', 14)} Проекти</span>
               <button class="db-section-link" data-route="projects">Всі →</button>
             </div>
             <div class="db-section-body" id="db-projects-body">
@@ -432,7 +433,7 @@ async function renderDashboard(container, profile, user) {
           ${config.modules.includes('tax-calendar') ? `
           <div class="db-section" id="db-tax-section">
             <div class="db-section-header">
-              <span class="db-section-title">📅 Найближчий податок</span>
+              <span class="db-section-title">${icon('tax-calendar', 14)} Найближчий податок</span>
               <button class="db-section-link" data-route="tax-calendar">Всі →</button>
             </div>
             <div class="db-section-body" id="db-tax-body">
@@ -641,28 +642,28 @@ function renderKPI(container, kpi, profession) {
 
 const KPI_SETS = {
   freelancer: (kpi) => [
-    { icon: '👥', label: 'Всього клієнтів',     value: kpi.totalClients ?? '—', color: '#4F8EF7', sub: `+${kpi.newClients ?? 0} цього місяця` },
-    { icon: '💰', label: 'Дохід цього місяця',  value: `₴${formatNum(kpi.monthlyIncome ?? 0)}`, color: '#34D399' },
-    { icon: '💸', label: 'Неоплачені рахунки',  value: kpi.unpaidCount ?? '—',  color: (kpi.unpaidCount || 0) > 0 ? '#F59E0B' : '#34D399' },
-    { icon: '✅', label: 'Відкриті задачі',      value: kpi.activeTasks ?? '—',  color: '#A78BFA' },
+    { icon: icon('clients', 20),  label: 'Всього клієнтів',    value: kpi.totalClients ?? '—', color: '#4F8EF7', sub: `+${kpi.newClients ?? 0} цього місяця` },
+    { icon: icon('finances', 20), label: 'Дохід цього місяця', value: `₴${formatNum(kpi.monthlyIncome ?? 0)}`, color: '#34D399' },
+    { icon: icon('invoices', 20), label: 'Неоплачені рахунки', value: kpi.unpaidCount ?? '—',  color: (kpi.unpaidCount || 0) > 0 ? '#F59E0B' : '#34D399' },
+    { icon: icon('tasks', 20),    label: 'Відкриті задачі',    value: kpi.activeTasks ?? '—',  color: '#A78BFA' },
   ],
   accountant: (kpi) => [
-    { icon: '👥', label: 'Клієнти',              value: kpi.totalClients ?? '—', color: '#4F8EF7', sub: `+${kpi.newClients ?? 0} цього місяця` },
-    { icon: '💰', label: 'Дохід цього місяця',  value: `₴${formatNum(kpi.monthlyIncome ?? 0)}`, color: '#34D399' },
-    { icon: '💸', label: 'Неоплачені рахунки',  value: kpi.unpaidCount ?? '—',  color: (kpi.unpaidCount || 0) > 0 ? '#F59E0B' : '#34D399' },
-    { icon: '✨', label: 'Нових цього місяця',   value: kpi.newClients ?? '—',   color: '#38BDF8' },
+    { icon: icon('clients', 20),  label: 'Клієнти',             value: kpi.totalClients ?? '—', color: '#4F8EF7', sub: `+${kpi.newClients ?? 0} цього місяця` },
+    { icon: icon('finances', 20), label: 'Дохід цього місяця',  value: `₴${formatNum(kpi.monthlyIncome ?? 0)}`, color: '#34D399' },
+    { icon: icon('invoices', 20), label: 'Неоплачені рахунки',  value: kpi.unpaidCount ?? '—',  color: (kpi.unpaidCount || 0) > 0 ? '#F59E0B' : '#34D399' },
+    { icon: icon('sparkles', 20), label: 'Нових цього місяця',  value: kpi.newClients ?? '—',   color: '#38BDF8' },
   ],
   smm: (kpi) => [
-    { icon: '👥', label: 'Клієнти',              value: kpi.totalClients ?? '—', color: '#4F8EF7', sub: `+${kpi.newClients ?? 0} цього місяця` },
-    { icon: '🔗', label: 'Акаунти',              value: kpi.totalAccounts ?? '—', color: '#F472B6' },
-    { icon: '📝', label: 'Заплановано постів',   value: kpi.plannedPosts ?? '—', color: '#A78BFA' },
-    { icon: '✅', label: 'Відкриті задачі',      value: kpi.activeTasks ?? '—',  color: '#34D399' },
+    { icon: icon('clients', 20),      label: 'Клієнти',             value: kpi.totalClients ?? '—',  color: '#4F8EF7', sub: `+${kpi.newClients ?? 0} цього місяця` },
+    { icon: icon('accounts', 20),     label: 'Акаунти',             value: kpi.totalAccounts ?? '—', color: '#F472B6' },
+    { icon: icon('content-plan', 20), label: 'Заплановано постів',  value: kpi.plannedPosts ?? '—',  color: '#A78BFA' },
+    { icon: icon('tasks', 20),        label: 'Відкриті задачі',     value: kpi.activeTasks ?? '—',   color: '#34D399' },
   ],
   beauty: (kpi) => [
-    { icon: '👥', label: 'Клієнти',              value: kpi.totalClients ?? '—', color: '#F472B6', sub: `+${kpi.newClients ?? 0} цього місяця` },
-    { icon: '💰', label: 'Дохід цього місяця',  value: `₴${formatNum(kpi.monthlyIncome ?? 0)}`, color: '#34D399' },
-    { icon: '✨', label: 'Нових цього місяця',   value: kpi.newClients ?? '—',   color: '#38BDF8' },
-    { icon: '✅', label: 'Відкриті задачі',      value: kpi.activeTasks ?? '—',  color: '#A78BFA' },
+    { icon: icon('clients', 20),  label: 'Клієнти',             value: kpi.totalClients ?? '—', color: '#F472B6', sub: `+${kpi.newClients ?? 0} цього місяця` },
+    { icon: icon('finances', 20), label: 'Дохід цього місяця',  value: `₴${formatNum(kpi.monthlyIncome ?? 0)}`, color: '#34D399' },
+    { icon: icon('sparkles', 20), label: 'Нових цього місяця',  value: kpi.newClients ?? '—',   color: '#38BDF8' },
+    { icon: icon('tasks', 20),    label: 'Відкриті задачі',     value: kpi.activeTasks ?? '—',  color: '#A78BFA' },
   ],
 }
 
@@ -721,7 +722,7 @@ function renderTasksList(container, tasks) {
   if (!el) return
   const open = tasks.filter(t => t.status !== 'done').slice(0, 8)
   if (!open.length) {
-    el.innerHTML = `<div class="db-empty-row">Немає відкритих задач 🎉</div>`
+    el.innerHTML = `<div class="db-empty-row">Немає відкритих задач</div>`
     return
   }
   const PRI = { high: { color: '#EF4444', label: '!!!' }, medium: { color: '#F59E0B', label: '!!' }, low: { color: '#34D399', label: '!' } }
@@ -772,7 +773,7 @@ function renderPostsList(container, posts) {
     const s = ST[p.status] || { label: p.status, color: '#6B7280' }
     return `
       <div class="db-item-row" data-route="content-plan">
-        <div class="db-item-avatar" style="background:${s.color}">📝</div>
+        <div class="db-item-avatar" style="background:${s.color};color:#fff">${icon('notes', 14)}</div>
         <div class="db-item-info">
           <div class="db-item-name">${p.title || p.text?.slice(0,40) || '—'}</div>
           <div class="db-item-meta">${p.platform || ''} ${p.scheduledDate ? '· ' + fmtDate(p.scheduledDate) : ''}</div>
@@ -846,28 +847,28 @@ function renderTaxTeaser(container) {
 // HELPERS
 // ═══════════════════════════════════════════════════════════
 const MODULE_NAV = {
-  clients:           { icon: '👥', label: 'Клієнти',    color: '#4F8EF7' },
-  projects:          { icon: '📁', label: 'Проекти',    color: '#34D399' },
-  invoices:          { icon: '📄', label: 'Рахунки',    color: '#F59E0B' },
-  contracts:         { icon: '📝', label: 'Договори',   color: '#A78BFA' },
-  tasks:             { icon: '✅', label: 'Задачі',     color: '#38BDF8' },
-  timer:             { icon: '⏱', label: 'Таймер',     color: '#FB923C' },
-  finances:          { icon: '💰', label: 'Фінанси',    color: '#34D399' },
-  'tax-calendar':    { icon: '📅', label: 'Податки',    color: '#F87171' },
-  appointments:      { icon: '🗓', label: 'Розклад',    color: '#E879F9' },
-  services:          { icon: '💅', label: 'Послуги',    color: '#F472B6' },
-  'content-plan':    { icon: '📱', label: 'Контент',    color: '#A78BFA' },
-  accounts:          { icon: '🔗', label: 'Акаунти',    color: '#A3E635' },
-  passwords:         { icon: '🔑', label: 'Паролі',     color: '#94A3B8' },
-  notes:             { icon: '🗒', label: 'Нотатки',    color: '#6EE7B7' },
-  kanban:            { icon: '🗂', label: 'Kanban',     color: '#60A5FA' },
-  templates:         { icon: '📋', label: 'Шаблони',    color: '#C084FC' },
-  warehouse:         { icon: '📦', label: 'Склад',      color: '#FB923C' },
-  portfolio:         { icon: '🖼', label: 'Портфоліо',  color: '#34D399' },
-  hr:                { icon: '👔', label: 'Персонал',   color: '#38BDF8' },
-  'client-analytics':{ icon: '📈', label: 'Аналітика',  color: '#4F8EF7' },
-  currency:          { icon: '💱', label: 'Валюти',     color: '#F59E0B' },
-  documents:         { icon: '📁', label: 'Документи',  color: '#94A3B8' },
+  clients:           { label: 'Клієнти',    color: '#4F8EF7' },
+  projects:          { label: 'Проекти',    color: '#34D399' },
+  invoices:          { label: 'Рахунки',    color: '#F59E0B' },
+  contracts:         { label: 'Договори',   color: '#A78BFA' },
+  tasks:             { label: 'Задачі',     color: '#38BDF8' },
+  timer:             { label: 'Таймер',     color: '#FB923C' },
+  finances:          { label: 'Фінанси',    color: '#34D399' },
+  'tax-calendar':    { label: 'Податки',    color: '#F87171' },
+  appointments:      { label: 'Розклад',    color: '#E879F9' },
+  services:          { label: 'Послуги',    color: '#F472B6' },
+  'content-plan':    { label: 'Контент',    color: '#A78BFA' },
+  accounts:          { label: 'Акаунти',    color: '#A3E635' },
+  passwords:         { label: 'Паролі',     color: '#94A3B8' },
+  notes:             { label: 'Нотатки',    color: '#6EE7B7' },
+  kanban:            { label: 'Kanban',     color: '#60A5FA' },
+  templates:         { label: 'Шаблони',    color: '#C084FC' },
+  warehouse:         { label: 'Склад',      color: '#FB923C' },
+  portfolio:         { label: 'Портфоліо',  color: '#34D399' },
+  hr:                { label: 'Персонал',   color: '#38BDF8' },
+  'client-analytics':{ label: 'Аналітика',  color: '#4F8EF7' },
+  currency:          { label: 'Валюти',     color: '#F59E0B' },
+  documents:         { label: 'Документи',  color: '#94A3B8' },
 }
 
 function getGreeting() {
@@ -959,7 +960,7 @@ function injectStyles() {
     background-size: 200% 100%; animation: db-shimmer 1.4s infinite; border-radius: var(--radius-sm);
   }
   @keyframes db-shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
-  .db-kpi-icon  { font-size: 20px; margin-bottom: 10px; }
+  .db-kpi-icon  { display: flex; align-items: center; margin-bottom: 10px; color: var(--kc, var(--accent-blue)); }
   .db-kpi-value {
     font-family: var(--font-display); font-size: 30px; font-weight: 800;
     letter-spacing: -0.03em; color: var(--kc, var(--text-primary)); line-height: 1;
@@ -998,7 +999,7 @@ function injectStyles() {
     display: flex; align-items: center; justify-content: space-between;
     padding: 14px 18px; border-bottom: 1px solid var(--border);
   }
-  .db-section-title { font-size: 13px; font-weight: 700; }
+  .db-section-title { font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px; color: var(--text-primary); }
   .db-section-link  {
     font-size: 12px; color: var(--accent-blue); background: none; border: none;
     cursor: pointer; padding: 0; font-weight: 500;
@@ -1120,7 +1121,7 @@ function injectStyles() {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px color-mix(in srgb, var(--mc) 20%, transparent);
   }
-  .db-modtile-icon  { font-size: 20px; line-height: 1; }
+  .db-modtile-icon  { display: flex; align-items: center; justify-content: center; }
   .db-modtile-label { font-size: 9px; font-weight: 700; text-align: center; color: var(--mc); line-height: 1.2; }
 
   /* ── Tax teaser ── */
@@ -1139,7 +1140,7 @@ function injectStyles() {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     min-height: calc(100vh - 80px); padding: 40px; text-align: center;
   }
-  .worker-welcome-icon  { font-size: 64px; margin-bottom: 20px; }
+  .worker-welcome-icon  { display: flex; align-items: center; justify-content: center; margin-bottom: 20px; color: var(--accent-blue); }
   .worker-welcome-title { font-family: var(--font-display); font-size: 32px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 14px; }
   .worker-welcome-sub   { font-size: 15px; color: var(--text-secondary); line-height: 1.6; max-width: 420px; margin-bottom: 28px; }
   .worker-join-btn      { padding: 14px 36px; font-size: 16px; margin-bottom: 16px; }
@@ -1248,7 +1249,7 @@ function injectStyles() {
     box-shadow: 0 8px 24px rgba(0,0,0,.2);
     border-color: var(--sc, var(--accent-blue));
   }
-  .wdb-stat-icon { font-size: 20px; margin-bottom: 6px; }
+  .wdb-stat-icon { display: flex; align-items: center; margin-bottom: 6px; color: var(--sc, var(--accent-blue)); }
   .wdb-stat-val  {
     font-family: var(--font-display); font-size: 32px; font-weight: 800;
     color: var(--sc, var(--text-primary)); line-height: 1; letter-spacing: -0.03em;
@@ -1314,7 +1315,7 @@ function injectStyles() {
     display: flex; flex-direction: column; align-items: center;
     text-align: center; gap: 10px;
   }
-  .wdb-leave-icon  { font-size: 32px; }
+  .wdb-leave-icon  { display: flex; align-items: center; justify-content: center; color: #F87171; }
   .wdb-leave-title { font-size: 14px; font-weight: 700; }
   .wdb-leave-desc  { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
   .wdb-leave-btn {
@@ -1346,7 +1347,7 @@ function injectStyles() {
     from { opacity: 0; transform: scale(.94) translateY(8px); }
     to   { opacity: 1; transform: scale(1)  translateY(0); }
   }
-  .wdb-confirm-icon  { font-size: 44px; margin-bottom: 12px; }
+  .wdb-confirm-icon  { display: flex; align-items: center; justify-content: center; margin-bottom: 12px; color: #F87171; }
   .wdb-confirm-title { font-size: 18px; font-weight: 800; margin-bottom: 10px; }
   .wdb-confirm-desc  { font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 24px; }
   .wdb-confirm-actions { display: flex; gap: 10px; }
@@ -1395,7 +1396,7 @@ function injectStyles() {
     box-shadow: 0 6px 16px color-mix(in srgb, var(--mc) 25%, transparent);
   }
   .wdb-mod-tile:active { transform: translateY(-1px); }
-  .wdb-mod-tile-icon  { font-size: 26px; line-height: 1; }
+  .wdb-mod-tile-icon  { display: flex; align-items: center; justify-content: center; color: var(--mc); }
   .wdb-mod-tile-label {
     font-size: 10px; font-weight: 700; text-align: center;
     color: var(--mc); line-height: 1.3; letter-spacing: .01em;

@@ -2,6 +2,7 @@
 import { navigate } from '../../../core/router.js'
 import { getCurrentUser, getUserProfile, updateProfileCache } from '../../services/auth.js'
 import { lookupInvite, joinWorkspace, getWorkspace } from '../../services/workspace.js'
+import { icon } from '../../utils/icons.js'
 
 export async function render(container) {
   injectStyles()
@@ -18,7 +19,7 @@ export async function render(container) {
   container.innerHTML = `
     <div class="join-wrap">
       <div class="join-card">
-        <div class="join-icon">👥</div>
+        <div class="join-icon">${icon('clients', 40)}</div>
         <h1 class="join-title">Приєднатись до команди</h1>
         <p class="join-sub">Введіть 6-значний код, який надав вам власник воркспейсу</p>
 
@@ -43,7 +44,7 @@ export async function render(container) {
           <div class="join-preview-ws" id="join-preview-ws"></div>
           <div class="join-preview-role" id="join-preview-role"></div>
           <div class="join-preview-mods" id="join-preview-mods"></div>
-          <button class="btn btn-primary join-confirm-btn" id="join-confirm">✓ Підтвердити і приєднатись</button>
+          <button class="btn btn-primary join-confirm-btn" id="join-confirm">${icon('check', 14)} Підтвердити і приєднатись</button>
         </div>
       </div>
     </div>
@@ -127,7 +128,7 @@ export async function render(container) {
       navigate('dashboard')
     } catch (err) {
       btn.disabled = false
-      btn.textContent = '✓ Підтвердити і приєднатись'
+      btn.innerHTML = `${icon('check', 14)} Підтвердити і приєднатись`
       showError('Помилка приєднання. Спробуйте ще раз.')
       console.error(err)
     }
@@ -135,19 +136,20 @@ export async function render(container) {
 
   function showPreview(invite, ws) {
     const MODULE_LABELS = {
-      dashboard: '⊞ Дашборд', clients: '👥 Клієнти', projects: '📁 Проекти',
-      invoices: '📄 Рахунки', contracts: '📝 Договори', tasks: '✓ Задачі',
-      timer: '⏱ Таймер', finances: '💰 Фінанси', 'tax-calendar': '📅 Податки',
-      appointments: '🗓 Розклад', services: '💅 Послуги', 'content-plan': '📱 Контент',
-      accounts: '🔗 Акаунти', passwords: '🔑 Паролі', notes: '🗒 Нотатки',
+      dashboard: 'Дашборд', clients: 'Клієнти', projects: 'Проекти',
+      invoices: 'Рахунки', contracts: 'Договори', tasks: 'Задачі',
+      timer: 'Таймер', finances: 'Фінанси', 'tax-calendar': 'Податки',
+      appointments: 'Розклад', services: 'Послуги', 'content-plan': 'Контент',
+      accounts: 'Акаунти', passwords: 'Паролі', notes: 'Нотатки',
     }
 
-    container.querySelector('#join-preview-ws').textContent = `🏢 ${ws?.name || 'Команда'}`
+    container.querySelector('#join-preview-ws').innerHTML =
+      `<span style="display:inline-flex;align-items:center;gap:7px">${icon('briefcase', 16)} ${ws?.name || 'Команда'}</span>`
     container.querySelector('#join-preview-role').innerHTML =
       `Ваша роль: <strong>${invite.role}</strong>`
     container.querySelector('#join-preview-mods').innerHTML =
       (invite.modules || []).map(id =>
-        `<span class="join-mod-chip">${MODULE_LABELS[id] || id}</span>`
+        `<span class="join-mod-chip">${icon(id, 12)} ${MODULE_LABELS[id] || id}</span>`
       ).join('')
 
     previewEl.style.display = 'block'
@@ -177,7 +179,7 @@ function renderAlreadyMember(container, profile) {
   container.innerHTML = `
     <div class="join-wrap">
       <div class="join-card">
-        <div class="join-icon">${profile.isWorkspaceOwner ? '🏢' : '✅'}</div>
+        <div class="join-icon">${profile.isWorkspaceOwner ? icon('briefcase', 40) : icon('check-circle', 40)}</div>
         <h1 class="join-title">${profile.isWorkspaceOwner ? 'Ви власник команди' : 'Ви вже в команді'}</h1>
         <p class="join-sub">
           ${profile.isWorkspaceOwner
@@ -210,7 +212,8 @@ function injectStyles() {
       border-radius: var(--radius-xl); padding: 48px 40px;
       width: 100%; max-width: 480px; text-align: center;
     }
-    .join-icon  { font-size: 52px; margin-bottom: 16px; }
+    .join-icon  { display:flex; align-items:center; justify-content:center; width:72px; height:72px; border-radius:18px; background:rgba(79,142,247,.1); color:var(--accent-blue); margin:0 auto 20px; }
+    .join-icon svg { flex-shrink:0; }
     .join-title { font-family: var(--font-display); font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 10px; }
     .join-sub   { font-size: 14px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 28px; }
 
@@ -239,6 +242,7 @@ function injectStyles() {
     .join-preview-role { font-size: 13px; color: var(--text-secondary); margin-bottom: 14px; }
     .join-preview-mods { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 20px; }
     .join-mod-chip {
+      display: inline-flex; align-items: center; gap: 4px;
       background: var(--bg-secondary); border-radius: var(--radius-full);
       padding: 4px 10px; font-size: 12px; font-weight: 500;
     }

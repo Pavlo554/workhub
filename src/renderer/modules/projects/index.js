@@ -2,6 +2,7 @@
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getUserProfile, getActivePathSegments } from '../../services/auth.js'
 import { checkPlanLimit } from '../../services/plan-guard.js'
+import { icon } from '../../utils/icons.js'
 import {
   collection, addDoc, getDocs, deleteDoc,
   doc, updateDoc, query, orderBy, serverTimestamp
@@ -25,7 +26,7 @@ export async function render(container) {
 
         <div class="pr-header">
           <div>
-            <h1 class="pr-title">📁 Проекти</h1>
+            <h1 class="pr-title">Проекти</h1>
             <p class="pr-sub" id="projects-count">Завантаження...</p>
           </div>
           <button class="btn btn-primary" id="add-project-btn">+ Новий проект</button>
@@ -37,10 +38,10 @@ export async function render(container) {
         <!-- Filters -->
         <div class="pr-filters" id="filter-tabs">
           <button class="pr-filter active" data-filter="all">Всі</button>
-          <button class="pr-filter" data-filter="active">🔵 Активні</button>
-          <button class="pr-filter" data-filter="paused">🟡 Призупинені</button>
-          <button class="pr-filter" data-filter="done">✅ Завершені</button>
-          <button class="pr-filter" data-filter="cancelled">❌ Скасовані</button>
+          <button class="pr-filter" data-filter="active">Активні</button>
+          <button class="pr-filter" data-filter="paused">Призупинені</button>
+          <button class="pr-filter" data-filter="done">Завершені</button>
+          <button class="pr-filter" data-filter="cancelled">Скасовані</button>
         </div>
 
         <div id="projects-list">
@@ -61,7 +62,7 @@ export async function render(container) {
       <div class="pr-modal">
         <div class="pr-modal-hd">
           <h2 class="pr-modal-title" id="modal-title">Новий проект</h2>
-          <button class="pr-modal-x" id="modal-close">✕</button>
+          <button class="pr-modal-x" id="modal-close">${icon('x', 14)}</button>
         </div>
         <form id="project-form" novalidate>
           <div class="pr-modal-body">
@@ -174,7 +175,7 @@ export async function render(container) {
     if (filtered.length === 0) {
       el.innerHTML = `
         <div class="pr-empty">
-          <div class="pr-empty-icon">📁</div>
+          <div class="pr-empty-icon">${icon('projects', 48)}</div>
           <div class="pr-empty-title">${filter !== 'all' ? 'Немає проектів з таким статусом' : 'Проектів ще немає'}</div>
           <div class="pr-empty-desc">Натисніть "+ Новий проект" щоб додати</div>
         </div>`
@@ -193,8 +194,8 @@ export async function render(container) {
             <div class="pr-card-top">
               <span class="pr-st-badge" style="color:${st.color};background:${st.bg}">${st.label}</span>
               <div class="pr-card-btns">
-                <button class="pr-icon-btn pr-edit" data-id="${p.id}">✏️</button>
-                <button class="pr-icon-btn pr-del"  data-id="${p.id}">🗑</button>
+                <button class="pr-icon-btn pr-edit" data-id="${p.id}">${icon('pencil', 13)}</button>
+                <button class="pr-icon-btn pr-del"  data-id="${p.id}">${icon('trash', 13)}</button>
               </div>
             </div>
 
@@ -202,9 +203,9 @@ export async function render(container) {
             ${p.description ? `<div class="pr-card-desc">${p.description}</div>` : ''}
 
             <div class="pr-card-chips">
-              ${p.client   ? `<span class="pr-chip">👤 ${p.client}</span>` : ''}
+              ${p.client   ? `<span class="pr-chip">${p.client}</span>` : ''}
               ${p.budget   ? `<span class="pr-chip">₴${Number(p.budget).toLocaleString('uk-UA')}</span>` : ''}
-              ${p.deadline ? `<span class="pr-chip ${overdue ? 'pr-chip-danger' : ''}">📅 ${formatDate(p.deadline)}</span>` : ''}
+              ${p.deadline ? `<span class="pr-chip ${overdue ? 'pr-chip-danger' : ''}">${formatDate(p.deadline)}</span>` : ''}
             </div>
 
             <div class="pr-progress-row">
@@ -260,7 +261,7 @@ export async function render(container) {
       <div class="prd-wrap">
         <div class="prd-hd">
           <div class="prd-stripe" style="background:${st.color}"></div>
-          <button class="prd-close" id="prd-close">✕</button>
+          <button class="prd-close" id="prd-close">${icon('x', 14)}</button>
         </div>
         <div class="prd-body">
 
@@ -287,10 +288,10 @@ export async function render(container) {
           <div class="prd-section">
             <div class="prd-label">Деталі</div>
             <div class="prd-info-list">
-              ${p.client    ? `<div class="prd-row"><span class="prd-key">👤 Клієнт</span><span>${p.client}</span></div>` : ''}
-              ${p.budget    ? `<div class="prd-row"><span class="prd-key">💰 Бюджет</span><span>₴${Number(p.budget).toLocaleString('uk-UA')}</span></div>` : ''}
-              ${p.startDate ? `<div class="prd-row"><span class="prd-key">🚀 Початок</span><span>${formatDate(p.startDate)}</span></div>` : ''}
-              ${p.deadline  ? `<div class="prd-row"><span class="prd-key">${overdue ? '⚠️' : '📅'} Дедлайн</span><span class="${overdue ? 'prd-overdue' : ''}">${formatDate(p.deadline)}</span></div>` : ''}
+              ${p.client    ? `<div class="prd-row"><span class="prd-key">Клієнт</span><span>${p.client}</span></div>` : ''}
+              ${p.budget    ? `<div class="prd-row"><span class="prd-key">Бюджет</span><span>₴${Number(p.budget).toLocaleString('uk-UA')}</span></div>` : ''}
+              ${p.startDate ? `<div class="prd-row"><span class="prd-key">Початок</span><span>${formatDate(p.startDate)}</span></div>` : ''}
+              ${p.deadline  ? `<div class="prd-row"><span class="prd-key">Дедлайн</span><span class="${overdue ? 'prd-overdue' : ''}">${formatDate(p.deadline)}</span></div>` : ''}
             </div>
           </div>
 
@@ -320,8 +321,8 @@ export async function render(container) {
 
         </div>
         <div class="prd-footer">
-          <button class="btn btn-secondary" id="prd-edit">✏️ Редагувати</button>
-          <button class="btn prd-del-btn" id="prd-delete">🗑 Видалити</button>
+          <button class="btn btn-secondary" id="prd-edit">Редагувати</button>
+          <button class="btn prd-del-btn" id="prd-delete">Видалити</button>
         </div>
       </div>
     `
@@ -515,7 +516,7 @@ function injectStyles() {
 
     /* Empty */
     .pr-empty       { text-align:center; padding:60px 24px; grid-column:1/-1; }
-    .pr-empty-icon  { font-size:52px; margin-bottom:14px; }
+    .pr-empty-icon  { display:flex; align-items:center; justify-content:center; margin-bottom:14px; color:var(--text-muted); }
     .pr-empty-title { font-family:var(--font-display); font-size:18px; font-weight:600; margin-bottom:6px; }
     .pr-empty-desc  { font-size:13px; color:var(--text-muted); }
 

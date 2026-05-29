@@ -1,15 +1,16 @@
 // src/renderer/modules/portfolio/index.js
+import { icon } from '../../utils/icons.js'
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getActivePathSegments } from '../../services/auth.js'
 import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
 const TYPES = [
-  { id: 'web',     label: 'Веб',         icon: '🌐', color: '#4F8EF7' },
-  { id: 'design',  label: 'Дизайн',      icon: '🎨', color: '#A78BFA' },
-  { id: 'smm',     label: 'SMM',         icon: '📱', color: '#F472B6' },
-  { id: 'video',   label: 'Відео',       icon: '🎬', color: '#F59E0B' },
-  { id: 'photo',   label: 'Фото',        icon: '📸', color: '#34D399' },
-  { id: 'other',   label: 'Інше',        icon: '💼', color: '#94A3B8' },
+  { id: 'web',     label: 'Веб',         iconName: 'globe',      color: '#4F8EF7' },
+  { id: 'design',  label: 'Дизайн',      iconName: 'image',      color: '#A78BFA' },
+  { id: 'smm',     label: 'SMM',         iconName: 'smartphone', color: '#F472B6' },
+  { id: 'video',   label: 'Відео',       iconName: 'film',       color: '#F59E0B' },
+  { id: 'photo',   label: 'Фото',        iconName: 'camera',     color: '#34D399' },
+  { id: 'other',   label: 'Інше',        iconName: 'briefcase',  color: '#94A3B8' },
 ]
 
 export async function render(container) {
@@ -35,7 +36,7 @@ export async function render(container) {
       <div class="pf-page">
         <div class="pf-header">
           <div>
-            <h1 class="pf-title">🖼 Портфоліо</h1>
+            <h1 class="pf-title">${icon('image', 20)} Портфоліо</h1>
             <p class="pf-subtitle">${items.length} проектів</p>
           </div>
           <button class="pf-add-btn" id="pf-add">+ Проект</button>
@@ -47,7 +48,7 @@ export async function render(container) {
             const cnt = items.filter(i => i.type === t.id).length
             if (!cnt) return ''
             return `<button class="pf-pill ${activeType===t.id?'active':''}" data-type="${t.id}" style="${activeType===t.id?`--pc:${t.color}`:''}">
-              ${t.icon} ${t.label} (${cnt})
+              ${icon(t.iconName, 12)} ${t.label} (${cnt})
             </button>`
           }).join('')}
         </div>
@@ -59,19 +60,19 @@ export async function render(container) {
             return `
               <div class="pf-card">
                 <div class="pf-card-img" style="background:${tp.color}18;border-color:${tp.color}30">
-                  <div class="pf-card-type-icon" style="color:${tp.color}">${tp.icon}</div>
+                  <div class="pf-card-type-icon" style="color:${tp.color}">${icon(tp.iconName, 28)}</div>
                   ${item.link ? `<a class="pf-card-link-btn" href="${item.link}" target="_blank" title="Відкрити">↗</a>` : ''}
                 </div>
                 <div class="pf-card-body">
                   <div class="pf-card-top">
-                    <span class="pf-type-badge" style="color:${tp.color};background:${tp.color}15">${tp.icon} ${tp.label}</span>
+                    <span class="pf-type-badge" style="color:${tp.color};background:${tp.color}15">${icon(tp.iconName, 11)} ${tp.label}</span>
                     <div class="pf-card-btns">
-                      <button class="pf-cb pf-edit" data-id="${item.id}">✏️</button>
-                      <button class="pf-cb pf-del"  data-id="${item.id}">🗑</button>
+                      <button class="pf-cb pf-edit" data-id="${item.id}">${icon('pencil', 13)}</button>
+                      <button class="pf-cb pf-del"  data-id="${item.id}">${icon('trash', 13)}</button>
                     </div>
                   </div>
                   <div class="pf-card-title">${item.title}</div>
-                  ${item.client ? `<div class="pf-card-client">👤 ${item.client}</div>` : ''}
+                  ${item.client ? `<div class="pf-card-client">${icon('user', 11)} ${item.client}</div>` : ''}
                   ${item.description ? `<div class="pf-card-desc">${item.description}</div>` : ''}
                   <div class="pf-card-foot">
                     ${item.tags ? item.tags.split(',').map(t => `<span class="pf-tag">${t.trim()}</span>`).join('') : ''}
@@ -83,7 +84,7 @@ export async function render(container) {
           }).join('')}
         </div>` : `
         <div class="pf-empty">
-          <div style="font-size:52px;margin-bottom:12px">🖼</div>
+          <div style="display:flex;align-items:center;justify-content:center;margin-bottom:12px;color:var(--text-muted);opacity:.4">${icon('image', 48)}</div>
           <div class="pf-empty-title">Портфоліо порожнє</div>
           <div class="pf-empty-desc">Додайте свої кращі роботи</div>
           <button class="pf-add-btn" id="pf-add-empty">+ Додати проект</button>
@@ -95,12 +96,12 @@ export async function render(container) {
         <div class="pf-modal">
           <div class="pf-modal-head">
             <h2 id="pf-modal-title">Новий проект</h2>
-            <button id="pf-modal-close">✕</button>
+            <button id="pf-modal-close">${icon('x', 14)}</button>
           </div>
           <div class="pf-modal-body">
             <div class="pf-field"><label>Назва *</label><input id="pf-f-title" class="pf-input" type="text" placeholder="Назва проекту..."></div>
             <div class="pf-form-row">
-              <div class="pf-field"><label>Тип</label><select id="pf-f-type" class="pf-input">${TYPES.map(t=>`<option value="${t.id}">${t.icon} ${t.label}</option>`).join('')}</select></div>
+              <div class="pf-field"><label>Тип</label><select id="pf-f-type" class="pf-input">${TYPES.map(t=>`<option value="${t.id}">${t.label}</option>`).join('')}</select></div>
               <div class="pf-field"><label>Рік</label><input id="pf-f-year" class="pf-input" type="number" placeholder="${new Date().getFullYear()}"></div>
             </div>
             <div class="pf-field"><label>Клієнт</label><input id="pf-f-client" class="pf-input" type="text" placeholder="Назва клієнта..."></div>
@@ -177,19 +178,22 @@ function injectStyles() {
   const s = document.createElement('style')
   s.id = 'pf-styles'
   s.textContent = `
-    .pf-page { padding:28px 32px; max-width:1100px; }
+    .pf-page { padding:28px 32px; }
     .pf-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; }
-    .pf-title { font-family:var(--font-display); font-size:24px; font-weight:800; margin-bottom:4px; }
+    .pf-title { font-family:var(--font-display); font-size:26px; font-weight:800; margin-bottom:4px; display:flex; align-items:center; gap:10px; }
     .pf-subtitle { font-size:13px; color:var(--text-muted); }
-    .pf-add-btn { padding:9px 20px; background:linear-gradient(135deg,#667eea,#4F8EF7); color:#fff; border:none; border-radius:var(--radius-md); font-size:13px; font-weight:700; cursor:pointer; }
+    .pf-add-btn { padding:9px 22px; background:linear-gradient(135deg,#667eea,#4F8EF7); color:#fff; border:none; border-radius:var(--radius-md); font-size:13px; font-weight:700; cursor:pointer; transition:all .15s; }
+    .pf-add-btn:hover { transform:translateY(-1px); box-shadow:0 4px 14px rgba(79,142,247,.4); }
     .pf-filter { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:20px; }
-    .pf-pill { padding:6px 14px; border-radius:var(--radius-full); font-size:12px; font-weight:600; color:var(--text-secondary); background:var(--bg-secondary); border:1px solid var(--border); cursor:pointer; transition:all .15s; }
+    .pf-pill { padding:6px 14px; border-radius:var(--radius-full); font-size:12px; font-weight:600; color:var(--text-secondary); background:var(--bg-secondary); border:1px solid var(--border); cursor:pointer; transition:all .15s; display:flex; align-items:center; gap:5px; }
+    .pf-pill:hover { border-color:var(--accent-blue); color:var(--text-primary); }
     .pf-pill.active { background:var(--pc,var(--accent-blue)); border-color:var(--pc,var(--accent-blue)); color:#fff; }
     .pf-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:16px; }
     .pf-card { background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-xl); overflow:hidden; transition:all .2s; }
-    .pf-card:hover { transform:translateY(-3px); box-shadow:0 12px 32px rgba(0,0,0,.25); }
-    .pf-card-img { height:120px; display:flex; align-items:center; justify-content:center; border-bottom:1px solid var(--border); position:relative; }
-    .pf-card-type-icon { font-size:48px; }
+    .pf-card:hover { transform:translateY(-3px); box-shadow:0 12px 32px rgba(0,0,0,.25); border-color:rgba(255,255,255,.12); }
+    .pf-card-img { height:140px; display:flex; align-items:center; justify-content:center; border-bottom:1px solid var(--border); position:relative; overflow:hidden; }
+    .pf-card-img::after { content:''; position:absolute; inset:0; background:linear-gradient(135deg, transparent 60%, rgba(0,0,0,.15)); pointer-events:none; }
+    .pf-card-type-icon { display:flex; align-items:center; justify-content:center; opacity:.7; }
     .pf-card-link-btn { position:absolute; top:10px; right:10px; width:28px; height:28px; border-radius:8px; background:rgba(0,0,0,.4); color:#fff; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; text-decoration:none; transition:all .15s; }
     .pf-card-link-btn:hover { background:var(--accent-blue); }
     .pf-card-body { padding:14px 16px; }
@@ -199,7 +203,7 @@ function injectStyles() {
     .pf-card:hover .pf-card-btns { opacity:1; }
     .pf-cb { width:26px; height:26px; border-radius:6px; background:var(--bg-tertiary); border:1px solid var(--border); cursor:pointer; font-size:12px; display:flex; align-items:center; justify-content:center; }
     .pf-card-title { font-size:14px; font-weight:700; margin-bottom:4px; }
-    .pf-card-client { font-size:12px; color:var(--text-muted); margin-bottom:4px; }
+    .pf-card-client { font-size:12px; color:var(--text-muted); margin-bottom:4px; display:flex; align-items:center; gap:4px; }
     .pf-card-desc { font-size:12px; color:var(--text-secondary); line-height:1.5; margin-bottom:8px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
     .pf-card-foot { display:flex; flex-wrap:wrap; gap:4px; align-items:center; }
     .pf-tag { font-size:10px; font-weight:600; padding:2px 8px; border-radius:var(--radius-full); background:var(--bg-tertiary); border:1px solid var(--border); color:var(--text-muted); }
@@ -212,7 +216,7 @@ function injectStyles() {
     @keyframes pf-in { from{opacity:0;transform:scale(.95)} to{opacity:1;transform:scale(1)} }
     .pf-modal-head { display:flex; justify-content:space-between; align-items:center; padding:20px 22px 0; }
     .pf-modal-head h2 { font-family:var(--font-display); font-size:18px; font-weight:800; }
-    .pf-modal-head button { background:none; border:none; font-size:16px; color:var(--text-muted); cursor:pointer; padding:4px 8px; border-radius:6px; }
+    .pf-modal-head button { background:none; border:none; color:var(--text-muted); cursor:pointer; padding:4px 8px; border-radius:6px; display:flex; align-items:center; justify-content:center; }
     .pf-modal-body { padding:18px 22px; display:flex; flex-direction:column; gap:13px; }
     .pf-modal-foot { padding:14px 22px; border-top:1px solid var(--border); display:flex; gap:8px; justify-content:flex-end; }
     .pf-field label { display:block; font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px; }

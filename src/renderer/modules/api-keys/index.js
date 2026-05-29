@@ -5,33 +5,39 @@ import {
   collection, addDoc, getDocs, deleteDoc,
   doc, updateDoc, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
+import { icon } from '../../utils/icons.js'
 
 // ── Categories ────────────────────────────────────────────────────────────────
 const CAT_META = {
-  social:  { icon: '📱', label: 'Соцмережі',  color: '#A78BFA' },
-  bot:     { icon: '🤖', label: 'Боти',        color: '#34D399' },
-  payment: { icon: '💳', label: 'Платежі',     color: '#F59E0B' },
-  service: { icon: '⚙️', label: 'Сервіси',    color: '#4F8EF7' },
-  ai:      { icon: '🧠', label: 'AI / ML',     color: '#F472B6' },
-  other:   { icon: '🔑', label: 'Інше',        color: '#6B7280' },
+  social:  { iconName: 'smartphone',   label: 'Соцмережі',  color: '#A78BFA' },
+  bot:     { iconName: 'cpu',          label: 'Боти',        color: '#34D399' },
+  payment: { iconName: 'credit-card',  label: 'Платежі',     color: '#F59E0B' },
+  service: { iconName: 'settings',     label: 'Сервіси',    color: '#4F8EF7' },
+  ai:      { iconName: 'zap',          label: 'AI / ML',     color: '#F472B6' },
+  other:   { iconName: 'passwords',    label: 'Інше',        color: '#6B7280' },
 }
 
-// ── Known services with icons ─────────────────────────────────────────────────
-const SERVICE_ICONS = {
-  'telegram':    '✈️', 'instagram': '📸', 'facebook': '📘', 'tiktok': '🎵',
-  'youtube':     '▶️', 'twitter':   '𝕏',  'linkedin': '💼', 'stripe': '💳',
-  'paypal':      '🅿️', 'openai':    '🤖', 'anthropic': '🧠', 'google': '🔍',
-  'firebase':    '🔥', 'aws':       '☁️',  'vercel':   '▲',  'github': '🐙',
-  'notion':      '📝', 'slack':     '💬', 'discord':  '💬', 'twilio': '📞',
-  'sendgrid':    '📧', 'mailchimp': '📧',
+// ── Known services with icon names ────────────────────────────────────────────
+const SERVICE_ICON_NAMES = {
+  'telegram':   'send',          'instagram':  'instagram',
+  'facebook':   'globe',         'tiktok':     'smartphone',
+  'youtube':    'monitor',       'twitter':    'send',
+  'linkedin':   'briefcase',     'stripe':     'credit-card',
+  'paypal':     'credit-card',   'openai':     'cpu',
+  'anthropic':  'cpu',           'google':     'search',
+  'firebase':   'zap',           'aws':        'building',
+  'vercel':     'monitor',       'github':     'cpu',
+  'notion':     'notes',         'slack':      'message-circle',
+  'discord':    'message-circle','twilio':     'phone',
+  'sendgrid':   'mail',          'mailchimp':  'mail',
 }
 
-function getServiceIcon(name) {
+function getServiceIcon(name, size = 24) {
   const key = (name || '').toLowerCase()
-  for (const [k, v] of Object.entries(SERVICE_ICONS)) {
-    if (key.includes(k)) return v
+  for (const [k, v] of Object.entries(SERVICE_ICON_NAMES)) {
+    if (key.includes(k)) return icon(v, size)
   }
-  return '🔑'
+  return icon('passwords', size)
 }
 
 // ── Env badge ─────────────────────────────────────────────────────────────────
@@ -90,6 +96,7 @@ function injectStyles() {
       border-bottom: 1px solid var(--border, rgba(255,255,255,.08));
     }
     .ak-tab {
+      display: inline-flex; align-items: center; gap: 6px;
       padding: 10px 18px; font-size: 13px; font-weight: 600;
       color: var(--text-secondary,#94A3B8); border: none; background: none;
       cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
@@ -151,7 +158,7 @@ function injectStyles() {
     }
     .ak-card:hover { background: rgba(255,255,255,.03); transform: translateX(2px); }
     .ak-card.selected { background: rgba(79,142,247,.06); }
-    .ak-card-icon { font-size: 26px; flex-shrink: 0; width: 34px; text-align: center; }
+    .ak-card-icon { display:flex; align-items:center; justify-content:center; flex-shrink: 0; width: 34px; height: 34px; border-radius:8px; background:var(--bg-tertiary,rgba(255,255,255,.04)); color:var(--cc,#4F8EF7); }
     .ak-card-info { flex: 1; min-width: 0; }
     .ak-card-name { font-size: 13px; font-weight: 600; color: var(--text-primary,#F1F5F9); margin-bottom: 3px; white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
     .ak-card-key  { font-size: 11px; color: var(--text-secondary,#94A3B8); font-family: monospace; }
@@ -180,7 +187,7 @@ function injectStyles() {
     }
     .ak-int-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,.25); }
     .ak-int-card.connected { border-color: rgba(52,211,153,.3); }
-    .ak-int-icon { font-size: 32px; }
+    .ak-int-icon { display:flex; align-items:center; justify-content:center; width:48px; height:48px; border-radius:12px; background:var(--bg-tertiary,rgba(255,255,255,.04)); color:var(--text-primary,#F1F5F9); }
     .ak-int-name { font-size: 14px; font-weight: 700; color: var(--text-primary,#F1F5F9); }
     .ak-int-desc { font-size: 11px; color: var(--text-secondary,#94A3B8); line-height: 1.4; }
     .ak-int-status {
@@ -217,7 +224,7 @@ function injectStyles() {
 
     /* Empty */
     .ak-empty { text-align: center; padding: 48px 20px; color: var(--text-secondary,#94A3B8); }
-    .ak-empty-icon { font-size: 40px; margin-bottom: 12px; opacity: .4; }
+    .ak-empty-icon { display:flex; justify-content:center; margin-bottom: 12px; opacity: .4; color:var(--text-secondary,#94A3B8); }
 
     /* Right panel */
     .ak-right {
@@ -232,7 +239,7 @@ function injectStyles() {
       justify-content: center; gap: 12px; padding: 24px;
       color: var(--text-secondary,#94A3B8); text-align: center;
     }
-    .ak-right-empty-icon { font-size: 48px; opacity: .3; }
+    .ak-right-empty-icon { display:flex; justify-content:center; opacity: .3; color:var(--text-secondary,#94A3B8); margin-bottom:8px; }
 
     /* Detail */
     .ak-d-close {
@@ -247,7 +254,7 @@ function injectStyles() {
       background: var(--bg-secondary,#1A1D2E); border-radius: 14px;
       border: 1px solid var(--border,rgba(255,255,255,.08));
     }
-    .ak-d-service-icon { font-size: 40px; margin-bottom: 8px; }
+    .ak-d-service-icon { display:flex; align-items:center; justify-content:center; width:60px; height:60px; border-radius:14px; background:var(--bg-tertiary,rgba(255,255,255,.04)); color:var(--text-secondary,#94A3B8); margin:0 auto 12px; }
     .ak-d-service-name { font-size: 16px; font-weight: 700; color: var(--text-primary,#F1F5F9); margin-bottom: 6px; }
 
     .ak-d-field {
@@ -347,18 +354,18 @@ function showToast(msg) {
 }
 
 async function copyText(text) {
-  try { await navigator.clipboard.writeText(text); showToast('Скопійовано ✓') }
+  try { await navigator.clipboard.writeText(text); showToast('Скопійовано') }
   catch { showToast('Помилка копіювання') }
 }
 
 // ── Integrations config ───────────────────────────────────────────────────────
 const INTEGRATIONS = [
   {
-    id: 'telegram', name: 'Telegram', icon: '✈️', color: '#229ED9',
+    id: 'telegram', name: 'Telegram', iconName: 'send', color: '#229ED9',
     desc: 'Підписники каналу, статистика повідомлень',
     fields: [
-      { key: 'botToken', label: '🤖 Bot Token', placeholder: '123456:ABC-DEF...' },
-      { key: 'channelId', label: '📢 Channel username', placeholder: '@mychannel' },
+      { key: 'botToken', label: 'Bot Token', placeholder: '123456:ABC-DEF...' },
+      { key: 'channelId', label: 'Channel username', placeholder: '@mychannel' },
     ],
     async fetchData(cfg) {
       if (!cfg.botToken || !cfg.channelId) return null
@@ -378,11 +385,11 @@ const INTEGRATIONS = [
     }
   },
   {
-    id: 'github', name: 'GitHub', icon: '🐙', color: '#6E40C9',
+    id: 'github', name: 'GitHub', iconName: 'cpu', color: '#6E40C9',
     desc: 'Репозиторії, зірки, активність',
     fields: [
-      { key: 'token', label: '🔑 Personal Access Token', placeholder: 'ghp_...' },
-      { key: 'username', label: '👤 Username', placeholder: 'your-username' },
+      { key: 'token', label: 'Personal Access Token', placeholder: 'ghp_...' },
+      { key: 'username', label: 'Username', placeholder: 'your-username' },
     ],
     async fetchData(cfg) {
       if (!cfg.username) return null
@@ -404,11 +411,11 @@ const INTEGRATIONS = [
     }
   },
   {
-    id: 'openai', name: 'OpenAI', icon: '🤖', color: '#10A37F',
+    id: 'openai', name: 'OpenAI', iconName: 'cpu', color: '#10A37F',
     desc: 'Зберігання OpenAI API ключа для ваших проектів',
     fields: [
-      { key: 'apiKey', label: '🔑 API Key', placeholder: 'sk-...' },
-      { key: 'org', label: '🏢 Organization ID (опціонально)', placeholder: 'org-...' },
+      { key: 'apiKey', label: 'API Key', placeholder: 'sk-...' },
+      { key: 'org', label: 'Organization ID (опціонально)', placeholder: 'org-...' },
     ],
     async fetchData(cfg) {
       if (!cfg.apiKey) return null
@@ -416,18 +423,18 @@ const INTEGRATIONS = [
         metrics: [
           { label: 'API Key', value: cfg.apiKey.slice(0,8)+'...' },
           { label: 'Organization', value: cfg.org || '—' },
-          { label: 'Статус', value: '✓ Збережено' },
+          { label: 'Статус', value: 'Збережено' },
         ],
         link: 'https://platform.openai.com',
       }
     }
   },
   {
-    id: 'stripe', name: 'Stripe', icon: '💳', color: '#635BFF',
+    id: 'stripe', name: 'Stripe', iconName: 'credit-card', color: '#635BFF',
     desc: 'Платежі, баланс, транзакції',
     fields: [
-      { key: 'secretKey', label: '🔑 Secret Key', placeholder: 'sk_live_...' },
-      { key: 'publicKey', label: '🔓 Publishable Key', placeholder: 'pk_live_...' },
+      { key: 'secretKey', label: 'Secret Key', placeholder: 'sk_live_...' },
+      { key: 'publicKey', label: 'Publishable Key', placeholder: 'pk_live_...' },
     ],
     async fetchData(cfg) {
       if (!cfg.secretKey) return null
@@ -435,19 +442,19 @@ const INTEGRATIONS = [
         metrics: [
           { label: 'Secret Key', value: cfg.secretKey.slice(0,12)+'...' },
           { label: 'Публічний ключ', value: cfg.publicKey?.slice(0,12)+'...' || '—' },
-          { label: 'Середовище', value: cfg.secretKey.startsWith('sk_live') ? '🟢 Live' : '🟡 Test' },
+          { label: 'Середовище', value: cfg.secretKey.startsWith('sk_live') ? 'Live' : 'Test' },
         ],
         link: 'https://dashboard.stripe.com',
       }
     }
   },
   {
-    id: 'custom', name: 'Свій сервіс', icon: '🔗', color: '#6B7280',
+    id: 'custom', name: 'Свій сервіс', iconName: 'settings', color: '#6B7280',
     desc: 'Додай власну інтеграцію через API URL',
     fields: [
-      { key: 'url', label: '🌐 API URL', placeholder: 'https://api.example.com/stats' },
-      { key: 'token', label: '🔑 Bearer Token (опціонально)', placeholder: 'token...' },
-      { key: 'label', label: '📝 Назва', placeholder: 'Мій сервіс' },
+      { key: 'url', label: 'API URL', placeholder: 'https://api.example.com/stats' },
+      { key: 'token', label: 'Bearer Token (опціонально)', placeholder: 'token...' },
+      { key: 'label', label: 'Назва', placeholder: 'Мій сервіс' },
     ],
     async fetchData(cfg) {
       if (!cfg.url) return null
@@ -523,7 +530,7 @@ export async function render(container) {
 
     if (!list.length) return `
       <div class="ak-empty">
-        <div class="ak-empty-icon">🔑</div>
+        <div class="ak-empty-icon">${icon('passwords', 36)}</div>
         <div>${search || filterCat !== 'all' ? 'Нічого не знайдено' : 'API ключів ще немає'}</div>
       </div>`
 
@@ -533,14 +540,14 @@ export async function render(container) {
       const sel = k.id === selectedId ? ' selected' : ''
       return `
         <div class="ak-card${sel}" data-id="${k.id}" style="--cc:${cm.color}">
-          <div class="ak-card-icon">${getServiceIcon(k.name)}</div>
+          <div class="ak-card-icon">${getServiceIcon(k.name, 18)}</div>
           <div class="ak-card-info">
             <div class="ak-card-name">${escHtml(k.name)}</div>
             <div class="ak-card-key">${maskKey(k.apiKey || k.token)}</div>
           </div>
           <div class="ak-card-badges">
             <span class="ak-env-badge" style="background:${em.bg};color:${em.color}">${em.label}</span>
-            <span class="ak-cat-badge" style="background:${cm.color}22;color:${cm.color}">${cm.icon}</span>
+            <span class="ak-cat-badge" style="background:${cm.color}22;color:${cm.color}">${icon(cm.iconName, 11)}</span>
           </div>
         </div>`
     }).join('')}</div>`
@@ -554,7 +561,7 @@ export async function render(container) {
       return `
         <div class="ak-int-card${connected?' connected':''}" data-int="${int.id}"
              style="border-color:${connected ? int.color+'44' : ''}">
-          <div class="ak-int-icon">${int.icon}</div>
+          <div class="ak-int-icon">${icon(int.iconName, 28)}</div>
           <div class="ak-int-name">${int.name}</div>
           <div class="ak-int-desc">${int.desc}</div>
           <div class="ak-int-status">
@@ -562,7 +569,7 @@ export async function render(container) {
             <span style="color:${connected ? '#34D399' : '#6B7280'}">${connected ? 'Підключено' : 'Не підключено'}</span>
           </div>
           <button class="ak-int-btn ${connected ? 'ak-int-btn-view' : 'ak-int-btn-connect'}">
-            ${connected ? '📊 Переглянути' : '+ Підключити'}
+            ${connected ? icon('bar-chart',12)+' Переглянути' : '+ Підключити'}
           </button>
         </div>`
     }).join('')}</div>`
@@ -582,21 +589,21 @@ export async function render(container) {
           <div class="ak-d-field-label">${label}</div>
           <div class="ak-d-field-row">
             <div class="ak-d-field-value" style="font-family:${copyable?'monospace':'inherit'}">${display}</div>
-            ${secret ? `<button class="ak-d-toggle" data-reveal="${k.id}">${revealed?'🙈':'👁'}</button>` : ''}
-            ${copyable ? `<button class="ak-d-copy" data-copy="${escHtml(value)}">📋</button>` : ''}
+            ${secret ? `<button class="ak-d-toggle" data-reveal="${k.id}">${revealed?icon('eye-off',12):icon('eye',12)}</button>` : ''}
+            ${copyable ? `<button class="ak-d-copy" data-copy="${escHtml(value)}">${icon('copy',12)}</button>` : ''}
           </div>
         </div>`
     }
 
     return `
-      <button class="ak-d-close" id="ak-d-close">✕</button>
+      <button class="ak-d-close" id="ak-d-close">${icon('x', 13)}</button>
       <div style="overflow:hidden">
         <div class="ak-d-service-box">
-          <div class="ak-d-service-icon">${getServiceIcon(k.name)}</div>
+          <div class="ak-d-service-icon">${getServiceIcon(k.name, 36)}</div>
           <div class="ak-d-service-name">${escHtml(k.name)}</div>
           <div style="display:flex;gap:6px">
             <span class="ak-env-badge" style="background:${em.bg};color:${em.color}">${em.label}</span>
-            <span class="ak-cat-badge" style="background:${cm.color}22;color:${cm.color}">${cm.icon} ${cm.label}</span>
+            <span class="ak-cat-badge" style="background:${cm.color}22;color:${cm.color};display:inline-flex;align-items:center;gap:4px">${icon(cm.iconName, 11)} ${cm.label}</span>
           </div>
         </div>
 
@@ -613,8 +620,8 @@ export async function render(container) {
         </div>
 
         <div class="ak-d-actions">
-          <button class="ak-d-btn ak-d-btn-edit" data-edit="${k.id}">✏ Редагувати</button>
-          <button class="ak-d-btn ak-d-btn-delete" data-delete="${k.id}">🗑 Видалити</button>
+          <button class="ak-d-btn ak-d-btn-edit" data-edit="${k.id}">${icon('edit', 13)} Редагувати</button>
+          <button class="ak-d-btn ak-d-btn-delete" data-delete="${k.id}">${icon('trash', 13)} Видалити</button>
         </div>
       </div>`
   }
@@ -631,9 +638,9 @@ export async function render(container) {
 
     right.innerHTML = `
       <div class="ak-right-scroll">
-        <button class="ak-d-close" id="ak-d-close" style="float:right">✕</button>
+        <button class="ak-d-close" id="ak-d-close" style="float:right">${icon('x', 13)}</button>
         <div style="text-align:center;margin-bottom:20px">
-          <div style="font-size:44px;margin-bottom:8px">${int.icon}</div>
+          <div style="display:flex;justify-content:center;align-items:center;width:64px;height:64px;border-radius:16px;background:${int.color}18;color:${int.color};margin:0 auto 12px">${icon(int.iconName, 32)}</div>
           <div style="font-size:16px;font-weight:700;color:#F1F5F9;margin-bottom:4px">${int.name}</div>
           <div style="font-size:12px;color:#94A3B8">${int.desc}</div>
         </div>
@@ -651,22 +658,22 @@ export async function render(container) {
 
         <div style="display:flex;gap:8px;margin-top:12px">
           <button id="int-save-btn" style="flex:1;padding:9px;border-radius:10px;border:none;background:#4F8EF7;color:#fff;font-size:13px;font-weight:600;cursor:pointer">
-            ${saved ? '💾 Оновити' : '+ Підключити'}
+            ${saved ? icon('download',13)+' Оновити' : '+ Підключити'}
           </button>
           <button id="int-fetch-btn" style="flex:1;padding:9px;border-radius:10px;border:none;background:rgba(52,211,153,.15);color:#34D399;font-size:13px;font-weight:600;cursor:pointer">
-            📊 Отримати дані
+            ${icon('bar-chart',13)} Отримати дані
           </button>
         </div>
 
         ${saved ? `<button id="int-disconnect-btn" style="width:100%;padding:9px;border-radius:10px;border:none;background:rgba(239,68,68,.12);color:#EF4444;font-size:13px;font-weight:600;cursor:pointer;margin-top:8px">
-          🔌 Відключити
+          ${icon('x-circle',13)} Відключити
         </button>` : ''}
 
         <div id="int-data-area" style="margin-top:16px"></div>
       </div>`
 
     right.querySelector('#ak-d-close')?.addEventListener('click', () => {
-      right.innerHTML = `<div class="ak-right-empty"><div class="ak-right-empty-icon">🔗</div><p style="font-size:14px;margin:0">Виберіть ключ або інтеграцію</p></div>`
+      right.innerHTML = `<div class="ak-right-empty"><div class="ak-right-empty-icon">${icon('settings',36)}</div><p style="font-size:14px;margin:0">Виберіть ключ або інтеграцію</p></div>`
     })
 
     right.querySelector('#int-save-btn')?.addEventListener('click', async () => {
@@ -682,7 +689,7 @@ export async function render(container) {
           integrations[intId] = { config: { intId, ...config }, docId: ref.id, data: null }
         }
         integrations[intId] = { ...integrations[intId], config: { intId, ...config } }
-        showToast('Збережено ✓')
+        showToast('Збережено')
         renderAll()
       } catch(e) { showToast('Помилка: ' + e.message) }
     })
@@ -701,17 +708,17 @@ export async function render(container) {
       if (!result) {
         area.innerHTML = `<div style="text-align:center;padding:12px;color:#94A3B8;font-size:12px">Заповніть поля та натисніть "Отримати дані"</div>`
       } else if (result.error) {
-        area.innerHTML = `<div style="padding:12px;border-radius:10px;background:rgba(239,68,68,.1);color:#EF4444;font-size:12px">❌ ${escHtml(result.error)}</div>`
+        area.innerHTML = `<div style="display:flex;align-items:center;gap:6px;padding:12px;border-radius:10px;background:rgba(239,68,68,.1);color:#EF4444;font-size:12px">${icon('x-circle',14)} ${escHtml(result.error)}</div>`
       } else {
         area.innerHTML = `
           <div class="ak-int-data">
-            <div class="ak-int-data-header">📊 Дані з ${int.name}</div>
+            <div class="ak-int-data-header" style="display:flex;align-items:center;gap:6px">${icon('bar-chart',14)} Дані з ${int.name}</div>
             ${result.metrics.map(m => `
               <div class="ak-int-metric">
                 <div class="ak-int-metric-label">${escHtml(m.label)}</div>
                 <div class="ak-int-metric-val">${escHtml(String(m.value))}</div>
               </div>`).join('')}
-            ${result.link ? `<a href="${result.link}" target="_blank" style="display:block;margin-top:10px;font-size:12px;color:#4F8EF7;text-decoration:none">🔗 Відкрити →</a>` : ''}
+            ${result.link ? `<a href="${result.link}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;margin-top:10px;font-size:12px;color:#4F8EF7;text-decoration:none">${icon('external-link',12)} Відкрити →</a>` : ''}
           </div>`
       }
     })
@@ -721,7 +728,7 @@ export async function render(container) {
       try {
         if (saved?.docId) await deleteDoc(doc(db, ...base, 'integrations', saved.docId))
         delete integrations[intId]
-        right.innerHTML = `<div class="ak-right-empty"><div class="ak-right-empty-icon">🔗</div><p style="font-size:14px;margin:0">Інтеграцію відключено</p></div>`
+        right.innerHTML = `<div class="ak-right-empty"><div class="ak-right-empty-icon">${icon('x-circle',36)}</div><p style="font-size:14px;margin:0">Інтеграцію відключено</p></div>`
         renderAll()
       } catch(e) { showToast('Помилка: ' + e.message) }
     })
@@ -748,8 +755,8 @@ export async function render(container) {
           </div>
 
           <div class="ak-tabs">
-            <button class="ak-tab${activeTab==='keys'?' active':''}" data-tab="keys">🔑 API Ключі</button>
-            <button class="ak-tab${activeTab==='integrations'?' active':''}" data-tab="integrations">🔗 Інтеграції</button>
+            <button class="ak-tab${activeTab==='keys'?' active':''}" data-tab="keys">${icon('passwords',13)} API Ключі</button>
+            <button class="ak-tab${activeTab==='integrations'?' active':''}" data-tab="integrations">${icon('settings',13)} Інтеграції</button>
           </div>
 
           <div class="ak-left-scroll" style="padding-top:16px">
@@ -758,10 +765,10 @@ export async function render(container) {
                 ${stats.map(s=>`<div class="ak-stat" style="--sc:${s.color}"><div class="ak-stat-label">${s.label}</div><div class="ak-stat-val">${s.val}</div></div>`).join('')}
               </div>
               <div class="ak-toolbar">
-                <input class="ak-search" id="ak-search" placeholder="🔍 Пошук..." value="${escHtml(search)}">
+                <input class="ak-search" id="ak-search" placeholder="Пошук..." value="${escHtml(search)}">
               </div>
               <div class="ak-filters">
-                ${[['all','Всі'],['bot','🤖 Боти'],['social','📱 Соцмережі'],['payment','💳 Платежі'],['service','⚙️ Сервіси'],['ai','🧠 AI'],['other','📦 Інше']]
+                ${[['all','Всі'],['bot','Боти'],['social','Соцмережі'],['payment','Платежі'],['service','Сервіси'],['ai','AI'],['other','Інше']]
                   .map(([k,l])=>`<button class="ak-pill${filterCat===k?' active':''}" data-filter="${k}">${l}</button>`).join('')}
               </div>
               ${renderKeysList()}
@@ -773,7 +780,7 @@ export async function render(container) {
           ${selectedId && keys.find(k=>k.id===selectedId) && activeTab==='keys'
             ? `<div class="ak-right-scroll">${renderKeyDetail(keys.find(k=>k.id===selectedId))}</div>`
             : `<div class="ak-right-empty">
-                <div class="ak-right-empty-icon">🔗</div>
+                <div class="ak-right-empty-icon">${icon('settings',36)}</div>
                 <p style="font-size:14px;margin:0">Виберіть ключ або інтеграцію</p>
                </div>`}
         </div>
@@ -846,7 +853,7 @@ export async function render(container) {
     overlay.className = 'ak-modal-overlay'
     overlay.innerHTML = `
       <div class="ak-modal">
-        <h3 class="ak-modal-title">${isEdit ? '✏ Редагувати ключ' : '+ Новий API ключ'}</h3>
+        <h3 class="ak-modal-title">${isEdit ? icon('edit',16)+' Редагувати ключ' : '+ Новий API ключ'}</h3>
 
         <div class="ak-form-row">
           <label>Назва сервісу *</label>
@@ -949,7 +956,7 @@ export async function render(container) {
         ${[1,2,3,4].map(()=>`<div class="ak-shimmer" style="height:64px;border-radius:12px;margin-bottom:8px"></div>`).join('')}
       </div>
     </div>
-    <div class="ak-right"><div class="ak-right-empty"><div class="ak-right-empty-icon">🔗</div></div></div>
+    <div class="ak-right"><div class="ak-right-empty"><div class="ak-right-empty-icon">${icon('settings',36)}</div></div></div>
   </div>`
 
   await Promise.all([loadKeys(), loadIntegrations()])

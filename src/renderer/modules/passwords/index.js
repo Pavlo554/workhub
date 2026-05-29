@@ -2,6 +2,7 @@
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getUserProfile, getActivePathSegments } from '../../services/auth.js'
 import { checkPlanLimit } from '../../services/plan-guard.js'
+import { icon } from '../../utils/icons.js'
 import {
   collection, addDoc, getDocs, deleteDoc,
   doc, updateDoc, query, orderBy, serverTimestamp
@@ -31,12 +32,12 @@ async function decryptPassword(b64, userId) {
 }
 
 const CAT_META = {
-  general: { icon: '🌐', label: 'Загальне',   color: '#6B7280' },
-  work:    { icon: '💼', label: 'Робота',      color: '#4F8EF7' },
-  finance: { icon: '🏦', label: 'Фінанси',    color: '#34D399' },
-  social:  { icon: '📱', label: 'Соцмережі',  color: '#A78BFA' },
-  email:   { icon: '✉️', label: 'Пошта',      color: '#F59E0B' },
-  other:   { icon: '🔒', label: 'Інше',        color: '#F472B6' },
+  general: { label: 'Загальне',   color: '#6B7280' },
+  work:    { label: 'Робота',      color: '#4F8EF7' },
+  finance: { label: 'Фінанси',    color: '#34D399' },
+  social:  { label: 'Соцмережі',  color: '#A78BFA' },
+  email:   { label: 'Пошта',      color: '#F59E0B' },
+  other:   { label: 'Інше',        color: '#F472B6' },
 }
 
 export async function render(container) {
@@ -50,7 +51,7 @@ export async function render(container) {
 
         <div class="pw-header">
           <div>
-            <h1 class="pw-title">🔑 Паролі</h1>
+            <h1 class="pw-title">Паролі</h1>
             <p class="pw-sub" id="pw-count">Завантаження...</p>
           </div>
           <button class="btn btn-primary" id="add-pwd-btn">+ Додати</button>
@@ -58,7 +59,7 @@ export async function render(container) {
 
         <!-- Search -->
         <div class="pw-search">
-          <span class="pw-search-icon">🔍</span>
+          <span class="pw-search-icon">${icon('search', 14)}</span>
           <input type="text" class="pw-search-input" id="pw-search" placeholder="Пошук за сервісом або логіном..." />
         </div>
 
@@ -66,7 +67,7 @@ export async function render(container) {
         <div class="pw-filters" id="pw-filters">
           <button class="pw-filter active" data-cat="all">Всі</button>
           ${Object.entries(CAT_META).map(([k, v]) =>
-            `<button class="pw-filter" data-cat="${k}" style="--cc:${v.color}">${v.icon} ${v.label}</button>`
+            `<button class="pw-filter" data-cat="${k}" style="--cc:${v.color}">${v.label}</button>`
           ).join('')}
         </div>
 
@@ -89,7 +90,7 @@ export async function render(container) {
       <div class="modal" style="max-width:540px">
         <div class="modal-header">
           <h2 class="modal-title" id="pw-modal-title">Новий пароль</h2>
-          <button class="modal-close" id="pw-modal-close">✕</button>
+          <button class="modal-close" id="pw-modal-close">${icon('x', 14)}</button>
         </div>
         <form class="modal-form" id="pw-form" novalidate>
           <div class="modal-body">
@@ -102,7 +103,7 @@ export async function render(container) {
               <div class="field">
                 <label>Категорія</label>
                 <select id="f-category" class="input">
-                  ${Object.entries(CAT_META).map(([k,v]) => `<option value="${k}">${v.icon} ${v.label}</option>`).join('')}
+                  ${Object.entries(CAT_META).map(([k,v]) => `<option value="${k}">${v.label}</option>`).join('')}
                 </select>
               </div>
             </div>
@@ -121,8 +122,8 @@ export async function render(container) {
               <label>Пароль *</label>
               <div class="pw-input-wrap">
                 <input id="f-password" type="password" class="input" placeholder="Введіть пароль" />
-                <button type="button" class="pw-icon-action" id="toggle-pwd" title="Показати">👁</button>
-                <button type="button" class="pw-icon-action" id="gen-pwd" title="Згенерувати">🎲</button>
+                <button type="button" class="pw-icon-action" id="toggle-pwd" title="Показати">${icon('eye', 16)}</button>
+                <button type="button" class="pw-icon-action" id="gen-pwd" title="Згенерувати">${icon('sparkles', 16)}</button>
               </div>
               <span class="field-error" id="e-password"></span>
             </div>
@@ -191,7 +192,7 @@ export async function render(container) {
     if (list.length === 0) {
       el.innerHTML = `
         <div class="pw-empty">
-          <div class="pw-empty-icon">🔑</div>
+          <div class="pw-empty-icon">${icon('passwords', 36)}</div>
           <div class="pw-empty-title">${passwords.length === 0 ? 'Паролів ще немає' : 'Нічого не знайдено'}</div>
           <div class="pw-empty-desc">Натисніть "+ Додати" щоб зберегти перший пароль</div>
         </div>`
@@ -203,7 +204,7 @@ export async function render(container) {
       return `
         <div class="pw-card ${selectedId === p.id ? 'pw-selected' : ''}" data-id="${p.id}" style="--cc:${cat.color}">
           <div class="pw-card-stripe"></div>
-          <div class="pw-card-icon">${cat.icon}</div>
+          <div class="pw-card-icon" style="color:${cat.color}">${icon('passwords', 20)}</div>
           <div class="pw-card-info">
             <div class="pw-card-service">${p.service || '—'}</div>
             <div class="pw-card-login">${p.login || ''}</div>
@@ -236,8 +237,8 @@ export async function render(container) {
       <div class="pw-d-stripe" style="background:${cat.color}"></div>
 
       <div class="pw-d-head">
-        <button class="pw-d-close" id="pw-d-close">✕</button>
-        <div class="pw-d-icon" style="background:color-mix(in srgb,${cat.color} 12%,transparent)">${cat.icon}</div>
+        <button class="pw-d-close" id="pw-d-close">${icon('x', 14)}</button>
+        <div class="pw-d-icon" style="background:color-mix(in srgb,${cat.color} 12%,transparent);color:${cat.color}">${icon('passwords', 28)}</div>
         <div class="pw-d-service">${pwd.service || '—'}</div>
         <div class="pw-d-cat-badge" style="background:color-mix(in srgb,${cat.color} 15%,transparent);color:${cat.color}">${cat.label}</div>
       </div>
@@ -246,7 +247,7 @@ export async function render(container) {
         <div class="pw-d-label">Логін / Email</div>
         <div class="pw-d-copy-row">
           <span class="pw-d-value">${pwd.login || '—'}</span>
-          <button class="pw-copy-btn" data-copy="login" title="Копіювати логін">📋</button>
+          <button class="pw-copy-btn" data-copy="login" title="Копіювати логін">${icon('copy', 14)}</button>
         </div>
       </div>
 
@@ -254,8 +255,8 @@ export async function render(container) {
         <div class="pw-d-label">Пароль</div>
         <div class="pw-d-copy-row">
           <span class="pw-d-value pw-d-masked" id="pw-d-pass-val">••••••••</span>
-          <button class="pw-copy-btn" id="pw-d-reveal" title="Показати/сховати">👁</button>
-          <button class="pw-copy-btn" data-copy="password" title="Копіювати пароль">📋</button>
+          <button class="pw-copy-btn" id="pw-d-reveal" title="Показати/сховати">${icon('eye', 14)}</button>
+          <button class="pw-copy-btn" data-copy="password" title="Копіювати пароль">${icon('copy', 14)}</button>
         </div>
       </div>
 
@@ -264,7 +265,7 @@ export async function render(container) {
         <div class="pw-d-label">URL</div>
         <div class="pw-d-copy-row">
           <a class="pw-d-link" href="${pwd.url}" target="_blank">${pwd.url}</a>
-          <button class="pw-copy-btn" data-copy="url" title="Копіювати URL">📋</button>
+          <button class="pw-copy-btn" data-copy="url" title="Копіювати URL">${icon('copy', 14)}</button>
         </div>
       </div>` : ''}
 
@@ -275,8 +276,8 @@ export async function render(container) {
       </div>` : ''}
 
       <div class="pw-d-footer">
-        <button class="btn btn-secondary" id="pw-d-edit">✏️ Редагувати</button>
-        <button class="btn btn-danger"    id="pw-d-del">🗑 Видалити</button>
+        <button class="btn btn-secondary" id="pw-d-edit">Редагувати</button>
+        <button class="btn btn-danger"    id="pw-d-del">Видалити</button>
       </div>
     `
 
@@ -295,12 +296,12 @@ export async function render(container) {
         plainPwd = await decryptPassword(pwd.passwordEncrypted, user.uid)
         span.textContent = plainPwd
         span.classList.add('pw-d-revealed')
-        container.querySelector('#pw-d-reveal').textContent = '🙈'
+        container.querySelector('#pw-d-reveal').innerHTML = icon('eye-off', 14)
         revealed = true
       } else {
         span.textContent = '••••••••'
         span.classList.remove('pw-d-revealed')
-        container.querySelector('#pw-d-reveal').textContent = '👁'
+        container.querySelector('#pw-d-reveal').innerHTML = icon('eye', 14)
         revealed = false
       }
     })
@@ -316,9 +317,9 @@ export async function render(container) {
           text = plainPwd
         }
         await navigator.clipboard.writeText(text)
-        const orig = btn.textContent
-        btn.textContent = '✓'
-        setTimeout(() => { btn.textContent = orig }, 1500)
+        const orig = btn.innerHTML
+        btn.innerHTML = icon('check', 12)
+        setTimeout(() => { btn.innerHTML = orig }, 1500)
       })
     })
 
@@ -469,7 +470,7 @@ function injectStyles() {
     transition:border-color .2s; flex-shrink:0;
   }
   .pw-search:focus-within { border-color:var(--accent-blue); }
-  .pw-search-icon  { font-size:14px; flex-shrink:0; }
+  .pw-search-icon  { display:flex; align-items:center; color:var(--text-muted); flex-shrink:0; }
   .pw-search-input { flex:1; background:none; font-size:13px; color:var(--text-primary); }
   .pw-search-input::placeholder { color:var(--text-muted); }
 
@@ -494,7 +495,7 @@ function injectStyles() {
   .pw-card.pw-selected { border-color:var(--accent-blue); box-shadow:0 0 0 2px rgba(79,142,247,.2); }
 
   .pw-card-stripe { width:4px; height:100%; min-height:58px; background:var(--cc); flex-shrink:0; }
-  .pw-card-icon   { font-size:22px; flex-shrink:0; }
+  .pw-card-icon   { display:flex; align-items:center; justify-content:center; flex-shrink:0; }
   .pw-card-info   { flex:1; min-width:0; padding:12px 0; }
   .pw-card-service { font-weight:700; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .pw-card-login   { font-size:12px; color:var(--text-muted); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -507,7 +508,7 @@ function injectStyles() {
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     padding:60px 20px; gap:10px; color:var(--text-muted);
   }
-  .pw-empty-icon  { font-size:40px; }
+  .pw-empty-icon  { display:flex; align-items:center; justify-content:center; color:var(--text-muted); }
   .pw-empty-title { font-size:15px; font-weight:600; color:var(--text-secondary); }
   .pw-empty-desc  { font-size:13px; text-align:center; }
 
@@ -528,7 +529,7 @@ function injectStyles() {
   .pw-d-close:hover { background:var(--bg-elevated); color:var(--text-primary); }
 
   .pw-d-icon {
-    width:60px; height:60px; border-radius:16px; font-size:28px;
+    width:60px; height:60px; border-radius:16px;
     display:flex; align-items:center; justify-content:center; margin-bottom:4px;
   }
   .pw-d-service {
@@ -572,7 +573,7 @@ function injectStyles() {
   .pw-icon-action {
     width:38px; height:38px; border-radius:var(--radius-sm); background:var(--bg-tertiary);
     border:1px solid var(--border); display:flex; align-items:center; justify-content:center;
-    font-size:16px; cursor:pointer; transition:background .15s; flex-shrink:0;
+    cursor:pointer; transition:background .15s; flex-shrink:0;
   }
   .pw-icon-action:hover { background:var(--accent-blue-dim); }
   `

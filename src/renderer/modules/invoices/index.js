@@ -8,21 +8,22 @@ import {
   collection, addDoc, getDocs, deleteDoc, doc, updateDoc,
   query, orderBy, where, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
+import { icon } from '../../utils/icons.js'
 
 const PAY_METHODS = {
-  card:   { icon: '💳', label: 'Картка' },
-  crypto: { icon: '₿',  label: 'Крипта' },
-  cash:   { icon: '💵', label: 'Наличка' },
+  card:   { label: 'Картка', iconName: 'finances'  },
+  crypto: { label: 'Крипта', iconName: 'globe'     },
+  cash:   { label: 'Наличка', iconName: 'briefcase' },
 }
 
 const EXPENSE_CATS = [
-  { id: 'salary',   icon: '👤', label: 'ЗП / Виплата' },
-  { id: 'hosting',  icon: '🖥', label: 'Хостинг / Домен' },
-  { id: 'software', icon: '💻', label: 'ПЗ / Підписки' },
-  { id: 'ads',      icon: '📣', label: 'Реклама' },
-  { id: 'office',   icon: '🏢', label: 'Офіс / Оренда' },
-  { id: 'tax',      icon: '📋', label: 'Податки / ЄСВ' },
-  { id: 'other',    icon: '📦', label: 'Інше' },
+  { id: 'salary',   label: 'ЗП / Виплата',     iconName: 'user'        },
+  { id: 'hosting',  label: 'Хостинг / Домен',  iconName: 'globe'       },
+  { id: 'software', label: 'ПЗ / Підписки',    iconName: 'cpu'         },
+  { id: 'ads',      label: 'Реклама',           iconName: 'bar-chart'   },
+  { id: 'office',   label: 'Офіс / Оренда',    iconName: 'building'    },
+  { id: 'tax',      label: 'Податки / ЄСВ',    iconName: 'shield'      },
+  { id: 'other',    label: 'Інше',              iconName: 'briefcase'   },
 ]
 
 export async function render(container) {
@@ -40,7 +41,7 @@ export async function render(container) {
 
         <div class="inv-page-header">
           <div>
-            <h1 class="inv-page-title">📄 Рахунки та фінанси</h1>
+            <h1 class="inv-page-title">Рахунки та фінанси</h1>
             <p class="inv-page-sub" id="inv-subtitle">Завантаження...</p>
           </div>
           <div class="inv-header-btns">
@@ -52,39 +53,47 @@ export async function render(container) {
         <!-- Summary cards -->
         <div class="inv-summary">
           <div class="summary-card income">
-            <div class="sum-icon-wrap">📈</div>
-            <div class="sum-val" id="s-income">₴0</div>
-            <div class="sum-label">Дохід (оплачено)</div>
+            <div class="sum-icon-wrap">${icon('reports', 22)}</div>
+            <div class="sum-content">
+              <div class="sum-label">Дохід (оплачено)</div>
+              <div class="sum-val" id="s-income">₴0</div>
+            </div>
           </div>
           <div class="summary-card expense">
-            <div class="sum-icon-wrap">📉</div>
-            <div class="sum-val" id="s-expense">₴0</div>
-            <div class="sum-label">Витрати</div>
+            <div class="sum-icon-wrap">${icon('bar-chart', 22)}</div>
+            <div class="sum-content">
+              <div class="sum-label">Витрати</div>
+              <div class="sum-val" id="s-expense">₴0</div>
+            </div>
           </div>
           <div class="summary-card profit">
-            <div class="sum-icon-wrap">💰</div>
-            <div class="sum-val" id="s-profit">₴0</div>
-            <div class="sum-label">Чистий прибуток</div>
+            <div class="sum-icon-wrap">${icon('trending-up', 22)}</div>
+            <div class="sum-content">
+              <div class="sum-label">Чистий прибуток</div>
+              <div class="sum-val" id="s-profit">₴0</div>
+            </div>
           </div>
           <div class="summary-card pending">
-            <div class="sum-icon-wrap">⏳</div>
-            <div class="sum-val" id="s-pending">₴0</div>
-            <div class="sum-label">Очікується</div>
+            <div class="sum-icon-wrap">${icon('timer', 22)}</div>
+            <div class="sum-content">
+              <div class="sum-label">Очікується</div>
+              <div class="sum-val" id="s-pending">₴0</div>
+            </div>
           </div>
         </div>
 
         <!-- Tabs -->
         <div class="inv-tabs">
-          <button class="inv-tab active" data-tab="invoices">📄 Рахунки</button>
-          <button class="inv-tab" data-tab="expenses">📉 Витрати</button>
+          <button class="inv-tab active" data-tab="invoices">Рахунки</button>
+          <button class="inv-tab" data-tab="expenses">Витрати</button>
         </div>
 
         <!-- Invoices panel -->
         <div id="panel-invoices">
           <div class="invoice-filter">
             <button class="filter-btn active" data-filter="all">Всі</button>
-            <button class="filter-btn" data-filter="paid">✅ Оплачені</button>
-            <button class="filter-btn" data-filter="unpaid">⏳ Очікуються</button>
+            <button class="filter-btn" data-filter="paid">Оплачені</button>
+            <button class="filter-btn" data-filter="unpaid">Очікуються</button>
           </div>
           <div id="invoices-list">
             <div class="inv-loading"><div class="spinner"></div></div>
@@ -112,7 +121,7 @@ export async function render(container) {
       <div class="modal" style="max-width:600px;max-height:90vh;overflow-y:auto">
         <div class="modal-header" style="position:sticky;top:0;background:var(--bg-secondary);z-index:1">
           <h2 class="modal-title" id="inv-modal-title">Новий рахунок</h2>
-          <button class="modal-close" id="inv-modal-close">✕</button>
+          <button class="modal-close" id="inv-modal-close">${icon('x', 14)}</button>
         </div>
         <form id="invoice-form" novalidate>
           <div class="modal-body">
@@ -167,7 +176,7 @@ export async function render(container) {
                   <label class="pay-method-item">
                     <input type="radio" name="pay-method" value="${key}" ${key === 'card' ? 'checked' : ''} />
                     <div class="pay-method-box">
-                      <span class="pay-method-icon">${m.icon}</span>
+                      <span class="pay-method-icon">${icon(m.iconName, 18)}</span>
                       <span class="pay-method-label">${m.label}</span>
                     </div>
                   </label>
@@ -200,7 +209,7 @@ export async function render(container) {
       <div class="modal" style="max-width:480px">
         <div class="modal-header">
           <h2 class="modal-title" id="exp-modal-title">Нова витрата</h2>
-          <button class="modal-close" id="exp-modal-close">✕</button>
+          <button class="modal-close" id="exp-modal-close">${icon('x', 14)}</button>
         </div>
         <form id="expense-form" novalidate>
           <div class="modal-body">
@@ -218,7 +227,7 @@ export async function render(container) {
                   <label class="exp-cat-item">
                     <input type="radio" name="exp-cat" value="${c.id}" ${i === 0 ? 'checked' : ''} />
                     <div class="exp-cat-box">
-                      <span>${c.icon}</span>
+                      <span style="display:flex;align-items:center">${icon(c.iconName, 13)}</span>
                       <span>${c.label}</span>
                     </div>
                   </label>
@@ -329,7 +338,7 @@ export async function render(container) {
     const el   = container.querySelector('#invoices-list')
 
     if (list.length === 0) {
-      el.innerHTML = `<div class="inv-empty"><div class="inv-empty-icon">📄</div><div class="inv-empty-title">Рахунків немає</div><div class="inv-empty-desc">Натисніть "+ Рахунок" щоб створити</div></div>`
+      el.innerHTML = `<div class="inv-empty"><div class="inv-empty-icon">${icon('invoices', 32)}</div><div class="inv-empty-title">Рахунків немає</div><div class="inv-empty-desc">Натисніть "+ Рахунок" щоб створити</div></div>`
       return
     }
 
@@ -341,20 +350,20 @@ export async function render(container) {
         <div class="invoice-card ${inv.status} ${sel ? 'inv-selected' : ''}" data-id="${inv.id}">
           <div class="inv-card-top">
             <span class="inv-num-pill">${inv.number}</span>
-            <span class="inv-st-badge ${inv.status}">${paid ? '✓ Оплачено' : '⏳ Очікується'}</span>
+            <span class="inv-st-badge ${inv.status}">${paid ? 'Оплачено' : 'Очікується'}</span>
           </div>
           <div class="inv-card-client">${inv.client}</div>
           <div class="inv-card-desc">${inv.description}</div>
           <div class="inv-card-footer">
             <div class="inv-card-meta">
-              <span class="inv-pm">${pm.icon} ${pm.label}</span>
-              <span class="inv-date">📅 ${formatDate(inv.date)}</span>
+              <span class="inv-pm">${icon(pm.iconName, 11)} ${pm.label}</span>
+              <span class="inv-date">${formatDate(inv.date)}</span>
             </div>
             <div class="inv-card-amount-row">
               <span class="inv-amount" style="color:${paid ? '#34D399' : '#FBBF24'}">₴${Number(inv.amount).toLocaleString('uk-UA')}</span>
               <div class="inv-card-btns">
-                <button class="inv-icon-btn edit-inv" data-id="${inv.id}" title="Редагувати">✏️</button>
-                <button class="inv-icon-btn del-inv"  data-id="${inv.id}" title="Видалити">🗑</button>
+                <button class="inv-icon-btn edit-inv" data-id="${inv.id}" title="Редагувати">${icon('pencil', 13)}</button>
+                <button class="inv-icon-btn del-inv"  data-id="${inv.id}" title="Видалити">${icon('trash', 13)}</button>
               </div>
             </div>
           </div>
@@ -400,13 +409,13 @@ export async function render(container) {
       <div class="invd-wrap">
         <div class="invd-hd">
           <div class="invd-stripe" style="background:${paid ? '#34D399' : '#FBBF24'}"></div>
-          <button class="invd-close" id="invd-close">✕</button>
+          <button class="invd-close" id="invd-close">${icon('x', 14)}</button>
         </div>
         <div class="invd-body">
 
           <div class="invd-top">
             <span class="inv-num-pill">${inv.number}</span>
-            <span class="inv-st-badge ${inv.status} invd-st">${paid ? '✓ Оплачено' : '⏳ Очікується'}</span>
+            <span class="inv-st-badge ${inv.status} invd-st">${paid ? 'Оплачено' : 'Очікується'}</span>
           </div>
 
           <div class="invd-client">${inv.client}</div>
@@ -422,30 +431,30 @@ export async function render(container) {
           <div class="invd-section">
             <div class="invd-label">Деталі</div>
             <div class="invd-info-list">
-              <div class="invd-row"><span class="invd-key">📅 Дата</span><span>${formatDate(inv.date)}</span></div>
-              <div class="invd-row"><span class="invd-key">${pm.icon} Оплата</span><span>${pm.label}</span></div>
-              ${inv.cryptoAddr ? `<div class="invd-row invd-row--addr"><span class="invd-key">📋 Адреса</span><span class="invd-addr">${inv.cryptoAddr}</span></div>` : ''}
-              ${inv.note ? `<div class="invd-row"><span class="invd-key">📝 Нотатка</span><span>${inv.note}</span></div>` : ''}
+              <div class="invd-row"><span class="invd-key">Дата</span><span>${formatDate(inv.date)}</span></div>
+              <div class="invd-row"><span class="invd-key">Оплата</span><span>${pm.label}</span></div>
+              ${inv.cryptoAddr ? `<div class="invd-row invd-row--addr"><span class="invd-key">Адреса</span><span class="invd-addr">${inv.cryptoAddr}</span></div>` : ''}
+              ${inv.note ? `<div class="invd-row"><span class="invd-key">Нотатка</span><span>${inv.note}</span></div>` : ''}
             </div>
           </div>
 
           <!-- Quick status toggle -->
           ${!paid ? `
           <button class="btn invd-pay-btn" id="invd-mark-paid">
-            ✅ Позначити як оплачено
+            Позначити як оплачено
           </button>` : `
           <button class="btn invd-unpay-btn" id="invd-mark-unpaid">
-            ↩ Скасувати оплату
+            Скасувати оплату
           </button>`}
 
         </div>
         <div class="invd-footer">
           <div class="invd-footer-row">
-            <button class="btn btn-secondary invd-btn-grow" id="invd-edit">✏️ Редагувати</button>
-            <button class="btn btn-secondary" id="invd-pdf">📄 PDF</button>
-            ${profile.liqpayPublicKey ? `<button class="btn btn-secondary" id="invd-pay-link">💳 Посилання</button>` : ''}
+            <button class="btn btn-secondary invd-btn-grow" id="invd-edit">Редагувати</button>
+            <button class="btn btn-secondary" id="invd-pdf">PDF</button>
+            ${profile.liqpayPublicKey ? `<button class="btn btn-secondary" id="invd-pay-link">Посилання</button>` : ''}
           </div>
-          <button class="btn invd-del-btn invd-del-full" id="invd-delete">🗑 Видалити</button>
+          <button class="btn invd-del-btn invd-del-full" id="invd-delete">Видалити</button>
         </div>
       </div>
     `
@@ -465,11 +474,11 @@ export async function render(container) {
           orderId:     `inv_${inv.id}`,
         })
         await navigator.clipboard.writeText(url)
-        btn.textContent = '✅ Скопійовано!'
+        btn.textContent = 'Скопійовано!'
         setTimeout(() => { btn.textContent = orig }, 2500)
       } catch (err) {
         console.error(err)
-        btn.textContent = '❌ Помилка'
+        btn.innerHTML = icon('x-circle', 13) + ' Помилка'
         setTimeout(() => { btn.textContent = orig }, 2500)
       }
     })
@@ -514,7 +523,7 @@ export async function render(container) {
     const el = container.querySelector('#expenses-list')
 
     if (expenses.length === 0) {
-      el.innerHTML = `<div class="empty-state"><div class="empty-icon">📉</div><div class="empty-title">Витрат немає</div><div class="empty-desc">Натисніть "+ Витрата" щоб додати</div></div>`
+      el.innerHTML = `<div class="empty-state"><div class="empty-icon" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted)">${icon('finances', 32)}</div><div class="empty-title">Витрат немає</div><div class="empty-desc">Натисніть "+ Витрата" щоб додати</div></div>`
       return
     }
 
@@ -529,7 +538,7 @@ export async function render(container) {
         ${Object.entries(byCat).map(([catId, total]) => {
           const cat = EXPENSE_CATS.find(c => c.id === catId) || EXPENSE_CATS.at(-1)
           return `<div class="exp-cat-summary">
-            <span>${cat.icon} ${cat.label}</span>
+            <span style="display:inline-flex;align-items:center;gap:5px">${icon(cat.iconName, 12)} ${cat.label}</span>
             <span class="exp-cat-total">₴${total.toLocaleString('uk-UA')}</span>
           </div>`
         }).join('')}
@@ -539,15 +548,15 @@ export async function render(container) {
           const cat = EXPENSE_CATS.find(c => c.id === e.category) || EXPENSE_CATS.at(-1)
           return `
           <div class="expense-row">
-            <div class="exp-cat-icon">${cat.icon}</div>
+            <div class="exp-cat-icon">${icon(cat.iconName, 14)}</div>
             <div class="exp-info">
               <div class="exp-name">${e.name}</div>
               <div class="exp-meta">${cat.label} · ${formatDate(e.date)}${e.note ? ' · ' + e.note : ''}</div>
             </div>
             <div class="exp-amount">−₴${Number(e.amount).toLocaleString('uk-UA')}</div>
             <div class="card-actions">
-              <button class="card-btn edit-exp" data-id="${e.id}">✏️</button>
-              <button class="card-btn del-exp"  data-id="${e.id}">🗑</button>
+              <button class="card-btn edit-exp" data-id="${e.id}">${icon('pencil', 13)}</button>
+              <button class="card-btn del-exp"  data-id="${e.id}">${icon('trash', 13)}</button>
             </div>
           </div>`
         }).join('')}
@@ -775,20 +784,29 @@ function injectStyles() {
     .inv-header-btns { display:flex; gap:10px; flex-shrink:0; }
 
     /* Summary */
-    .inv-summary { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:24px; }
+    .inv-summary { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:28px; }
     .summary-card {
       background:var(--bg-secondary); border:1px solid var(--border);
-      border-radius:var(--radius-xl); padding:18px 20px;
-      transition:transform .2s, box-shadow .2s;
+      border-radius:var(--radius-xl); padding:20px;
+      display:flex; align-items:center; gap:16px;
+      transition:box-shadow .2s, border-color .2s;
     }
-    .summary-card:hover { transform:translateY(-2px); box-shadow:0 6px 20px rgba(0,0,0,.2); }
-    .summary-card.income  { border-top:3px solid #34D399; }
-    .summary-card.expense { border-top:3px solid #EF4444; }
-    .summary-card.profit  { border-top:3px solid #4F8EF7; }
-    .summary-card.pending { border-top:3px solid #FBBF24; }
-    .sum-icon-wrap { font-size:22px; margin-bottom:10px; }
-    .sum-val   { font-family:var(--font-display); font-size:26px; font-weight:800; letter-spacing:-0.02em; margin-bottom:4px; }
-    .sum-label { font-size:11px; color:var(--text-muted); font-weight:500; text-transform:uppercase; letter-spacing:.04em; }
+    .summary-card:hover { box-shadow:0 4px 20px rgba(0,0,0,.18); border-color:rgba(255,255,255,.1); }
+    .sum-icon-wrap {
+      width:48px; height:48px; border-radius:14px; flex-shrink:0;
+      display:flex; align-items:center; justify-content:center;
+    }
+    .income  .sum-icon-wrap { background:rgba(52,211,153,.12);  color:#34D399; }
+    .expense .sum-icon-wrap { background:rgba(239,68,68,.12);   color:#EF4444; }
+    .profit  .sum-icon-wrap { background:rgba(79,142,247,.12);  color:#4F8EF7; }
+    .pending .sum-icon-wrap { background:rgba(251,191,36,.12);  color:#FBBF24; }
+    .sum-content { flex:1; min-width:0; }
+    .sum-label { font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.06em; margin-bottom:5px; }
+    .income  .sum-val { color:#34D399; }
+    .expense .sum-val { color:#EF4444; }
+    .profit  .sum-val { color:#4F8EF7; }
+    .pending .sum-val { color:#FBBF24; }
+    .sum-val { font-family:var(--font-display); font-size:24px; font-weight:800; letter-spacing:-0.02em; line-height:1; }
 
     /* Tabs */
     .inv-tabs { display:flex; gap:6px; margin-bottom:16px; background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-lg); padding:3px; width:fit-content; }
@@ -829,7 +847,7 @@ function injectStyles() {
 
     .inv-card-footer { padding:12px 16px; border-top:1px solid rgba(255,255,255,.06); background:rgba(0,0,0,.1); }
     .inv-card-meta   { display:flex; gap:10px; align-items:center; margin-bottom:8px; }
-    .inv-pm          { font-size:11px; font-weight:600; color:var(--text-secondary); }
+    .inv-pm          { font-size:11px; font-weight:600; color:var(--text-secondary); display:flex; align-items:center; gap:4px; }
     .inv-date        { font-size:11px; color:var(--text-muted); }
     .inv-card-amount-row { display:flex; justify-content:space-between; align-items:center; }
     .inv-amount      { font-family:var(--font-display); font-size:20px; font-weight:800; }
@@ -840,7 +858,7 @@ function injectStyles() {
 
     /* Empty */
     .inv-empty       { text-align:center; padding:60px 24px; grid-column:1/-1; }
-    .inv-empty-icon  { font-size:52px; margin-bottom:14px; }
+    .inv-empty-icon  { display:flex; align-items:center; justify-content:center; margin-bottom:14px; color:var(--text-muted); }
     .inv-empty-title { font-family:var(--font-display); font-size:18px; font-weight:600; margin-bottom:6px; }
     .inv-empty-desc  { font-size:13px; color:var(--text-muted); }
 
@@ -886,7 +904,7 @@ function injectStyles() {
     .expenses-items { display:flex; flex-direction:column; gap:8px; }
     .expense-row { display:flex; align-items:center; gap:14px; background:var(--bg-secondary); border:1px solid var(--border); border-left:3px solid #EF4444; border-radius:var(--radius-lg); padding:14px 18px; transition:border-color .2s; }
     .expense-row:hover .inv-card-btns { opacity:1; }
-    .exp-cat-icon { font-size:22px; width:32px; text-align:center; flex-shrink:0; }
+    .exp-cat-icon { display:flex; align-items:center; justify-content:center; width:32px; height:32px; border-radius:8px; background:var(--bg-tertiary); color:var(--text-secondary); flex-shrink:0; }
     .exp-info { flex:1; }
     .exp-name { font-size:14px; font-weight:600; margin-bottom:2px; }
     .exp-meta { font-size:12px; color:var(--text-secondary); }
@@ -899,7 +917,7 @@ function injectStyles() {
     .pay-method-grid { display:flex; gap:10px; }
     .pay-method-item input { display:none; }
     .pay-method-box { display:flex; flex-direction:column; align-items:center; gap:4px; padding:12px 18px; background:var(--bg-tertiary); border:2px solid var(--border); border-radius:var(--radius-md); cursor:pointer; transition:all .2s; min-width:90px; }
-    .pay-method-icon  { font-size:22px; }
+    .pay-method-icon  { display:flex; align-items:center; justify-content:center; }
     .pay-method-label { font-size:12px; font-weight:600; color:var(--text-secondary); }
     .pay-method-item input:checked + .pay-method-box { border-color:var(--accent-blue); background:var(--accent-blue-dim); }
     .pay-method-item input:checked + .pay-method-box .pay-method-label { color:var(--accent-blue); }
