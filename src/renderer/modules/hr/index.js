@@ -1,4 +1,5 @@
 // src/renderer/modules/hr/index.js
+import { icon } from '../../utils/icons.js'
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getActivePathSegments } from '../../services/auth.js'
 import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
@@ -34,17 +35,33 @@ export async function render(container) {
       <div class="hr-page">
         <div class="hr-header">
           <div>
-            <h1 class="hr-title">👔 Персонал та HR</h1>
+            <h1 class="hr-title">${icon('user', 20)} Персонал та HR</h1>
             <p class="hr-subtitle">${active} активних · ${employees.length} всього</p>
           </div>
           <button class="hr-add-btn" id="hr-add">+ Співробітник</button>
         </div>
 
         <div class="hr-kpi-row">
-          <div class="hr-kpi"><div class="hr-kpi-val">${employees.length}</div><div class="hr-kpi-label">Всього</div></div>
-          <div class="hr-kpi"><div class="hr-kpi-val" style="color:#34D399">${active}</div><div class="hr-kpi-label">Активних</div></div>
-          <div class="hr-kpi"><div class="hr-kpi-val" style="color:#F59E0B">${employees.filter(e=>e.status==='trial').length}</div><div class="hr-kpi-label">Випробний термін</div></div>
-          <div class="hr-kpi"><div class="hr-kpi-val">₴${totalSalary.toLocaleString('uk-UA')}</div><div class="hr-kpi-label">Фонд оплати праці</div></div>
+          <div class="hr-kpi">
+            <div class="hr-kpi-icon" style="color:#4F8EF7">${icon('user', 18)}</div>
+            <div class="hr-kpi-val">${employees.length}</div>
+            <div class="hr-kpi-label">Всього</div>
+          </div>
+          <div class="hr-kpi">
+            <div class="hr-kpi-icon" style="color:#34D399">${icon('check-circle', 18)}</div>
+            <div class="hr-kpi-val" style="color:#34D399">${active}</div>
+            <div class="hr-kpi-label">Активних</div>
+          </div>
+          <div class="hr-kpi">
+            <div class="hr-kpi-icon" style="color:#F59E0B">${icon('timer', 18)}</div>
+            <div class="hr-kpi-val" style="color:#F59E0B">${employees.filter(e=>e.status==='trial').length}</div>
+            <div class="hr-kpi-label">Випробний термін</div>
+          </div>
+          <div class="hr-kpi">
+            <div class="hr-kpi-icon" style="color:#A78BFA">${icon('finances', 18)}</div>
+            <div class="hr-kpi-val">₴${totalSalary.toLocaleString('uk-UA')}</div>
+            <div class="hr-kpi-label">Фонд оплати праці</div>
+          </div>
         </div>
 
         <div class="hr-filter-pills">
@@ -64,14 +81,14 @@ export async function render(container) {
             return `
               <div class="hr-card">
                 <div class="hr-card-head">
-                  <div class="hr-avatar">${(emp.name||'?')[0].toUpperCase()}</div>
+                  <div class="hr-avatar" style="background:${['#4F8EF7','#A78BFA','#34D399','#F59E0B','#F472B6','#FB923C','#38BDF8'][(emp.name||'?').charCodeAt(0)%7]}">${(emp.name||'?')[0].toUpperCase()}</div>
                   <div class="hr-card-info">
                     <div class="hr-card-name">${emp.name}</div>
                     <div class="hr-card-role">${emp.role || '—'}</div>
                   </div>
                   <div class="hr-card-btns">
-                    <button class="hr-cb hr-edit" data-id="${emp.id}">✏️</button>
-                    <button class="hr-cb hr-del"  data-id="${emp.id}">🗑</button>
+                    <button class="hr-cb hr-edit" data-id="${emp.id}">${icon('pencil', 13)}</button>
+                    <button class="hr-cb hr-del"  data-id="${emp.id}">${icon('trash', 13)}</button>
                   </div>
                 </div>
                 <div class="hr-card-body">
@@ -79,10 +96,10 @@ export async function render(container) {
                   ${emp.salary ? `<span class="hr-salary">₴${Number(emp.salary).toLocaleString('uk-UA')}/міс</span>` : ''}
                 </div>
                 <div class="hr-card-meta">
-                  ${emp.phone    ? `<div class="hr-meta-row">📞 ${emp.phone}</div>` : ''}
-                  ${emp.email    ? `<div class="hr-meta-row">📧 ${emp.email}</div>` : ''}
-                  ${emp.startDate? `<div class="hr-meta-row">📅 Від ${emp.startDate}</div>` : ''}
-                  ${emp.schedule ? `<div class="hr-meta-row">🕐 ${emp.schedule}</div>` : ''}
+                  ${emp.phone    ? `<div class="hr-meta-row">${icon('phone', 11)} ${emp.phone}</div>` : ''}
+                  ${emp.email    ? `<div class="hr-meta-row">${icon('mail', 11)} ${emp.email}</div>` : ''}
+                  ${emp.startDate? `<div class="hr-meta-row">${icon('calendar', 11)} Від ${emp.startDate}</div>` : ''}
+                  ${emp.schedule ? `<div class="hr-meta-row">${icon('timer', 11)} ${emp.schedule}</div>` : ''}
                 </div>
                 ${emp.notes ? `<div class="hr-card-notes">${emp.notes}</div>` : ''}
               </div>
@@ -90,7 +107,7 @@ export async function render(container) {
           }).join('')}
         </div>` : `
         <div class="hr-empty">
-          <div style="font-size:52px;margin-bottom:12px">👔</div>
+          <div style="display:flex;align-items:center;justify-content:center;margin-bottom:12px;color:var(--text-muted);opacity:.4">${icon('user', 48)}</div>
           <div class="hr-empty-title">Команди ще немає</div>
           <div class="hr-empty-desc">Додайте першого співробітника</div>
           <button class="hr-add-btn" id="hr-add-empty">+ Додати співробітника</button>
@@ -102,7 +119,7 @@ export async function render(container) {
         <div class="hr-modal">
           <div class="hr-modal-head">
             <h2 id="hr-modal-title">Новий співробітник</h2>
-            <button id="hr-modal-close">✕</button>
+            <button id="hr-modal-close">${icon('x', 14)}</button>
           </div>
           <div class="hr-modal-body">
             <div class="hr-form-row">
@@ -196,14 +213,18 @@ function injectStyles() {
   const s = document.createElement('style')
   s.id = 'hr-styles'
   s.textContent = `
-    .hr-page { padding:28px 32px; max-width:1000px; }
+    .hr-page { padding:28px 32px; }
     .hr-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; }
-    .hr-title { font-family:var(--font-display); font-size:24px; font-weight:800; margin-bottom:4px; }
+    .hr-title { font-family:var(--font-display); font-size:26px; font-weight:800; margin-bottom:4px; display:flex; align-items:center; gap:10px; }
     .hr-subtitle { font-size:13px; color:var(--text-muted); }
-    .hr-add-btn { padding:9px 20px; background:linear-gradient(135deg,#667eea,#4F8EF7); color:#fff; border:none; border-radius:var(--radius-md); font-size:13px; font-weight:700; cursor:pointer; }
+    .hr-add-btn { padding:9px 22px; background:linear-gradient(135deg,#667eea,#4F8EF7); color:#fff; border:none; border-radius:var(--radius-md); font-size:13px; font-weight:700; cursor:pointer; transition:all .15s; }
+    .hr-add-btn:hover { transform:translateY(-1px); box-shadow:0 4px 14px rgba(79,142,247,.4); }
     .hr-kpi-row { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px; }
-    .hr-kpi { background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px 20px; }
-    .hr-kpi-val { font-family:var(--font-display); font-size:24px; font-weight:800; margin-bottom:3px; }
+    @media (max-width:900px) { .hr-kpi-row { grid-template-columns:repeat(2,1fr); } }
+    .hr-kpi { background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-xl); padding:18px 20px; transition:border-color .2s; }
+    .hr-kpi:hover { border-color:rgba(255,255,255,.12); }
+    .hr-kpi-icon { display:flex; align-items:center; margin-bottom:10px; }
+    .hr-kpi-val { font-family:var(--font-display); font-size:26px; font-weight:800; margin-bottom:3px; }
     .hr-kpi-label { font-size:11px; color:var(--text-muted); font-weight:600; text-transform:uppercase; letter-spacing:.05em; }
     .hr-filter-pills { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:20px; }
     .hr-pill { padding:6px 14px; border-radius:var(--radius-full); font-size:12px; font-weight:600; color:var(--text-secondary); background:var(--bg-secondary); border:1px solid var(--border); cursor:pointer; transition:all .15s; }
@@ -212,7 +233,7 @@ function injectStyles() {
     .hr-card { background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-xl); padding:18px; transition:all .15s; }
     .hr-card:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,.2); }
     .hr-card-head { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
-    .hr-avatar { width:44px; height:44px; border-radius:50%; background:linear-gradient(135deg,#667eea,#764ba2); color:#fff; font-size:18px; font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .hr-avatar { width:44px; height:44px; border-radius:14px; color:#fff; font-size:18px; font-weight:800; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
     .hr-card-info { flex:1; }
     .hr-card-name { font-size:15px; font-weight:700; }
     .hr-card-role { font-size:12px; color:var(--text-muted); }
@@ -223,7 +244,7 @@ function injectStyles() {
     .hr-status-badge { font-size:11px; font-weight:700; padding:3px 10px; border-radius:var(--radius-full); }
     .hr-salary { font-size:13px; font-weight:700; color:#34D399; margin-left:auto; }
     .hr-card-meta { display:flex; flex-direction:column; gap:4px; }
-    .hr-meta-row { font-size:12px; color:var(--text-secondary); }
+    .hr-meta-row { font-size:12px; color:var(--text-secondary); display:flex; align-items:center; gap:5px; }
     .hr-card-notes { margin-top:10px; font-size:12px; color:var(--text-muted); background:var(--bg-tertiary); border-radius:var(--radius-md); padding:8px 10px; line-height:1.5; }
     .hr-empty { text-align:center; padding:80px 32px; }
     .hr-empty-title { font-family:var(--font-display); font-size:18px; font-weight:700; margin-bottom:6px; }
@@ -233,7 +254,7 @@ function injectStyles() {
     @keyframes hr-in { from{opacity:0;transform:scale(.95)} to{opacity:1;transform:scale(1)} }
     .hr-modal-head { display:flex; justify-content:space-between; align-items:center; padding:20px 22px 0; }
     .hr-modal-head h2 { font-family:var(--font-display); font-size:18px; font-weight:800; }
-    .hr-modal-head button { background:none; border:none; font-size:16px; color:var(--text-muted); cursor:pointer; padding:4px 8px; border-radius:6px; }
+    .hr-modal-head button { background:none; border:none; color:var(--text-muted); cursor:pointer; padding:4px 8px; border-radius:6px; display:flex; align-items:center; justify-content:center; }
     .hr-modal-body { padding:18px 22px; display:flex; flex-direction:column; gap:13px; }
     .hr-modal-foot { padding:14px 22px; border-top:1px solid var(--border); display:flex; gap:8px; justify-content:flex-end; }
     .hr-field label { display:block; font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px; }

@@ -49,6 +49,7 @@
       https://*.firebasestorage.app
       https://api.telegram.org
       https://api.coingecko.com
+      https://bank.gov.ua
       wss://*.firebaseio.com;
   ">
   <title>WorkHub</title>
@@ -60,9 +61,10 @@
   <link rel="stylesheet" href="./styles/navigation.css" />
   <link rel="stylesheet" href="./styles/dashboard.css" />
   <link rel="stylesheet" href="./styles/animations.css" />
+  <link rel="stylesheet" href="./styles/global-polish.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 </head>
 <body>
 
@@ -73,9 +75,15 @@
       <span class="titlebar-name">WorkHub</span>
     </div>
     <div class="titlebar-controls">
-      <button class="tb-btn" id="tb-minimize">&#8722;</button>
-      <button class="tb-btn" id="tb-maximize">&#9744;</button>
-      <button class="tb-btn tb-close" id="tb-close">&#10005;</button>
+      <button class="tb-btn" id="tb-minimize" title="Згорнути">
+        <svg width="10" height="1" viewBox="0 0 10 1" fill="currentColor"><rect width="10" height="1" rx="0.5"/></svg>
+      </button>
+      <button class="tb-btn" id="tb-maximize" title="Розгорнути">
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="0.6" y="0.6" width="8.8" height="8.8" rx="1.5"/></svg>
+      </button>
+      <button class="tb-btn tb-close" id="tb-close" title="Закрити">
+        <svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="1" y1="1" x2="9" y2="9"/><line x1="9" y1="1" x2="1" y2="9"/></svg>
+      </button>
     </div>
   </div>
 

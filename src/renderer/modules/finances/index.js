@@ -1,6 +1,7 @@
 // src/renderer/modules/finances/index.js
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getActivePathSegments } from '../../services/auth.js'
+import { icon } from '../../utils/icons.js'
 import {
   collection, addDoc, getDocs, deleteDoc,
   doc, updateDoc, query, orderBy, serverTimestamp
@@ -8,28 +9,28 @@ import {
 
 // ── Category definitions ───────────────────────────────────────────────────
 const INCOME_CATS = [
-  { id: 'freelance',   icon: '💻', label: 'Фріланс'     },
-  { id: 'salary',      icon: '👤', label: 'Зарплата'    },
-  { id: 'project',     icon: '📁', label: 'Проект'      },
-  { id: 'investment',  icon: '📈', label: 'Інвестиції'  },
-  { id: 'sale',        icon: '🛒', label: 'Продаж'      },
-  { id: 'other',       icon: '📦', label: 'Інше'        },
+  { id: 'freelance',   label: 'Фріланс'    },
+  { id: 'salary',      label: 'Зарплата'   },
+  { id: 'project',     label: 'Проект'     },
+  { id: 'investment',  label: 'Інвестиції' },
+  { id: 'sale',        label: 'Продаж'     },
+  { id: 'other',       label: 'Інше'       },
 ]
 
 const EXPENSE_CATS = [
-  { id: 'rent',        icon: '🏢', label: 'Оренда'      },
-  { id: 'utilities',   icon: '💡', label: 'Комунальні'  },
-  { id: 'food',        icon: '🍽', label: 'Їжа'         },
-  { id: 'transport',   icon: '🚗', label: 'Транспорт'   },
-  { id: 'comms',       icon: '📱', label: 'Зв\'язок'    },
-  { id: 'marketing',   icon: '📣', label: 'Маркетинг'   },
-  { id: 'equipment',   icon: '🖥', label: 'Обладнання'  },
-  { id: 'other',       icon: '📦', label: 'Інше'        },
+  { id: 'rent',        label: 'Оренда'     },
+  { id: 'utilities',   label: 'Комунальні' },
+  { id: 'food',        label: 'Їжа'        },
+  { id: 'transport',   label: 'Транспорт'  },
+  { id: 'comms',       label: 'Зв\'язок'   },
+  { id: 'marketing',   label: 'Маркетинг'  },
+  { id: 'equipment',   label: 'Обладнання' },
+  { id: 'other',       label: 'Інше'       },
 ]
 
 function getCatMeta(type, catId) {
   const list = type === 'income' ? INCOME_CATS : EXPENSE_CATS
-  return list.find(c => c.id === catId) || { icon: '📦', label: catId || 'Інше' }
+  return list.find(c => c.id === catId) || { label: catId || 'Інше' }
 }
 
 function fmtAmt(v) {
@@ -215,7 +216,6 @@ function injectStyles() {
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 18px;
       flex-shrink: 0;
       margin-left: 6px;
     }
@@ -268,7 +268,7 @@ function injectStyles() {
       text-align: center;
       padding: 60px 20px;
     }
-    .fn-empty-icon { font-size: 48px; margin-bottom: 12px; opacity: .5; }
+    .fn-empty-icon { display:flex; align-items:center; justify-content:center; margin-bottom:12px; color:var(--text-muted); }
     .fn-empty-title { font-size: 16px; font-weight: 600; color: var(--text-secondary, #94A3B8); margin-bottom: 6px; }
     .fn-empty-desc  { font-size: 13px; color: var(--text-muted, #64748B); }
 
@@ -539,7 +539,7 @@ export async function render(container) {
 
         <div class="fn-header">
           <div>
-            <h1 class="fn-title">💰 Фінанси</h1>
+            <h1 class="fn-title">Фінанси</h1>
             <p class="fn-sub" id="fn-subtitle">Завантаження...</p>
           </div>
           <button class="btn btn-primary" id="fn-add-btn">+ Нова транзакція</button>
@@ -550,15 +550,15 @@ export async function render(container) {
           <!-- Stat cards -->
           <div class="fn-stats">
             <div class="fn-stat fn-stat-income">
-              <div class="fn-stat-label">📈 Дохід</div>
+              <div class="fn-stat-label">Дохід</div>
               <div class="fn-stat-val" id="fn-s-income">₴0</div>
             </div>
             <div class="fn-stat fn-stat-expense">
-              <div class="fn-stat-label">📉 Витрати</div>
+              <div class="fn-stat-label">Витрати</div>
               <div class="fn-stat-val" id="fn-s-expense">₴0</div>
             </div>
             <div class="fn-stat fn-stat-balance">
-              <div class="fn-stat-label">💰 Баланс</div>
+              <div class="fn-stat-label">Баланс</div>
               <div class="fn-stat-val" id="fn-s-balance">₴0</div>
             </div>
           </div>
@@ -566,8 +566,8 @@ export async function render(container) {
           <!-- Filter pills -->
           <div class="fn-filters" id="fn-filters">
             <button class="fn-pill active" data-filter="all">Всі</button>
-            <button class="fn-pill" data-filter="income">📈 Дохід</button>
-            <button class="fn-pill" data-filter="expense">📉 Витрати</button>
+            <button class="fn-pill" data-filter="income">Дохід</button>
+            <button class="fn-pill" data-filter="expense">Витрати</button>
           </div>
 
           <!-- Transaction list -->
@@ -591,7 +591,7 @@ export async function render(container) {
       <div class="fn-modal">
         <div class="fn-modal-header">
           <h2 class="fn-modal-title" id="fn-modal-title">Нова транзакція</h2>
-          <button class="fn-modal-close" id="fn-modal-close">✕</button>
+          <button class="fn-modal-close" id="fn-modal-close">${icon('x', 14)}</button>
         </div>
         <form id="fn-form" novalidate>
           <div class="fn-modal-body">
@@ -599,8 +599,8 @@ export async function render(container) {
             <!-- Type tabs -->
             <div class="field" style="margin-bottom:16px">
               <div class="fn-type-tabs" id="fn-type-tabs">
-                <button type="button" class="fn-type-tab active" data-type="income">📈 Дохід</button>
-                <button type="button" class="fn-type-tab"        data-type="expense">📉 Витрата</button>
+                <button type="button" class="fn-type-tab active" data-type="income">Дохід</button>
+                <button type="button" class="fn-type-tab"        data-type="expense">Витрата</button>
               </div>
             </div>
 
@@ -683,7 +683,7 @@ export async function render(container) {
       console.error('finances load error', err)
       listEl.innerHTML = `
         <div class="fn-empty">
-          <div class="fn-empty-icon">⚠️</div>
+          <div class="fn-empty-icon">${icon('alert-triangle', 40)}</div>
           <div class="fn-empty-title">Помилка завантаження</div>
           <div class="fn-empty-desc">${err.message}</div>
         </div>`
@@ -725,7 +725,7 @@ export async function render(container) {
     if (list.length === 0) {
       listEl.innerHTML = `
         <div class="fn-empty">
-          <div class="fn-empty-icon">💸</div>
+          <div class="fn-empty-icon">${icon('finances', 48)}</div>
           <div class="fn-empty-title">Транзакцій немає</div>
           <div class="fn-empty-desc">Натисніть "+ Нова транзакція" щоб додати</div>
         </div>`
@@ -737,7 +737,7 @@ export async function render(container) {
       const sel = t.id === selectedId
       return `
         <div class="fn-card fn-card-${t.type} ${sel ? 'fn-card-selected' : ''}" data-id="${t.id}">
-          <div class="fn-card-icon">${cat.icon}</div>
+          <div class="fn-card-icon">${icon(t.type === 'income' ? 'finances' : 'bar-chart', 20)}</div>
           <div class="fn-card-body">
             <div class="fn-card-top">
               <span class="fn-card-cat">${cat.label}</span>
@@ -746,7 +746,7 @@ export async function render(container) {
               </span>
             </div>
             ${t.description ? `<div class="fn-card-desc">${t.description}</div>` : ''}
-            <div class="fn-card-date">📅 ${fmtDate(t.date)}</div>
+            <div class="fn-card-date">${fmtDate(t.date)}</div>
           </div>
         </div>`
     }).join('')}</div>`
@@ -777,29 +777,28 @@ export async function render(container) {
     stripeEl.className = `fn-detail-stripe ${t.type}`
 
     const cat = getCatMeta(t.type, t.category)
-    const typeLabel  = t.type === 'income' ? 'Дохід'   : 'Витрата'
-    const typeIcon   = t.type === 'income' ? '📈'      : '📉'
+    const typeLabel  = t.type === 'income' ? 'Дохід' : 'Витрата'
 
     detailEl.innerHTML = `
       <div class="fn-detail-header">
         <div>
-          <div class="fn-detail-type-badge ${t.type}">${typeIcon} ${typeLabel}</div>
+          <div class="fn-detail-type-badge ${t.type}">${typeLabel}</div>
           <div class="fn-detail-amount ${t.type}">
             ${t.type === 'income' ? '+' : '−'}${fmtAmt(t.amount)}
           </div>
         </div>
-        <button class="fn-detail-close" id="fn-detail-close">✕</button>
+        <button class="fn-detail-close" id="fn-detail-close">${icon('x', 14)}</button>
       </div>
 
       <div class="fn-detail-body">
         <div class="fn-detail-section">
           <div class="fn-detail-row">
             <span class="fn-detail-row-label">Категорія</span>
-            <span class="fn-detail-row-val">${cat.icon} ${cat.label}</span>
+            <span class="fn-detail-row-val">${cat.label}</span>
           </div>
           <div class="fn-detail-row">
             <span class="fn-detail-row-label">Дата</span>
-            <span class="fn-detail-row-val">📅 ${fmtDate(t.date)}</span>
+            <span class="fn-detail-row-val">${fmtDate(t.date)}</span>
           </div>
           ${t.description ? `
           <div class="fn-detail-row">
@@ -810,8 +809,8 @@ export async function render(container) {
       </div>
 
       <div class="fn-detail-footer">
-        <button class="btn btn-secondary" id="fn-detail-edit">✏️ Редагувати</button>
-        <button class="btn btn-danger"    id="fn-detail-delete">🗑 Видалити</button>
+        <button class="btn btn-secondary" id="fn-detail-edit">Редагувати</button>
+        <button class="btn btn-danger"    id="fn-detail-delete">Видалити</button>
       </div>
     `
 
@@ -893,7 +892,7 @@ export async function render(container) {
   function populateCategorySelect() {
     const sel  = container.querySelector('#fn-f-category')
     const cats = modalType === 'income' ? INCOME_CATS : EXPENSE_CATS
-    sel.innerHTML = cats.map(c => `<option value="${c.id}">${c.icon} ${c.label}</option>`).join('')
+    sel.innerHTML = cats.map(c => `<option value="${c.id}">${c.label}</option>`).join('')
   }
 
   container.querySelector('#fn-type-tabs').addEventListener('click', e => {

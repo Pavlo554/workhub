@@ -1,6 +1,7 @@
 // src/renderer/modules/contracts/index.js
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getUserProfile, getActivePathSegments } from '../../services/auth.js'
+import { icon } from '../../utils/icons.js'
 import {
   collection, addDoc, getDocs, deleteDoc, doc, updateDoc,
   query, orderBy, serverTimestamp
@@ -25,7 +26,7 @@ export async function render(container) {
 
         <div class="ct-header">
           <div>
-            <h1 class="ct-title">📝 Договори</h1>
+            <h1 class="ct-title">Договори</h1>
             <p class="ct-sub" id="ct-count">Завантаження...</p>
           </div>
           <button class="btn btn-primary" id="add-contract-btn">+ Новий</button>
@@ -37,10 +38,10 @@ export async function render(container) {
         <!-- Filters -->
         <div class="ct-filters" id="ct-filters">
           <button class="ct-filter active" data-filter="all">Всі</button>
-          <button class="ct-filter" data-filter="active">🟢 Активні</button>
-          <button class="ct-filter" data-filter="draft">🟡 Чернетки</button>
-          <button class="ct-filter" data-filter="completed">✅ Завершені</button>
-          <button class="ct-filter" data-filter="cancelled">❌ Скасовані</button>
+          <button class="ct-filter" data-filter="active">Активні</button>
+          <button class="ct-filter" data-filter="draft">Чернетки</button>
+          <button class="ct-filter" data-filter="completed">Завершені</button>
+          <button class="ct-filter" data-filter="cancelled">Скасовані</button>
         </div>
 
         <div id="ct-list">
@@ -61,7 +62,7 @@ export async function render(container) {
       <div class="modal" style="max-width:640px">
         <div class="modal-header">
           <h2 class="modal-title" id="ct-modal-title">Новий договір</h2>
-          <button class="modal-close" id="ct-modal-close">✕</button>
+          <button class="modal-close" id="ct-modal-close">${icon('x', 14)}</button>
         </div>
         <form class="modal-form" id="ct-form" novalidate>
           <div class="modal-body">
@@ -198,7 +199,7 @@ export async function render(container) {
     if (list.length === 0) {
       el.innerHTML = `
         <div class="ct-empty">
-          <div class="ct-empty-icon">📝</div>
+          <div class="ct-empty-icon">${icon('contracts', 40)}</div>
           <div class="ct-empty-title">${currentFilter === 'all' ? 'Договорів ще немає' : 'Нічого не знайдено'}</div>
           <div class="ct-empty-desc">Створіть перший договір з клієнтом</div>
         </div>
@@ -235,7 +236,7 @@ export async function render(container) {
           <div class="ct-card-footer">
             ${c.amount ? `<span class="ct-card-amount">₴${fmtNum(c.amount)}</span>` : '<span></span>'}
             <span class="ct-card-date ${isOverdue ? 'ct-overdue' : ''}">
-              ${isOverdue ? '⚠️ ' : ''}${c.endDate ? fmtDate(c.endDate) : (c.date ? fmtDate(c.date) : '')}
+              ${c.endDate ? fmtDate(c.endDate) : (c.date ? fmtDate(c.date) : '')}
             </span>
           </div>
         </div>
@@ -257,7 +258,7 @@ export async function render(container) {
       <div class="ct-d-stripe" style="background:${st.color}"></div>
 
       <div class="ct-d-head">
-        <button class="ct-d-close" id="ct-d-close">✕</button>
+        <button class="ct-d-close" id="ct-d-close">${icon('x', 14)}</button>
         <div class="ct-d-num">${c.number || '—'}</div>
         <div class="ct-d-client">${c.client || '—'}</div>
         <div class="ct-d-status-badge" style="background:${st.bg};color:${st.color}">${st.label}</div>
@@ -273,9 +274,9 @@ export async function render(container) {
       <div class="ct-d-section">
         <div class="ct-d-section-label">Деталі</div>
         <div class="ct-d-details">
-          ${c.date      ? `<div class="ct-d-row"><span>📋 Підписано</span><span>${fmtDate(c.date)}</span></div>` : ''}
-          ${c.startDate ? `<div class="ct-d-row"><span>▶️ Початок</span><span>${fmtDate(c.startDate)}</span></div>` : ''}
-          ${c.endDate   ? `<div class="ct-d-row"><span>${isOverdue ? '⚠️' : '🏁'} Закінчення</span><span class="${isOverdue ? 'ct-text-red' : ''}">${fmtDate(c.endDate)}${isOverdue ? ' — прострочено' : ''}</span></div>` : ''}
+          ${c.date      ? `<div class="ct-d-row"><span>Підписано</span><span>${fmtDate(c.date)}</span></div>` : ''}
+          ${c.startDate ? `<div class="ct-d-row"><span>Початок</span><span>${fmtDate(c.startDate)}</span></div>` : ''}
+          ${c.endDate   ? `<div class="ct-d-row"><span>Закінчення</span><span class="${isOverdue ? 'ct-text-red' : ''}">${fmtDate(c.endDate)}${isOverdue ? ' — прострочено' : ''}</span></div>` : ''}
         </div>
       </div>
 
@@ -301,12 +302,12 @@ export async function render(container) {
 
       <!-- PDF button -->
       <div class="ct-d-section">
-        <button class="ct-pdf-btn" id="ct-d-pdf">📄 Завантажити PDF</button>
+        <button class="ct-pdf-btn" id="ct-d-pdf">Завантажити PDF</button>
       </div>
 
       <div class="ct-d-footer">
-        <button class="btn btn-secondary" id="ct-d-edit">✏️ Редагувати</button>
-        <button class="btn btn-danger"    id="ct-d-del">🗑 Видалити</button>
+        <button class="btn btn-secondary" id="ct-d-edit">Редагувати</button>
+        <button class="btn btn-danger"    id="ct-d-del">Видалити</button>
       </div>
     `
 
@@ -566,7 +567,7 @@ function injectStyles() {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     padding: 60px 20px; gap: 10px; color: var(--text-muted);
   }
-  .ct-empty-icon  { font-size: 40px; }
+  .ct-empty-icon  { display:flex; align-items:center; justify-content:center; color:var(--text-muted); }
   .ct-empty-title { font-size: 15px; font-weight: 600; color: var(--text-secondary); }
   .ct-empty-desc  { font-size: 13px; }
 

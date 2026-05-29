@@ -1,6 +1,7 @@
 // src/renderer/modules/content-plan/index.js
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getActivePathSegments } from '../../services/auth.js'
+import { icon } from '../../utils/icons.js'
 import {
   collection, addDoc, getDocs, deleteDoc, doc, updateDoc,
   query, orderBy, serverTimestamp,
@@ -9,23 +10,23 @@ import {
 // ── Constants ─────────────────────────────────────────────
 
 const PLATFORMS = [
-  { id: 'instagram', icon: '📸', label: 'Instagram', color: '#E1306C' },
-  { id: 'tiktok',    icon: '🎵', label: 'TikTok',    color: '#69C9D0' },
-  { id: 'telegram',  icon: '✈️', label: 'Telegram',  color: '#2CA5E0' },
-  { id: 'facebook',  icon: '👥', label: 'Facebook',  color: '#1877F2' },
-  { id: 'youtube',   icon: '▶️', label: 'YouTube',   color: '#FF0000' },
-  { id: 'linkedin',  icon: '💼', label: 'LinkedIn',  color: '#0A66C2' },
-  { id: 'twitter',   icon: '🐦', label: 'Twitter/X', color: '#1DA1F2' },
-  { id: 'other',     icon: '🌐', label: 'Інше',      color: '#94A3B8' },
+  { id: 'instagram', label: 'Instagram', color: '#E1306C' },
+  { id: 'tiktok',    label: 'TikTok',    color: '#69C9D0' },
+  { id: 'telegram',  label: 'Telegram',  color: '#2CA5E0' },
+  { id: 'facebook',  label: 'Facebook',  color: '#1877F2' },
+  { id: 'youtube',   label: 'YouTube',   color: '#FF0000' },
+  { id: 'linkedin',  label: 'LinkedIn',  color: '#0A66C2' },
+  { id: 'twitter',   label: 'Twitter/X', color: '#1DA1F2' },
+  { id: 'other',     label: 'Інше',      color: '#94A3B8' },
 ]
 
 const POST_TYPES = [
-  { id: 'post',    label: 'Пост',      icon: '📄' },
-  { id: 'story',   label: 'Сторіз',   icon: '⭕' },
-  { id: 'reel',    label: 'Reels',    icon: '🎬' },
-  { id: 'video',   label: 'Відео',    icon: '🎥' },
-  { id: 'article', label: 'Стаття',   icon: '📰' },
-  { id: 'poll',    label: 'Опитування',icon: '📊' },
+  { id: 'post',    label: 'Пост'        },
+  { id: 'story',   label: 'Сторіз'      },
+  { id: 'reel',    label: 'Reels'       },
+  { id: 'video',   label: 'Відео'       },
+  { id: 'article', label: 'Стаття'      },
+  { id: 'poll',    label: 'Опитування'  },
 ]
 
 const STATUSES = {
@@ -50,14 +51,14 @@ export async function render(container) {
       <!-- Header -->
       <div class="cp-header">
         <div>
-          <h1 class="cp-title">📱 Контент-план</h1>
+          <h1 class="cp-title">Контент-план</h1>
           <p class="cp-sub" id="cp-sub">Завантаження...</p>
         </div>
         <div class="cp-header-actions">
           <div class="cp-view-toggle">
-            <button class="cp-view-btn active" data-view="kanban" title="Канбан">⊞</button>
-            <button class="cp-view-btn" data-view="calendar" title="Календар">📅</button>
-            <button class="cp-view-btn" data-view="list" title="Список">☰</button>
+            <button class="cp-view-btn active" data-view="kanban" title="Канбан">${icon('kanban', 15)}</button>
+            <button class="cp-view-btn" data-view="calendar" title="Календар">${icon('tax-calendar', 15)}</button>
+            <button class="cp-view-btn" data-view="list" title="Список">${icon('notes', 15)}</button>
           </div>
           <button class="btn btn-primary" id="cp-add-btn">+ Новий пост</button>
         </div>
@@ -68,7 +69,7 @@ export async function render(container) {
         <button class="cp-plat-btn active" data-plat="all">Всі платформи</button>
         ${PLATFORMS.map(p => `
           <button class="cp-plat-btn" data-plat="${p.id}" style="--pc:${p.color}">
-            ${p.icon} ${p.label}
+            ${p.label}
           </button>
         `).join('')}
       </div>
@@ -100,7 +101,7 @@ export async function render(container) {
       <div class="cp-modal">
         <div class="cp-modal-head">
           <h2 id="cp-modal-title">Новий пост</h2>
-          <button class="cp-modal-close" id="cp-modal-close">✕</button>
+          <button class="cp-modal-close" id="cp-modal-close">${icon('x', 14)}</button>
         </div>
         <div class="cp-modal-body">
 
@@ -122,7 +123,7 @@ export async function render(container) {
                 ${PLATFORMS.map(p => `
                   <label class="cp-plat-pick" style="--pc:${p.color}">
                     <input type="radio" name="f-platform" value="${p.id}" />
-                    <span class="cp-plat-pick-box">${p.icon} ${p.label}</span>
+                    <span class="cp-plat-pick-box">${p.label}</span>
                   </label>
                 `).join('')}
               </div>
@@ -137,7 +138,7 @@ export async function render(container) {
                 ${POST_TYPES.map((t, i) => `
                   <label class="cp-type-pick">
                     <input type="radio" name="f-type" value="${t.id}" ${i === 0 ? 'checked' : ''} />
-                    <span class="cp-type-box">${t.icon} ${t.label}</span>
+                    <span class="cp-type-box">${t.label}</span>
                   </label>
                 `).join('')}
               </div>
@@ -279,7 +280,6 @@ export async function render(container) {
             ${dayPosts.map(p => {
               const plat = PLATFORMS.find(x => x.id === p.platform)
               return `<div class="cp-cal-post" style="background:${plat?.color || '#94A3B8'}22;border-color:${plat?.color || '#94A3B8'}55" data-id="${p.id}">
-                <span>${plat?.icon || '📄'}</span>
                 <span class="cp-cal-post-text">${p.caption}</span>
               </div>`
             }).join('')}
@@ -315,7 +315,7 @@ export async function render(container) {
     const list = filtered().slice().sort((a, b) => (a.date || '9999') < (b.date || '9999') ? -1 : 1)
 
     if (list.length === 0) {
-      el.innerHTML = `<div class="cp-empty"><div class="cp-empty-icon">📱</div><div class="cp-empty-title">Постів ще немає</div><div class="cp-empty-desc">Натисніть "+ Новий пост" щоб додати перший</div></div>`
+      el.innerHTML = `<div class="cp-empty"><div class="cp-empty-icon">${icon('content-plan', 48)}</div><div class="cp-empty-title">Постів ще немає</div><div class="cp-empty-desc">Натисніть "+ Новий пост" щоб додати перший</div></div>`
       return
     }
 
@@ -325,21 +325,21 @@ export async function render(container) {
       const status = STATUSES[p.status || 'idea']
       return `
         <div class="cp-list-row" data-id="${p.id}">
-          <div class="cp-list-plat" style="background:${plat?.color || '#94A3B8'}22;border-color:${plat?.color || '#94A3B8'}44">
-            <span>${plat?.icon || '🌐'}</span>
+          <div class="cp-list-plat" style="background:${plat?.color || '#94A3B8'}22;border-color:${plat?.color || '#94A3B8'}44; color:${plat?.color || '#94A3B8'}">
+            ${icon('accounts', 18)}
           </div>
           <div class="cp-list-body">
             <div class="cp-list-caption">${p.caption}</div>
             ${p.text ? `<div class="cp-list-text">${p.text.slice(0, 100)}${p.text.length > 100 ? '…' : ''}</div>` : ''}
           </div>
           <div class="cp-list-meta">
-            ${p.date ? `<span class="cp-list-date">📅 ${formatDate(p.date)}${p.time ? ' ' + p.time : ''}</span>` : ''}
-            <span class="cp-list-type">${type?.icon || ''} ${type?.label || ''}</span>
+            ${p.date ? `<span class="cp-list-date">${formatDate(p.date)}${p.time ? ' ' + p.time : ''}</span>` : ''}
+            <span class="cp-list-type">${type?.label || ''}</span>
           </div>
           <div class="cp-list-status" style="color:${status.color};background:${status.bg}">${status.label}</div>
           <div class="cp-list-actions">
-            <button class="cp-list-btn edit-btn" data-id="${p.id}">✏️</button>
-            <button class="cp-list-btn delete-btn" data-id="${p.id}">🗑</button>
+            <button class="cp-list-btn edit-btn" data-id="${p.id}">${icon('pencil', 13)}</button>
+            <button class="cp-list-btn delete-btn" data-id="${p.id}">${icon('trash', 13)}</button>
           </div>
         </div>
       `
@@ -367,19 +367,18 @@ export async function render(container) {
       <div class="cp-card" data-id="${p.id}">
         <div class="cp-card-head">
           <div class="cp-card-plat" style="background:${plat?.color || '#94A3B8'}22;border-color:${plat?.color || '#94A3B8'}55">
-            <span>${plat?.icon || '🌐'}</span>
             <span style="color:${plat?.color || '#94A3B8'}">${plat?.label || 'Інше'}</span>
           </div>
           <div class="cp-card-actions">
-            <button class="cp-card-btn edit-btn" data-id="${p.id}">✏️</button>
-            <button class="cp-card-btn delete-btn" data-id="${p.id}">🗑</button>
+            <button class="cp-card-btn edit-btn" data-id="${p.id}">${icon('pencil', 12)}</button>
+            <button class="cp-card-btn delete-btn" data-id="${p.id}">${icon('trash', 12)}</button>
           </div>
         </div>
         <div class="cp-card-caption">${p.caption}</div>
         ${p.text ? `<div class="cp-card-text">${p.text.slice(0, 120)}${p.text.length > 120 ? '…' : ''}</div>` : ''}
         <div class="cp-card-foot">
-          ${type ? `<span class="cp-card-type">${type.icon} ${type.label}</span>` : ''}
-          ${p.date ? `<span class="cp-card-date">📅 ${formatDate(p.date)}${p.time ? ' · ' + p.time : ''}</span>` : ''}
+          ${type ? `<span class="cp-card-type">${type.label}</span>` : ''}
+          ${p.date ? `<span class="cp-card-date">${formatDate(p.date)}${p.time ? ' · ' + p.time : ''}</span>` : ''}
           ${p.hashtags ? `<div class="cp-card-tags">${p.hashtags.split(' ').slice(0,3).map(h => `<span class="cp-tag">${h}</span>`).join('')}</div>` : ''}
         </div>
       </div>
@@ -657,7 +656,7 @@ function injectStyles() {
       border-radius:var(--radius-lg); padding:14px 18px; transition:all .2s;
     }
     .cp-list-row:hover { border-color:rgba(255,255,255,.12); transform:translateX(2px); }
-    .cp-list-plat  { width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:20px; border:1px solid; flex-shrink:0; }
+    .cp-list-plat  { width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; border:1px solid; flex-shrink:0; }
     .cp-list-body  { flex:1; min-width:0; }
     .cp-list-caption { font-weight:700; font-size:14px; margin-bottom:2px; }
     .cp-list-text    { font-size:12px; color:var(--text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -672,7 +671,7 @@ function injectStyles() {
 
     /* Empty */
     .cp-empty       { text-align:center; padding:80px 24px; }
-    .cp-empty-icon  { font-size:52px; margin-bottom:16px; }
+    .cp-empty-icon  { display:flex; align-items:center; justify-content:center; margin-bottom:16px; color:var(--text-muted); }
     .cp-empty-title { font-family:var(--font-display); font-size:20px; font-weight:700; margin-bottom:8px; }
     .cp-empty-desc  { font-size:14px; color:var(--text-muted); }
     .cp-loading     { display:flex; justify-content:center; padding:60px; }

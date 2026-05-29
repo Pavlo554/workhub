@@ -2,6 +2,7 @@
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getActivePathSegments } from '../../services/auth.js'
 import { debounce } from '../../../core/utils.js'
+import { icon } from '../../utils/icons.js'
 import {
   collection, addDoc, getDocs, deleteDoc,
   doc, updateDoc, query, orderBy, serverTimestamp
@@ -27,7 +28,7 @@ export async function render(container) {
 
         <div class="nt-header">
           <div>
-            <h1 class="nt-title">🗒 Нотатки</h1>
+            <h1 class="nt-title">Нотатки</h1>
             <p class="nt-sub" id="nt-count">Завантаження...</p>
           </div>
           <button class="btn btn-primary" id="add-note-btn">+ Нова</button>
@@ -35,7 +36,7 @@ export async function render(container) {
 
         <!-- Search -->
         <div class="nt-search">
-          <span>🔍</span>
+          <span class="nt-search-icon">${icon('search', 14)}</span>
           <input type="text" class="nt-search-input" id="nt-search" placeholder="Пошук..." />
         </div>
 
@@ -113,7 +114,7 @@ export async function render(container) {
     if (list.length === 0) {
       el.innerHTML = `
         <div class="nt-empty">
-          <div class="nt-empty-icon">🗒</div>
+          <div class="nt-empty-icon">${icon('notes', 36)}</div>
           <div class="nt-empty-title">${notes.length === 0 ? 'Нотаток ще немає' : 'Нічого не знайдено'}</div>
           <div class="nt-empty-desc">Натисніть "+ Нова" щоб створити першу нотатку</div>
         </div>`
@@ -156,7 +157,7 @@ export async function render(container) {
         <div class="nt-card-body">
           <div class="nt-card-top">
             <div class="nt-card-title">${n.title || 'Без назви'}</div>
-            <button class="nt-card-del" data-id="${n.id}" title="Видалити">🗑</button>
+            <button class="nt-card-del" data-id="${n.id}" title="Видалити">${icon('trash', 12)}</button>
           </div>
           ${preview ? `<div class="nt-card-preview">${preview}${n.content?.length > 160 ? '…' : ''}</div>` : ''}
           <div class="nt-card-date">${fmtDate(date)}</div>
@@ -178,7 +179,7 @@ export async function render(container) {
       <div class="nt-ed-stripe" style="background:${meta.accent}"></div>
 
       <div class="nt-ed-toolbar">
-        <button class="nt-ed-close" id="nt-ed-close">✕</button>
+        <button class="nt-ed-close" id="nt-ed-close">${icon('x', 14)}</button>
         <div class="nt-ed-colors">
           ${Object.entries(COLOR_META).map(([k, v]) => `
             <button class="nt-ed-dot ${color === k ? 'nt-ed-dot-active' : ''}"
@@ -186,8 +187,8 @@ export async function render(container) {
           `).join('')}
         </div>
         <div class="nt-ed-actions">
-          <button class="nt-ed-save btn btn-primary" id="nt-ed-save">💾 Зберегти</button>
-          <button class="nt-ed-del btn btn-danger"   id="nt-ed-del">🗑</button>
+          <button class="nt-ed-save btn btn-primary" id="nt-ed-save">Зберегти</button>
+          <button class="nt-ed-del btn btn-danger"   id="nt-ed-del">${icon('trash', 13)}</button>
         </div>
       </div>
 
@@ -235,7 +236,7 @@ export async function render(container) {
         })
         await loadNotes()
       } catch (err) { console.error(err) }
-      finally { btn.disabled = false; btn.innerHTML = '💾 Зберегти' }
+      finally { btn.disabled = false; btn.textContent = 'Зберегти' }
     })
 
     // Delete
@@ -274,7 +275,7 @@ export async function render(container) {
       <div class="nt-ed-stripe" style="background:#6B7280"></div>
 
       <div class="nt-ed-toolbar">
-        <button class="nt-ed-close" id="nt-ed-close">✕</button>
+        <button class="nt-ed-close" id="nt-ed-close">${icon('x', 14)}</button>
         <div class="nt-ed-colors">
           ${Object.entries(COLOR_META).map(([k, v]) => `
             <button class="nt-ed-dot ${k === 'default' ? 'nt-ed-dot-active' : ''}"
@@ -282,7 +283,7 @@ export async function render(container) {
           `).join('')}
         </div>
         <div class="nt-ed-actions">
-          <button class="nt-ed-save btn btn-primary" id="nt-ed-save">💾 Зберегти</button>
+          <button class="nt-ed-save btn btn-primary" id="nt-ed-save">Зберегти</button>
         </div>
       </div>
 
@@ -317,7 +318,7 @@ export async function render(container) {
         closeEditor()
         await loadNotes()
       } catch (err) { console.error(err) }
-      finally { btn.disabled = false; btn.innerHTML = '💾 Зберегти' }
+      finally { btn.disabled = false; btn.textContent = 'Зберегти' }
     })
 
     setTimeout(() => container.querySelector('#nt-ed-title')?.focus(), 100)
@@ -389,6 +390,7 @@ function injectStyles() {
     transition:border-color .2s; flex-shrink:0;
   }
   .nt-search:focus-within { border-color:var(--accent-blue); }
+  .nt-search-icon { display:flex; align-items:center; color:var(--text-muted); flex-shrink:0; }
   .nt-search-input { flex:1; background:none; font-size:13px; color:var(--text-primary); }
   .nt-search-input::placeholder { color:var(--text-muted); }
 
@@ -440,7 +442,7 @@ function injectStyles() {
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     padding:60px 20px; gap:10px; text-align:center;
   }
-  .nt-empty-icon  { font-size:40px; }
+  .nt-empty-icon  { display:flex; align-items:center; justify-content:center; color:var(--text-muted); }
   .nt-empty-title { font-size:15px; font-weight:600; color:var(--text-secondary); }
   .nt-empty-desc  { font-size:13px; color:var(--text-muted); }
 

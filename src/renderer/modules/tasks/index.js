@@ -8,6 +8,7 @@ import {
 import {
   ref, uploadBytes, getDownloadURL, deleteObject
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js'
+import { icon } from '../../utils/icons.js'
 
 export async function render(container) {
   injectStyles()
@@ -20,7 +21,7 @@ export async function render(container) {
 
         <div class="tk-header">
           <div>
-            <h1 class="tk-title">✅ Задачі</h1>
+            <h1 class="tk-title">Задачі</h1>
             <p class="tk-sub" id="tasks-count">Завантаження...</p>
           </div>
           <button class="btn btn-primary" id="add-task-btn">+ Нова задача</button>
@@ -42,15 +43,15 @@ export async function render(container) {
           </div>
           <div class="tk-priority-filter" id="tk-pri-filter">
             <button class="tk-pri-btn active" data-pri="all">Всі</button>
-            <button class="tk-pri-btn" data-pri="high"   style="--pc:#EF4444">🔴 Високий</button>
-            <button class="tk-pri-btn" data-pri="medium" style="--pc:#F59E0B">🟡 Середній</button>
-            <button class="tk-pri-btn" data-pri="low"    style="--pc:#34D399">🟢 Низький</button>
+            <button class="tk-pri-btn" data-pri="high"   style="--pc:#EF4444">Високий</button>
+            <button class="tk-pri-btn" data-pri="medium" style="--pc:#F59E0B">Середній</button>
+            <button class="tk-pri-btn" data-pri="low"    style="--pc:#34D399">Низький</button>
           </div>
         </div>
 
         <!-- Project filter -->
         <div class="tk-proj-filter-row" id="tk-proj-row" style="display:none">
-          <span class="tk-proj-label">📁 Проект:</span>
+          <span class="tk-proj-label">Проект:</span>
           <div class="tk-proj-pills" id="tk-proj-pills"></div>
         </div>
 
@@ -72,7 +73,7 @@ export async function render(container) {
       <div class="modal" style="max-width:560px">
         <div class="modal-header">
           <h2 class="modal-title" id="modal-title">Нова задача</h2>
-          <button class="modal-close" id="modal-close">✕</button>
+          <button class="modal-close" id="modal-close">${icon('x', 14)}</button>
         </div>
         <form class="modal-form" id="task-form" novalidate>
           <div class="modal-body">
@@ -100,8 +101,8 @@ export async function render(container) {
                 <label>Пріоритет</label>
                 <select id="f-priority" class="input">
                   <option value="medium">Середній</option>
-                  <option value="high">Високий 🔴</option>
-                  <option value="low">Низький 🟢</option>
+                  <option value="high">Високий</option>
+                  <option value="low">Низький</option>
                 </select>
               </div>
               <div class="field">
@@ -123,7 +124,7 @@ export async function render(container) {
             <div style="display:none" id="attach-zone-wrap">
               <div class="attach-zone" id="attach-zone">
                 <input type="file" id="f-files" multiple accept="image/*,.pdf,.doc,.docx" style="display:none" />
-                <button type="button" class="attach-btn" id="attach-pick-btn">📎 Додати файли</button>
+                <button type="button" class="attach-btn" id="attach-pick-btn">Додати файли</button>
               </div>
               <div class="attach-previews" id="attach-previews"></div>
             </div>
@@ -199,7 +200,7 @@ export async function render(container) {
     } catch (err) {
       console.error(err)
       container.querySelector('#tasks-list').innerHTML = `
-        <div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Помилка завантаження</div></div>
+        <div class="empty-state"><div class="empty-icon" style="color:var(--text-muted)">${icon('alert-triangle', 32)}</div><div class="empty-title">Помилка завантаження</div></div>
       `
     }
   }
@@ -237,7 +238,7 @@ export async function render(container) {
     if (list.length === 0) {
       el.innerHTML = `
         <div class="tk-empty">
-          <div class="tk-empty-icon">✅</div>
+          <div class="tk-empty-icon">${icon('tasks', 32)}</div>
           <div class="tk-empty-title">${filter === 'done' ? 'Ще немає виконаних задач' : 'Задач немає'}</div>
           <div class="tk-empty-desc">Натисніть "+ Нова задача" щоб додати</div>
         </div>`
@@ -257,30 +258,30 @@ export async function render(container) {
           <div class="tk-card-body">
             <div class="tk-card-top">
               <button class="tk-check ${done ? 'done' : ''}" data-id="${t.id}" title="${done ? 'Відмінити' : 'Виконати'}">
-                ${done ? '✓' : ''}
+                ${done ? icon('check', 11) : ''}
               </button>
               <div class="tk-card-actions">
-                <button class="tk-icon-btn tk-edit"   data-id="${t.id}">✏️</button>
-                <button class="tk-icon-btn tk-delete" data-id="${t.id}">🗑</button>
+                <button class="tk-icon-btn tk-edit"   data-id="${t.id}">${icon('pencil', 13)}</button>
+                <button class="tk-icon-btn tk-delete" data-id="${t.id}">${icon('trash', 13)}</button>
               </div>
             </div>
 
             <div class="tk-card-title">${t.title}</div>
-            ${proj ? `<div class="tk-card-proj">📁 ${proj.name}</div>` : ''}
+            ${proj ? `<div class="tk-card-proj">${icon('projects', 11)} ${proj.name}</div>` : ''}
             ${t.description ? `<div class="tk-card-desc">${t.description}</div>` : ''}
 
             ${atts.length ? `
               <div class="tk-attachments">
                 ${atts.map(a => a.type === 'image'
                   ? `<img src="${a.url}" class="tk-thumb" title="${a.name}" />`
-                  : `<a href="${a.url}" target="_blank" class="tk-file-chip">📄 ${a.name}</a>`
+                  : `<a href="${a.url}" target="_blank" class="tk-file-chip">${icon('file', 11)} ${a.name}</a>`
                 ).join('')}
               </div>` : ''}
 
             <div class="tk-card-footer">
               <span class="tk-badge" style="color:${pri.color};background:${pri.bg}">${pri.label}</span>
               <span class="tk-badge" style="color:${st.color};background:${st.bg}">${st.label}</span>
-              ${t.dueDate ? `<span class="tk-due ${over ? 'overdue' : ''}">📅 ${formatDate(t.dueDate)}</span>` : ''}
+              ${t.dueDate ? `<span class="tk-due ${over ? 'overdue' : ''}">${formatDate(t.dueDate)}</span>` : ''}
             </div>
           </div>
         </div>`
@@ -350,7 +351,7 @@ export async function render(container) {
 
         <div class="tkd-hd">
           <div class="tkd-stripe" style="background:${pri.color}"></div>
-          <button class="tkd-close" id="tkd-close">✕</button>
+          <button class="tkd-close" id="tkd-close">${icon('x', 14)}</button>
         </div>
 
         <div class="tkd-body">
@@ -358,7 +359,7 @@ export async function render(container) {
           <!-- Title + check -->
           <div class="tkd-top">
             <button class="tk-check ${task.status === 'done' ? 'done' : ''}" id="tkd-check" style="--pri:${pri.color}">
-              ${task.status === 'done' ? '✓' : ''}
+              ${task.status === 'done' ? icon('check', 14) : ''}
             </button>
             <h2 class="tkd-title ${task.status === 'done' ? 'tkd-done' : ''}">${task.title}</h2>
           </div>
@@ -367,7 +368,7 @@ export async function render(container) {
           <div class="tkd-badges">
             <span class="tk-badge" style="color:${pri.color};background:${pri.bg}">${pri.label}</span>
             <span class="tk-badge" style="color:${st.color};background:${st.bg}">${st.label}</span>
-            ${over ? `<span class="tk-badge" style="color:#EF4444;background:rgba(239,68,68,.12)">⚠️ Прострочено</span>` : ''}
+            ${over ? `<span class="tk-badge" style="color:#EF4444;background:rgba(239,68,68,.12)">Прострочено</span>` : ''}
           </div>
 
           <!-- Quick status change -->
@@ -393,10 +394,10 @@ export async function render(container) {
           <div class="tkd-section">
             <div class="tkd-label">Деталі</div>
             <div class="tkd-info-list">
-              ${proj ? `<div class="tkd-info-row"><span class="tkd-info-icon">📁</span><span class="tkd-info-key">Проект</span><span class="tkd-info-val">${proj.name}</span></div>` : ''}
-              ${task.dueDate ? `<div class="tkd-info-row"><span class="tkd-info-icon">${over ? '⚠️' : '📅'}</span><span class="tkd-info-key">Дедлайн</span><span class="tkd-info-val ${over ? 'overdue' : ''}">${formatDate(task.dueDate)}</span></div>` : ''}
-              ${created ? `<div class="tkd-info-row"><span class="tkd-info-icon">🕐</span><span class="tkd-info-key">Створено</span><span class="tkd-info-val">${created.toLocaleDateString('uk-UA', {day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span></div>` : ''}
-              ${updated ? `<div class="tkd-info-row"><span class="tkd-info-icon">✏️</span><span class="tkd-info-key">Оновлено</span><span class="tkd-info-val">${updated.toLocaleDateString('uk-UA', {day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span></div>` : ''}
+              ${proj ? `<div class="tkd-info-row"><span class="tkd-info-icon">${icon('projects', 13)}</span><span class="tkd-info-key">Проект</span><span class="tkd-info-val">${proj.name}</span></div>` : ''}
+              ${task.dueDate ? `<div class="tkd-info-row"><span class="tkd-info-icon">${over ? icon('alert-triangle', 13) : icon('tax-calendar', 13)}</span><span class="tkd-info-key">Дедлайн</span><span class="tkd-info-val ${over ? 'overdue' : ''}">${formatDate(task.dueDate)}</span></div>` : ''}
+              ${created ? `<div class="tkd-info-row"><span class="tkd-info-icon">${icon('timer', 13)}</span><span class="tkd-info-key">Створено</span><span class="tkd-info-val">${created.toLocaleDateString('uk-UA', {day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span></div>` : ''}
+              ${updated ? `<div class="tkd-info-row"><span class="tkd-info-icon">${icon('pencil', 13)}</span><span class="tkd-info-key">Оновлено</span><span class="tkd-info-val">${updated.toLocaleDateString('uk-UA', {day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'})}</span></div>` : ''}
             </div>
           </div>
 
@@ -406,7 +407,7 @@ export async function render(container) {
             <div class="tkd-attachments">
               ${atts.map(a => a.type === 'image'
                 ? `<a href="${a.url}" target="_blank"><img src="${a.url}" class="tkd-img" title="${a.name}" /></a>`
-                : `<a href="${a.url}" target="_blank" class="tkd-file"><span>📄</span><span>${a.name}</span></a>`
+                : `<a href="${a.url}" target="_blank" class="tkd-file"><span style="display:flex;align-items:center">${icon('file-pdf', 13)}</span><span>${a.name}</span></a>`
               ).join('')}
             </div>
           </div>` : ''}
@@ -415,8 +416,8 @@ export async function render(container) {
 
         <!-- Footer actions -->
         <div class="tkd-footer">
-          <button class="btn btn-secondary" id="tkd-edit">✏️ Редагувати</button>
-          <button class="btn" style="background:rgba(239,68,68,.12);color:#EF4444;border:1px solid rgba(239,68,68,.3)" id="tkd-delete">🗑 Видалити</button>
+          <button class="btn btn-secondary" id="tkd-edit">Редагувати</button>
+          <button class="btn" style="background:rgba(239,68,68,.12);color:#EF4444;border:1px solid rgba(239,68,68,.3)" id="tkd-delete">Видалити</button>
         </div>
 
       </div>
@@ -517,10 +518,10 @@ export async function render(container) {
       <div class="attach-item" data-path="${a.storagePath || ''}">
         ${a.type === 'image'
           ? `<img src="${a.url}" class="attach-preview-img" />`
-          : `<div class="attach-file-icon">📄</div>`
+          : `<div class="attach-file-icon">${icon('file-pdf', 24)}</div>`
         }
         <div class="attach-name">${a.name}</div>
-        <button type="button" class="attach-remove existing-remove" data-path="${a.storagePath || ''}" data-id="${a.id || ''}">✕</button>
+        <button type="button" class="attach-remove existing-remove" data-path="${a.storagePath || ''}" data-id="${a.id || ''}">${icon('x', 12)}</button>
       </div>
     `).join('')
 
@@ -560,16 +561,16 @@ export async function render(container) {
         item.innerHTML = `
           <img src="${e.target.result}" class="attach-preview-img" />
           <div class="attach-name">${file.name}</div>
-          <button type="button" class="attach-remove new-remove" data-filename="${file.name}">✕</button>
+          <button type="button" class="attach-remove new-remove" data-filename="${file.name}">${icon('x', 12)}</button>
         `
         item.querySelector('.new-remove').addEventListener('click', () => removeNewFile(file.name, item))
       }
       reader.readAsDataURL(file)
     } else {
       item.innerHTML = `
-        <div class="attach-file-icon">📄</div>
+        <div class="attach-file-icon">${icon('file-pdf', 24)}</div>
         <div class="attach-name">${file.name}</div>
-        <button type="button" class="attach-remove new-remove" data-filename="${file.name}">✕</button>
+        <button type="button" class="attach-remove new-remove" data-filename="${file.name}">${icon('x', 12)}</button>
       `
       item.querySelector('.new-remove').addEventListener('click', () => removeNewFile(file.name, item))
     }
@@ -793,7 +794,7 @@ function injectStyles() {
     .tk-attachments { display:flex; gap:6px; flex-wrap:wrap; }
     .tk-thumb       { width:52px; height:52px; object-fit:cover; border-radius:8px; border:1px solid var(--border); cursor:pointer; transition:opacity .2s; }
     .tk-thumb:hover { opacity:.8; }
-    .tk-file-chip   { font-size:11px; background:var(--bg-tertiary); border:1px solid var(--border); border-radius:var(--radius-full); padding:3px 10px; color:var(--text-secondary); text-decoration:none; }
+    .tk-file-chip   { display:inline-flex; align-items:center; gap:4px; font-size:11px; background:var(--bg-tertiary); border:1px solid var(--border); border-radius:var(--radius-full); padding:3px 10px; color:var(--text-secondary); text-decoration:none; }
     .tk-file-chip:hover { color:var(--accent-blue); }
 
     .tk-card-footer { display:flex; gap:6px; flex-wrap:wrap; align-items:center; padding-top:8px; border-top:1px solid rgba(255,255,255,.06); margin-top:auto; }
@@ -803,7 +804,7 @@ function injectStyles() {
 
     /* Empty */
     .tk-empty       { text-align:center; padding:80px 24px; grid-column:1/-1; }
-    .tk-empty-icon  { font-size:52px; margin-bottom:16px; }
+    .tk-empty-icon  { display:flex; align-items:center; justify-content:center; margin-bottom:16px; color:var(--text-muted); }
     .tk-empty-title { font-family:var(--font-display); font-size:18px; font-weight:600; margin-bottom:8px; }
     .tk-empty-desc  { font-size:14px; color:var(--text-muted); }
 
@@ -817,7 +818,7 @@ function injectStyles() {
     .attach-previews { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
     .attach-item { position:relative; display:flex; flex-direction:column; align-items:center; gap:4px; }
     .attach-preview-img { width:72px; height:72px; object-fit:cover; border-radius:8px; border:1px solid var(--border); }
-    .attach-file-icon { width:72px; height:72px; display:flex; align-items:center; justify-content:center; font-size:28px; background:var(--bg-tertiary); border-radius:8px; border:1px solid var(--border); }
+    .attach-file-icon { width:72px; height:72px; display:flex; align-items:center; justify-content:center; background:var(--bg-tertiary); border-radius:8px; border:1px solid var(--border); color:var(--text-muted); }
     .attach-name  { font-size:10px; color:var(--text-muted); max-width:72px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:center; }
     .attach-remove { position:absolute; top:-6px; right:-6px; width:18px; height:18px; border-radius:50%; background:#EF4444; color:#fff; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center; cursor:pointer; border:none; line-height:1; }
 
@@ -863,7 +864,7 @@ function injectStyles() {
 
     .tkd-info-list { display:flex; flex-direction:column; gap:8px; }
     .tkd-info-row  { display:grid; grid-template-columns:20px 80px 1fr; align-items:center; gap:8px; font-size:13px; }
-    .tkd-info-icon { font-size:15px; text-align:center; }
+    .tkd-info-icon { display:flex; align-items:center; justify-content:center; color:var(--text-muted); }
     .tkd-info-key  { color:var(--text-muted); font-size:12px; }
     .tkd-info-val  { color:var(--text-primary); font-weight:500; }
     .tkd-info-val.overdue { color:#EF4444; font-weight:700; }

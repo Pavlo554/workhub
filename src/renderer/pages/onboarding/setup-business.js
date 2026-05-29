@@ -35,7 +35,7 @@ export async function render(container) {
           </div>
           <div style="display:flex;gap:12px;margin-top:8px">
             <button type="button" class="btn btn-secondary" id="back-btn">← Назад</button>
-            <button type="submit" class="btn btn-primary btn-full" id="submit-btn">Розпочати роботу 🚀</button>
+            <button type="submit" class="btn btn-primary btn-full" id="submit-btn">Розпочати роботу</button>
           </div>
         </form>
       </div>
@@ -87,7 +87,7 @@ export async function render(container) {
       errorBox.textContent = 'Помилка збереження. Спробуйте ще раз'
       errorBox.style.display = 'flex'
       btn.disabled = false
-      btn.innerHTML = 'Розпочати роботу 🚀'
+      btn.innerHTML = 'Розпочати роботу'
     }
   })
 

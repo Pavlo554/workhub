@@ -1,6 +1,7 @@
 // src/renderer/modules/documents/index.js
 // Files stored locally via IPC (userData/documents/), metadata in Firestore
 import { db } from '../../services/firebase.js'
+import { icon } from '../../utils/icons.js'
 import { getCurrentUser, getActivePathSegments, getActiveBasePath } from '../../services/auth.js'
 import {
   collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp
@@ -8,16 +9,16 @@ import {
 
 // ── File type helpers ────────────────────────────────────────────────────────
 const TYPE_META = {
-  pdf:   { icon: '📄', label: 'PDF',       color: '#EF4444' },
-  word:  { icon: '📝', label: 'Word',      color: '#3B82F6' },
-  excel: { icon: '📊', label: 'Excel',     color: '#22C55E' },
-  ppt:   { icon: '📋', label: 'PowerPoint',color: '#F97316' },
-  image: { icon: '🖼', label: 'Зображення',color: '#A78BFA' },
-  video: { icon: '🎥', label: 'Відео',     color: '#EC4899' },
-  audio: { icon: '🎵', label: 'Аудіо',     color: '#F59E0B' },
-  zip:   { icon: '📦', label: 'Архів',     color: '#6B7280' },
-  text:  { icon: '📃', label: 'Текст',     color: '#94A3B8' },
-  other: { icon: '📎', label: 'Файл',      color: '#64748B' },
+  pdf:   { iconName: 'file-pdf',  label: 'PDF',        color: '#EF4444' },
+  word:  { iconName: 'file',      label: 'Word',       color: '#3B82F6' },
+  excel: { iconName: 'bar-chart', label: 'Excel',      color: '#22C55E' },
+  ppt:   { iconName: 'templates', label: 'PowerPoint', color: '#F97316' },
+  image: { iconName: 'image',     label: 'Зображення', color: '#A78BFA' },
+  video: { iconName: 'film',      label: 'Відео',      color: '#EC4899' },
+  audio: { iconName: 'music',     label: 'Аудіо',      color: '#F59E0B' },
+  zip:   { iconName: 'warehouse', label: 'Архів',      color: '#6B7280' },
+  text:  { iconName: 'notes',     label: 'Текст',      color: '#94A3B8' },
+  other: { iconName: 'paperclip', label: 'Файл',       color: '#64748B' },
 }
 
 function getFileType(name, mime) {
@@ -172,7 +173,8 @@ function injectStyles() {
     .dc-card:hover { background: rgba(255,255,255,.03); transform: translateX(2px); }
     .dc-card.selected { background: rgba(79,142,247,.06); }
     .dc-card-icon {
-      font-size: 28px; flex-shrink: 0; width: 36px; text-align: center;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; width: 36px; height: 36px;
     }
     .dc-card-info { flex: 1; min-width: 0; }
     .dc-card-name {
@@ -190,7 +192,7 @@ function injectStyles() {
       text-align: center; padding: 60px 20px;
       color: var(--text-secondary, #94A3B8);
     }
-    .dc-empty-icon { font-size: 48px; margin-bottom: 12px; opacity: .4; }
+    .dc-empty-icon { display: flex; align-items: center; justify-content: center; margin-bottom: 12px; opacity: .4; color: var(--text-muted, #64748B); }
     .dc-empty-text { font-size: 14px; margin-bottom: 16px; }
 
     /* Drop zone */
@@ -203,7 +205,7 @@ function injectStyles() {
     .dc-drop-zone:hover, .dc-drop-zone.dragover {
       background: rgba(79,142,247,.06); border-color: #4F8EF7;
     }
-    .dc-drop-zone-icon { font-size: 32px; margin-bottom: 8px; opacity: .6; }
+    .dc-drop-zone-icon { display: flex; align-items: center; justify-content: center; margin-bottom: 8px; opacity: .6; }
 
     /* Right panel */
     .dc-right {
@@ -220,18 +222,18 @@ function injectStyles() {
       align-items: center; justify-content: center;
       gap: 12px; padding: 24px; color: var(--text-secondary, #94A3B8); text-align: center;
     }
-    .dc-right-empty-icon { font-size: 48px; opacity: .3; }
+    .dc-right-empty-icon { display: flex; align-items: center; justify-content: center; opacity: .3; color: var(--text-muted, #64748B); }
 
     /* Detail */
     .dc-d-header {
       display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px;
     }
     .dc-d-icon-box {
-      width: 64px; height: 64px; border-radius: 16px;
+      width: 64px; height: 64px; border-radius: 16px; overflow: hidden;
       background: var(--bg-secondary, #1A1D2E);
       border: 1px solid var(--border, rgba(255,255,255,.08));
       display: flex; align-items: center; justify-content: center;
-      font-size: 32px; margin: 0 auto 16px; text-align: center;
+      margin: 0 auto 16px;
     }
     .dc-d-filename {
       font-size: 15px; font-weight: 700; color: var(--text-primary, #F1F5F9);
@@ -254,7 +256,7 @@ function injectStyles() {
       padding: 10px 12px; background: var(--bg-secondary, #1A1D2E);
       border-radius: 10px; margin-bottom: 6px;
     }
-    .dc-d-row-icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; margin-top: 1px; }
+    .dc-d-row-icon { display: flex; align-items: center; justify-content: center; width: 20px; flex-shrink: 0; color: var(--text-muted, #64748B); }
     .dc-d-row-label { font-size: 11px; color: var(--text-secondary, #94A3B8); margin-bottom: 2px; }
     .dc-d-row-value { font-size: 13px; font-weight: 500; color: var(--text-primary, #F1F5F9); word-break: break-all; }
 
@@ -317,7 +319,7 @@ export async function render(container) {
       </div>
       <div class="dc-right">
         <div class="dc-right-empty">
-          <div class="dc-right-empty-icon">📁</div>
+          <div class="dc-right-empty-icon">${icon('folder', 36)}</div>
           <p style="font-size:14px;margin:0">Завантаження...</p>
         </div>
       </div>
@@ -368,17 +370,17 @@ export async function render(container) {
     const list = filtered()
     if (!list.length) return `
       <div class="dc-drop-zone" id="dc-drop-zone">
-        <div class="dc-drop-zone-icon">📂</div>
+        <div class="dc-drop-zone-icon">${icon('folder-open', 36)}</div>
         Перетягни файли сюди або натисни "Завантажити файл"
       </div>
       <div class="dc-empty">
-        <div class="dc-empty-icon">📁</div>
+        <div class="dc-empty-icon">${icon('folder', 36)}</div>
         <div class="dc-empty-text">Ще немає документів</div>
       </div>`
 
     return `
       <div class="dc-drop-zone" id="dc-drop-zone">
-        <div class="dc-drop-zone-icon">📂</div>
+        <div class="dc-drop-zone-icon">${icon('folder-open', 36)}</div>
         Перетягни файли сюди для завантаження
       </div>
       <div class="dc-list">
@@ -387,7 +389,7 @@ export async function render(container) {
           const sel = d.id === selectedId ? ' selected' : ''
           return `
             <div class="dc-card${sel}" data-id="${d.id}" style="--tc:${tm.color}">
-              <div class="dc-card-icon">${tm.icon}</div>
+              <div class="dc-card-icon" style="color:${tm.color}">${icon(tm.iconName, 20)}</div>
               <div class="dc-card-info">
                 <div class="dc-card-name">${escHtml(d.name)}</div>
                 <div class="dc-card-meta">${fmtSize(d.size)} · ${fmtDate(d.uploadedAt)}</div>
@@ -404,30 +406,30 @@ export async function render(container) {
     return `
       <div class="dc-d-header">
         <div></div>
-        <button class="dc-d-close" id="dc-d-close">✕</button>
+        <button class="dc-d-close" id="dc-d-close">${icon('x', 14)}</button>
       </div>
       <div style="text-align:center;margin-bottom:20px">
-        <div class="dc-d-icon-box">${tm.icon}</div>
+        <div class="dc-d-icon-box" style="color:${tm.color}">${icon(tm.iconName, 32)}</div>
         <div class="dc-d-filename">${escHtml(d.name)}</div>
         <span class="dc-d-badge" style="background:${tm.color}22;color:${tm.color}">${tm.label}</span>
       </div>
 
       <div class="dc-d-row">
-        <div class="dc-d-row-icon">📏</div>
+        <div class="dc-d-row-icon">${icon('ruler', 14)}</div>
         <div>
           <div class="dc-d-row-label">Розмір</div>
           <div class="dc-d-row-value">${fmtSize(d.size)}</div>
         </div>
       </div>
       <div class="dc-d-row">
-        <div class="dc-d-row-icon">📅</div>
+        <div class="dc-d-row-icon">${icon('calendar', 14)}</div>
         <div>
           <div class="dc-d-row-label">Завантажено</div>
           <div class="dc-d-row-value">${fmtDate(d.uploadedAt)}</div>
         </div>
       </div>
       <div class="dc-d-row">
-        <div class="dc-d-row-icon">📎</div>
+        <div class="dc-d-row-icon">${icon('paperclip', 14)}</div>
         <div>
           <div class="dc-d-row-label">Тип файлу</div>
           <div class="dc-d-row-value">${escHtml(d.mimeType || d.fileType || '—')}</div>
@@ -436,8 +438,8 @@ export async function render(container) {
 
       <div class="dc-d-actions">
         <button class="dc-d-btn dc-d-btn-download" id="dc-d-download">▶ Відкрити файл</button>
-        <button class="dc-d-btn dc-d-btn-show" id="dc-d-show">📂 Показати в провіднику</button>
-        <button class="dc-d-btn dc-d-btn-delete" id="dc-d-delete">🗑 Видалити файл</button>
+        <button class="dc-d-btn dc-d-btn-show" id="dc-d-show">${icon('folder-open', 13)} Показати в провіднику</button>
+        <button class="dc-d-btn dc-d-btn-delete" id="dc-d-delete">${icon('trash', 13)} Видалити файл</button>
       </div>
     `
   }
@@ -458,7 +460,7 @@ export async function render(container) {
               <h2 class="dc-title">Документи</h2>
               <p class="dc-sub">${documents.length} файлів</p>
             </div>
-            <button class="dc-btn-upload" id="dc-upload-btn">⬆ Завантажити файл</button>
+            <button class="dc-btn-upload" id="dc-upload-btn">${icon('upload', 13)} Завантажити файл</button>
             <input type="file" id="dc-file-input" multiple style="display:none">
           </div>
           <div class="dc-left-scroll">
@@ -471,7 +473,7 @@ export async function render(container) {
             </div>
 
             <div class="dc-toolbar">
-              <input class="dc-search" id="dc-search" placeholder="🔍 Пошук документа..." value="${escHtml(search)}">
+              <input class="dc-search" id="dc-search" placeholder="Пошук документа..." value="${escHtml(search)}">
             </div>
 
             <div class="dc-filters">
@@ -489,7 +491,7 @@ export async function render(container) {
           ${selectedId && documents.find(d=>d.id===selectedId)
             ? `<div class="dc-right-scroll">${renderDetail(documents.find(d=>d.id===selectedId))}</div>`
             : `<div class="dc-right-empty">
-                <div class="dc-right-empty-icon">📁</div>
+                <div class="dc-right-empty-icon">${icon('folder', 36)}</div>
                 <p style="font-size:14px;margin:0">Виберіть документ або завантажте новий</p>
                </div>`}
         </div>

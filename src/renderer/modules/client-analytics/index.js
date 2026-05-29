@@ -1,4 +1,5 @@
 // src/renderer/modules/client-analytics/index.js
+import { icon } from '../../utils/icons.js'
 import { getCurrentUser, getActivePathSegments } from '../../services/auth.js'
 import { db } from '../../services/firebase.js'
 import { collection, getDocs, orderBy, query } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
@@ -32,7 +33,7 @@ export async function render(container) {
           <!-- Growth chart -->
           <div class="ca-card">
             <div class="ca-card-head">
-              <span class="ca-card-title">📈 Приріст клієнтів</span>
+              <span class="ca-card-title">${icon('trending-up', 14)} Приріст клієнтів</span>
             </div>
             <div class="ca-chart-wrap" id="ca-growth-chart">
               <div class="ca-chart-loading"><div class="spinner"></div></div>
@@ -42,7 +43,7 @@ export async function render(container) {
           <!-- Source breakdown -->
           <div class="ca-card">
             <div class="ca-card-head">
-              <span class="ca-card-title">🔍 Джерела клієнтів</span>
+              <span class="ca-card-title">${icon('search', 14)} Джерела клієнтів</span>
             </div>
             <div id="ca-sources-body">
               <div class="ca-chart-loading"><div class="spinner"></div></div>
@@ -54,7 +55,7 @@ export async function render(container) {
           <!-- Top clients by activity -->
           <div class="ca-card">
             <div class="ca-card-head">
-              <span class="ca-card-title">🏆 Топ клієнти</span>
+              <span class="ca-card-title">${icon('trophy', 14)} Топ клієнти</span>
             </div>
             <div id="ca-top-clients">
               <div class="ca-chart-loading"><div class="spinner"></div></div>
@@ -64,7 +65,7 @@ export async function render(container) {
           <!-- Status breakdown -->
           <div class="ca-card">
             <div class="ca-card-head">
-              <span class="ca-card-title">📊 Статуси</span>
+              <span class="ca-card-title">${icon('bar-chart', 14)} Статуси</span>
             </div>
             <div id="ca-status-body">
               <div class="ca-chart-loading"><div class="spinner"></div></div>
@@ -74,7 +75,7 @@ export async function render(container) {
           <!-- Activity by weekday -->
           <div class="ca-card">
             <div class="ca-card-head">
-              <span class="ca-card-title">📅 Активність по днях тижня</span>
+              <span class="ca-card-title">${icon('calendar', 14)} Активність по днях тижня</span>
             </div>
             <div class="ca-weekday-chart" id="ca-weekday-chart">
               <div class="ca-chart-loading"><div class="spinner"></div></div>
@@ -153,23 +154,23 @@ function renderKPI(container, all, filtered, days) {
 
   row.innerHTML = `
     <div class="ca-kpi-card" style="--cc:#4F8EF7">
-      <div class="ca-kpi-icon">👥</div>
+      <div class="ca-kpi-icon">${icon('clients', 20)}</div>
       <div class="ca-kpi-value">${total}</div>
       <div class="ca-kpi-label">Всього клієнтів</div>
     </div>
     <div class="ca-kpi-card" style="--cc:#34D399">
-      <div class="ca-kpi-icon">✨</div>
+      <div class="ca-kpi-icon">${icon('trending-up', 20)}</div>
       <div class="ca-kpi-value">${newCount}</div>
       <div class="ca-kpi-label">${days === 0 ? 'За весь час' : `За ${days} днів`}</div>
       <div class="ca-kpi-sub" style="color:${growthColor}">${days > 0 ? growthLabel + ' до пред. пер.' : ''}</div>
     </div>
     <div class="ca-kpi-card" style="--cc:#A78BFA">
-      <div class="ca-kpi-icon">💚</div>
+      <div class="ca-kpi-icon">${icon('check-circle', 20)}</div>
       <div class="ca-kpi-value">${active}</div>
       <div class="ca-kpi-label">Активних</div>
     </div>
     <div class="ca-kpi-card" style="--cc:#F59E0B">
-      <div class="ca-kpi-icon">📊</div>
+      <div class="ca-kpi-icon">${icon('bar-chart', 20)}</div>
       <div class="ca-kpi-value">${retention}%</div>
       <div class="ca-kpi-label">Утримання</div>
     </div>
@@ -242,7 +243,7 @@ function renderSources(container, clients) {
   const el = container.querySelector('#ca-sources-body')
   if (!el) return
 
-  const SOURCES = { instagram: { label: 'Instagram', color: '#E879F9', icon: '📸' }, referral: { label: 'Рекомендація', color: '#34D399', icon: '🤝' }, website: { label: 'Сайт', color: '#4F8EF7', icon: '🌐' }, facebook: { label: 'Facebook', color: '#60A5FA', icon: '👥' }, telegram: { label: 'Telegram', color: '#38BDF8', icon: '✈️' }, google: { label: 'Google', color: '#F59E0B', icon: '🔍' }, other: { label: 'Інше', color: '#9CA3AF', icon: '📌' } }
+  const SOURCES = { instagram: { label: 'Instagram', color: '#E879F9', iconName: 'camera' }, referral: { label: 'Рекомендація', color: '#34D399', iconName: 'user' }, website: { label: 'Сайт', color: '#4F8EF7', iconName: 'globe' }, facebook: { label: 'Facebook', color: '#60A5FA', iconName: 'clients' }, telegram: { label: 'Telegram', color: '#38BDF8', iconName: 'send' }, google: { label: 'Google', color: '#F59E0B', iconName: 'search' }, other: { label: 'Інше', color: '#9CA3AF', iconName: 'briefcase' } }
 
   const counts = {}
   clients.forEach(c => {
@@ -266,7 +267,7 @@ function renderSources(container, clients) {
         const pct = Math.round((count / total) * 100)
         return `
           <div class="ca-source-row">
-            <div class="ca-source-icon">${s.icon}</div>
+            <div class="ca-source-icon" style="color:${s.color}">${icon(s.iconName, 14)}</div>
             <div class="ca-source-info">
               <div class="ca-source-top">
                 <span class="ca-source-label">${s.label}</span>
@@ -414,7 +415,7 @@ function injectStyles() {
     background-size: 200% 100%; animation: ca-sh 1.4s infinite;
   }
   @keyframes ca-sh { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
-  .ca-kpi-icon  { font-size: 20px; margin-bottom: 10px; }
+  .ca-kpi-icon  { display: flex; align-items: center; margin-bottom: 10px; color: var(--cc); }
   .ca-kpi-value { font-family: var(--font-display); font-size: 30px; font-weight: 800; letter-spacing: -0.03em; color: var(--cc); line-height: 1; margin-bottom: 4px; }
   .ca-kpi-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
   .ca-kpi-sub   { font-size: 11px; margin-top: 4px; font-weight: 600; }
@@ -444,7 +445,7 @@ function injectStyles() {
   /* Sources */
   .ca-sources-list { padding: 8px 18px 12px; display: flex; flex-direction: column; gap: 12px; }
   .ca-source-row { display: flex; align-items: center; gap: 10px; }
-  .ca-source-icon { font-size: 18px; width: 28px; flex-shrink: 0; }
+  .ca-source-icon { display: flex; align-items: center; width: 28px; flex-shrink: 0; }
   .ca-source-info { flex: 1; min-width: 0; }
   .ca-source-top { display: flex; justify-content: space-between; margin-bottom: 4px; }
   .ca-source-label { font-size: 13px; font-weight: 600; }

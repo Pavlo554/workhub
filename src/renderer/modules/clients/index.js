@@ -7,6 +7,7 @@ import {
   collection, addDoc, getDocs, deleteDoc, doc, updateDoc,
   query, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
+import { icon } from '../../utils/icons.js'
 
 // ── Constants ─────────────────────────────────────────────
 
@@ -17,22 +18,22 @@ const STATUSES = {
 }
 
 const SOURCES = [
-  { id: 'instagram', label: 'Instagram',    icon: '📸', color: '#E1306C' },
-  { id: 'facebook',  label: 'Facebook Ads', icon: '👥', color: '#1877F2' },
-  { id: 'google',    label: 'Google Ads',   icon: '🔍', color: '#4285F4' },
-  { id: 'tiktok',    label: 'TikTok',       icon: '🎵', color: '#69C9D0' },
-  { id: 'referral',  label: 'Рекомендація', icon: '🤝', color: '#34D399' },
-  { id: 'site',      label: 'Сайт',         icon: '🌐', color: '#A78BFA' },
-  { id: 'cold',      label: 'Холодний',     icon: '❄️', color: '#38BDF8' },
-  { id: 'other',     label: 'Інше',         icon: '⭐', color: '#94A3B8' },
+  { id: 'instagram', label: 'Instagram',    color: '#E1306C' },
+  { id: 'facebook',  label: 'Facebook Ads', color: '#1877F2' },
+  { id: 'google',    label: 'Google Ads',   color: '#4285F4' },
+  { id: 'tiktok',    label: 'TikTok',       color: '#69C9D0' },
+  { id: 'referral',  label: 'Рекомендація', color: '#34D399' },
+  { id: 'site',      label: 'Сайт',         color: '#A78BFA' },
+  { id: 'cold',      label: 'Холодний',     color: '#38BDF8' },
+  { id: 'other',     label: 'Інше',         color: '#94A3B8' },
 ]
 
 const INTERACTION_TYPES = {
-  note:    { icon: '📝', label: 'Нотатка'      },
-  call:    { icon: '📞', label: 'Дзвінок'      },
-  email:   { icon: '✉️', label: 'Email'        },
-  meeting: { icon: '🤝', label: 'Зустріч'      },
-  message: { icon: '💬', label: 'Повідомлення' },
+  note:    { label: 'Нотатка',       iconName: 'pencil'          },
+  call:    { label: 'Дзвінок',       iconName: 'phone'           },
+  email:   { label: 'Email',         iconName: 'mail'            },
+  meeting: { label: 'Зустріч',       iconName: 'calendar'        },
+  message: { label: 'Повідомлення',  iconName: 'message-circle'  },
 }
 
 const MONTHS_UK = ['Січ','Лют','Бер','Кві','Тра','Чер','Лип','Сер','Вер','Жов','Лис','Гру']
@@ -79,13 +80,13 @@ export async function render(container) {
 
         <div class="cl-header">
           <div>
-            <h1 class="cl-title">👥 Клієнти</h1>
+            <h1 class="cl-title">Клієнти</h1>
             <p class="cl-sub" id="cl-sub">Завантаження...</p>
           </div>
           <div class="cl-header-actions">
             <div class="cl-tabs" id="cl-tabs">
               <button class="cl-tab active" data-tab="list">Список</button>
-              <button class="cl-tab" data-tab="analytics">📊 Аналітика</button>
+              <button class="cl-tab" data-tab="analytics">Аналітика</button>
             </div>
             <button class="btn btn-primary" id="cl-add-btn">+ Клієнт</button>
           </div>
@@ -95,7 +96,7 @@ export async function render(container) {
         <div id="view-list">
           <div class="cl-toolbar">
             <div class="cl-search">
-              <span>🔍</span>
+              <span style="display:flex;align-items:center;color:var(--text-muted)">${icon('search', 14)}</span>
               <input id="cl-search" class="cl-search-input" placeholder="Пошук за іменем, email, телефоном..." />
             </div>
             <div class="cl-filters" id="cl-filters">
@@ -132,7 +133,7 @@ export async function render(container) {
       <div class="cl-modal">
         <div class="cl-modal-hd">
           <h2 class="cl-modal-title" id="cl-modal-title">Новий клієнт</h2>
-          <button class="cl-modal-x" id="cl-modal-x">✕</button>
+          <button class="cl-modal-x" id="cl-modal-x">${icon('x', 14)}</button>
         </div>
         <form id="cl-form" novalidate>
           <div class="cl-modal-body">
@@ -145,9 +146,9 @@ export async function render(container) {
               <div class="field">
                 <label>Статус</label>
                 <select id="f-status" class="input">
-                  <option value="active">🟢 Активний</option>
-                  <option value="lead">🟡 Лід</option>
-                  <option value="inactive">⚫ Неактивний</option>
+                  <option value="active">Активний</option>
+                  <option value="lead">Лід</option>
+                  <option value="inactive">Неактивний</option>
                 </select>
               </div>
             </div>
@@ -186,7 +187,7 @@ export async function render(container) {
                 <label>Джерело клієнта</label>
                 <select id="f-source" class="input">
                   <option value="">— Не вказано</option>
-                  ${SOURCES.map(s => `<option value="${s.id}">${s.icon} ${s.label}</option>`).join('')}
+                  ${SOURCES.map(s => `<option value="${s.id}">${s.label}</option>`).join('')}
                 </select>
               </div>
             </div>
@@ -280,7 +281,7 @@ export async function render(container) {
     if (list.length === 0) {
       el.innerHTML = `
         <div class="cl-empty">
-          <div class="cl-empty-icon">👥</div>
+          <div class="cl-empty-icon">${icon('clients', 32)}</div>
           <div class="cl-empty-title">${searchQ || activeFilter !== 'all' ? 'Нічого не знайдено' : 'Клієнтів ще немає'}</div>
           <div class="cl-empty-desc">${searchQ || activeFilter !== 'all' ? 'Спробуйте змінити фільтр' : 'Натисніть "+ Клієнт" щоб додати'}</div>
         </div>`
@@ -295,18 +296,18 @@ export async function render(container) {
           <div class="cl-card-av" style="background:${color}22;color:${color}">${getInitials(c.name)}</div>
           <div class="cl-card-info">
             <div class="cl-card-name">${c.name}</div>
-            ${c.company ? `<div class="cl-card-co">🏢 ${c.company}</div>` : ''}
+            ${c.company ? `<div class="cl-card-co">${c.company}</div>` : ''}
             <div class="cl-card-contacts">
-              ${c.phone    ? `<span>📞 ${c.phone}</span>` : ''}
-              ${c.telegram ? `<span>✈️ @${c.telegram}</span>` : ''}
-              ${src        ? `<span style="color:${src.color}">${src.icon} ${src.label}</span>` : ''}
+              ${c.phone    ? `<span>${c.phone}</span>` : ''}
+              ${c.telegram ? `<span style="display:inline-flex;align-items:center;gap:3px">${icon('send', 11)} @${c.telegram}</span>` : ''}
+              ${src        ? `<span style="color:${src.color}">${src.label}</span>` : ''}
             </div>
           </div>
           <div class="cl-card-right">
             <span class="cl-badge" style="color:${st.color};background:${st.bg}">${st.label}</span>
             <div class="cl-card-btns">
-              <button class="cl-icon-btn cl-edit-btn" data-id="${c.id}" title="Редагувати">✏️</button>
-              <button class="cl-icon-btn cl-del-btn"  data-id="${c.id}" title="Видалити">🗑</button>
+              <button class="cl-icon-btn cl-edit-btn" data-id="${c.id}" title="Редагувати">${icon('pencil', 13)}</button>
+              <button class="cl-icon-btn cl-del-btn"  data-id="${c.id}" title="Видалити">${icon('trash', 13)}</button>
             </div>
           </div>
         </div>`
@@ -397,7 +398,7 @@ export async function render(container) {
         <div class="an-kpi-row">
           <div class="an-kpi" style="--kc:#4F8EF7">
             <div class="an-kpi-top">
-              <div class="an-kpi-icon">👥</div>
+              <div class="an-kpi-icon">${icon('clients', 18)}</div>
               <div class="an-kpi-badge" style="color:${growthColor}">
                 ${growthDiff !== 0 ? `${growthSign}${growthDiff} цей міс.` : 'без змін'}
               </div>
@@ -408,7 +409,7 @@ export async function render(container) {
 
           <div class="an-kpi" style="--kc:#34D399">
             <div class="an-kpi-top">
-              <div class="an-kpi-icon">🆕</div>
+              <div class="an-kpi-icon">${icon('plus', 18)}</div>
               <div class="an-kpi-badge" style="color:#34D399">цього місяця</div>
             </div>
             <div class="an-kpi-val">${thisMonth}</div>
@@ -417,7 +418,7 @@ export async function render(container) {
 
           <div class="an-kpi" style="--kc:#A78BFA">
             <div class="an-kpi-top">
-              <div class="an-kpi-icon">🎯</div>
+              <div class="an-kpi-icon">${icon('bar-chart', 18)}</div>
               <div class="an-kpi-badge" style="color:#A78BFA">${active} активних</div>
             </div>
             <div class="an-kpi-val">${convRate}%</div>
@@ -426,7 +427,7 @@ export async function render(container) {
 
           <div class="an-kpi" style="--kc:#FBBF24">
             <div class="an-kpi-top">
-              <div class="an-kpi-icon">💰</div>
+              <div class="an-kpi-icon">${icon('finances', 18)}</div>
               <div class="an-kpi-badge" style="color:#FBBF24">${fmtMoney(monthRevenue)} грн цей міс.</div>
             </div>
             <div class="an-kpi-val">${fmtMoney(totalRevenue)}</div>
@@ -436,7 +437,7 @@ export async function render(container) {
           ${roi !== null ? `
           <div class="an-kpi" style="--kc:${roi >= 0 ? '#34D399' : '#F87171'}">
             <div class="an-kpi-top">
-              <div class="an-kpi-icon">📈</div>
+              <div class="an-kpi-icon">${icon('reports', 18)}</div>
               <div class="an-kpi-badge" style="color:${roi >= 0 ? '#34D399' : '#F87171'}">${roi >= 0 ? 'прибуток' : 'збиток'}</div>
             </div>
             <div class="an-kpi-val" style="color:${roi >= 0 ? '#34D399' : '#F87171'}">${roi >= 0 ? '+' : ''}${roi}%</div>
@@ -449,7 +450,7 @@ export async function render(container) {
 
           <!-- Monthly trend -->
           <div class="an-card">
-            <div class="an-card-title">📈 Приріст клієнтів (6 місяців)</div>
+            <div class="an-card-title">Приріст клієнтів (6 місяців)</div>
             <div class="an-bar-chart">
               ${months.map(m => `
                 <div class="an-bar-col">
@@ -466,13 +467,13 @@ export async function render(container) {
 
           <!-- Source breakdown -->
           <div class="an-card">
-            <div class="an-card-title">🎯 Джерела клієнтів</div>
+            <div class="an-card-title">Джерела клієнтів</div>
             ${sourceData.length === 0
               ? `<div class="an-empty">Вкажіть джерело при додаванні клієнта</div>`
               : sourceData.map(s => `
                   <div class="an-src-row">
                     <div class="an-src-meta">
-                      <span class="an-src-icon">${s.icon}</span>
+                      <span class="an-src-dot" style="background:${s.color}"></span>
                       <span class="an-src-label">${s.label}</span>
                       <span class="an-src-count">${s.count}</span>
                     </div>
@@ -489,7 +490,7 @@ export async function render(container) {
 
         <!-- Status breakdown -->
         <div class="an-card an-status-card">
-          <div class="an-card-title">📊 Розподіл за статусом</div>
+          <div class="an-card-title">Розподіл за статусом</div>
           <div class="an-status-row">
             ${Object.entries(STATUSES).map(([key, st]) => {
               const cnt = clients.filter(c => (c.status || 'active') === key).length
@@ -514,7 +515,7 @@ export async function render(container) {
         <!-- Revenue breakdown -->
         ${totalRevenue > 0 ? `
         <div class="an-card">
-          <div class="an-card-title">💰 Фінансова зведка</div>
+          <div class="an-card-title">Фінансова зведка</div>
           <div class="an-finance-row">
             <div class="an-finance-item">
               <div class="an-finance-val" style="color:#34D399">${fmtMoney(totalRevenue)} грн</div>
@@ -591,36 +592,36 @@ export async function render(container) {
     detailEl.innerHTML = `
       <div class="cl-detail">
         <div class="cl-detail-hd">
-          <button class="cl-detail-close" id="cl-detail-close">✕</button>
+          <button class="cl-detail-close" id="cl-detail-close">${icon('x', 14)}</button>
         </div>
         <div class="cl-profile">
           <div class="cl-profile-av" style="background:${color}22;color:${color}">${getInitials(client.name)}</div>
           <div class="cl-profile-name">${client.name}</div>
-          ${client.company ? `<div class="cl-profile-co">🏢 ${client.company}</div>` : ''}
+          ${client.company ? `<div class="cl-profile-co">${client.company}</div>` : ''}
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center">
             <span class="cl-badge" style="color:${st.color};background:${st.bg}">${st.label}</span>
-            ${src ? `<span class="cl-badge" style="color:${src.color};background:${src.color}22">${src.icon} ${src.label}</span>` : ''}
+            ${src ? `<span class="cl-badge" style="color:${src.color};background:${src.color}22">${src.label}</span>` : ''}
           </div>
         </div>
 
         <div class="cl-quick">
-          ${client.phone    ? `<a class="cl-quick-btn" href="tel:${client.phone}" title="Зателефонувати">📞<span>Дзвінок</span></a>` : ''}
-          ${client.email    ? `<a class="cl-quick-btn" href="mailto:${client.email}" title="Email">✉️<span>Email</span></a>` : ''}
-          ${client.telegram ? `<a class="cl-quick-btn" href="https://t.me/${client.telegram}" target="_blank">✈️<span>Telegram</span></a>` : ''}
-          ${client.whatsapp ? `<a class="cl-quick-btn" href="https://wa.me/${client.whatsapp}" target="_blank">💬<span>WhatsApp</span></a>` : ''}
-          ${client.site     ? `<a class="cl-quick-btn" href="${client.site}" target="_blank">🌐<span>Сайт</span></a>` : ''}
-          <button class="cl-quick-btn" id="cl-edit-detail">✏️<span>Редагувати</span></button>
+          ${client.phone    ? `<a class="cl-quick-btn" href="tel:${client.phone}" title="Зателефонувати"><span>Дзвінок</span></a>` : ''}
+          ${client.email    ? `<a class="cl-quick-btn" href="mailto:${client.email}" title="Email"><span>Email</span></a>` : ''}
+          ${client.telegram ? `<a class="cl-quick-btn" href="https://t.me/${client.telegram}" target="_blank"><span>Telegram</span></a>` : ''}
+          ${client.whatsapp ? `<a class="cl-quick-btn" href="https://wa.me/${client.whatsapp}" target="_blank"><span>WhatsApp</span></a>` : ''}
+          ${client.site     ? `<a class="cl-quick-btn" href="${client.site}" target="_blank"><span>Сайт</span></a>` : ''}
+          <button class="cl-quick-btn" id="cl-edit-detail"><span>Редагувати</span></button>
         </div>
 
         <div class="cl-section">
           <div class="cl-section-title">Контакти</div>
           <div class="cl-contacts-list">
-            ${client.phone    ? `<div class="cl-contact-row"><span>📞</span><span>${client.phone}</span></div>` : ''}
-            ${client.email    ? `<div class="cl-contact-row"><span>✉️</span><span>${client.email}</span></div>` : ''}
-            ${client.telegram ? `<div class="cl-contact-row"><span>✈️</span><a href="https://t.me/${client.telegram}" target="_blank" class="cl-link">@${client.telegram}</a></div>` : ''}
-            ${client.whatsapp ? `<div class="cl-contact-row"><span>💬</span><a href="https://wa.me/${client.whatsapp}" target="_blank" class="cl-link">+${client.whatsapp}</a></div>` : ''}
-            ${client.site     ? `<div class="cl-contact-row"><span>🌐</span><a href="${client.site}" target="_blank" class="cl-link">${client.site}</a></div>` : ''}
-            ${client.budget   ? `<div class="cl-contact-row"><span>💰</span><span>${fmtMoney(client.budget)} грн</span></div>` : ''}
+            ${client.phone    ? `<div class="cl-contact-row"><span class="cl-contact-icon">${icon('phone', 13)}</span><span>${client.phone}</span></div>` : ''}
+            ${client.email    ? `<div class="cl-contact-row"><span class="cl-contact-icon">${icon('mail', 13)}</span><span>${client.email}</span></div>` : ''}
+            ${client.telegram ? `<div class="cl-contact-row"><span class="cl-contact-icon">${icon('send', 13)}</span><a href="https://t.me/${client.telegram}" target="_blank" class="cl-link">@${client.telegram}</a></div>` : ''}
+            ${client.whatsapp ? `<div class="cl-contact-row"><span class="cl-contact-icon">${icon('message-circle', 13)}</span><a href="https://wa.me/${client.whatsapp}" target="_blank" class="cl-link">+${client.whatsapp}</a></div>` : ''}
+            ${client.site     ? `<div class="cl-contact-row"><span class="cl-contact-icon">${icon('globe', 13)}</span><a href="${client.site}" target="_blank" class="cl-link">${client.site}</a></div>` : ''}
+            ${client.budget   ? `<div class="cl-contact-row"><span class="cl-contact-icon">${icon('finances', 13)}</span><span>${fmtMoney(client.budget)} грн</span></div>` : ''}
           </div>
           ${client.note ? `<div class="cl-note-box">${client.note}</div>` : ''}
         </div>
@@ -630,7 +631,7 @@ export async function render(container) {
           <div class="cl-add-inter">
             <div class="cl-inter-types" id="cl-inter-types">
               ${Object.entries(INTERACTION_TYPES).map(([k,v]) => `
-                <button class="cl-type-btn ${k==='note'?'active':''}" data-type="${k}" title="${v.label}">${v.icon}</button>
+                <button class="cl-type-btn ${k==='note'?'active':''}" data-type="${k}" title="${v.label}">${icon(v.iconName, 14)}</button>
               `).join('')}
             </div>
             <textarea class="input cl-inter-input" id="cl-inter-text" rows="2" placeholder="Введіть текст..."></textarea>
@@ -643,7 +644,7 @@ export async function render(container) {
                   const t = INTERACTION_TYPES[i.type] || INTERACTION_TYPES.note
                   return `
                     <div class="cl-inter-item">
-                      <div class="cl-inter-icon">${t.icon}</div>
+                      <div class="cl-inter-icon">${icon(t.iconName, 14)}</div>
                       <div class="cl-inter-body">
                         <div class="cl-inter-meta">
                           <span class="cl-inter-type">${t.label}</span>
@@ -651,7 +652,7 @@ export async function render(container) {
                         </div>
                         <div class="cl-inter-text">${i.text}</div>
                       </div>
-                      <button class="cl-inter-del" data-iid="${i.id}">✕</button>
+                      <button class="cl-inter-del" data-iid="${i.id}">${icon('x', 11)}</button>
                     </div>`
                 }).join('')}
           </div>
@@ -832,7 +833,7 @@ function injectStyles() {
     .cl-icon-btn:hover { background:rgba(255,255,255,.1); }
 
     .cl-empty       { text-align:center; padding:60px 24px; }
-    .cl-empty-icon  { font-size:48px; margin-bottom:12px; }
+    .cl-empty-icon  { display:flex; align-items:center; justify-content:center; margin-bottom:12px; color:var(--text-muted); }
     .cl-empty-title { font-family:var(--font-display); font-size:18px; font-weight:600; margin-bottom:6px; }
     .cl-empty-desc  { font-size:13px; color:var(--text-muted); }
 
@@ -848,7 +849,7 @@ function injectStyles() {
     .cl-profile-co  { font-size:13px; color:var(--text-secondary); }
 
     .cl-quick       { display:flex; gap:8px; padding:16px; flex-wrap:wrap; border-bottom:1px solid var(--border); }
-    .cl-quick-btn   { display:flex; flex-direction:column; align-items:center; gap:4px; padding:10px 12px; border-radius:var(--radius-lg); background:var(--bg-secondary); border:1px solid var(--border); cursor:pointer; transition:all .2s; color:var(--text-primary); text-decoration:none; font-size:20px; flex:1; min-width:56px; }
+    .cl-quick-btn   { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; padding:10px 12px; border-radius:var(--radius-lg); background:var(--bg-secondary); border:1px solid var(--border); cursor:pointer; transition:all .2s; color:var(--text-primary); text-decoration:none; flex:1; min-width:56px; }
     .cl-quick-btn span { font-size:10px; color:var(--text-muted); font-weight:500; white-space:nowrap; }
     .cl-quick-btn:hover { border-color:var(--accent-blue); background:rgba(79,142,247,.08); }
 
@@ -856,6 +857,7 @@ function injectStyles() {
     .cl-section-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); margin-bottom:12px; }
     .cl-contacts-list { display:flex; flex-direction:column; gap:8px; }
     .cl-contact-row   { display:flex; align-items:center; gap:10px; font-size:13px; }
+    .cl-contact-icon  { display:flex; align-items:center; color:var(--text-muted); flex-shrink:0; }
     .cl-link { color:var(--accent-blue); text-decoration:none; }
     .cl-link:hover { text-decoration:underline; }
     .cl-note-box { margin-top:12px; padding:12px; background:var(--bg-secondary); border-radius:var(--radius-lg); font-size:13px; color:var(--text-secondary); line-height:1.6; }
@@ -871,7 +873,7 @@ function injectStyles() {
     .cl-history      { display:flex; flex-direction:column; gap:10px; }
     .cl-history-empty { text-align:center; font-size:13px; color:var(--text-muted); padding:20px 0; }
     .cl-inter-item   { display:flex; gap:10px; align-items:flex-start; background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-lg); padding:12px; }
-    .cl-inter-icon   { font-size:18px; flex-shrink:0; margin-top:1px; }
+    .cl-inter-icon   { display:flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:8px; background:var(--bg-tertiary); color:var(--text-secondary); flex-shrink:0; }
     .cl-inter-body   { flex:1; min-width:0; }
     .cl-inter-meta   { display:flex; justify-content:space-between; margin-bottom:4px; }
     .cl-inter-type   { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted); }
@@ -892,7 +894,7 @@ function injectStyles() {
     }
     .an-kpi:hover { transform:translateY(-2px); box-shadow:0 6px 20px rgba(0,0,0,.25); }
     .an-kpi-top   { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
-    .an-kpi-icon  { font-size:22px; }
+    .an-kpi-icon  { display:flex; align-items:center; color:var(--text-secondary); }
     .an-kpi-badge { font-size:11px; font-weight:600; }
     .an-kpi-val   { font-family:var(--font-display); font-size:32px; font-weight:900; letter-spacing:-0.02em; line-height:1; margin-bottom:6px; }
     .an-kpi-label { font-size:12px; color:var(--text-muted); }
@@ -918,7 +920,7 @@ function injectStyles() {
     /* Source breakdown */
     .an-src-row    { display:grid; grid-template-columns:140px 1fr 40px; align-items:center; gap:10px; margin-bottom:10px; }
     .an-src-meta   { display:flex; align-items:center; gap:6px; }
-    .an-src-icon   { font-size:16px; flex-shrink:0; }
+    .an-src-dot    { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
     .an-src-label  { font-size:13px; font-weight:500; }
     .an-src-count  { font-size:12px; color:var(--text-muted); margin-left:auto; }
     .an-src-bar-wrap { background:rgba(255,255,255,.06); border-radius:4px; height:8px; overflow:hidden; }

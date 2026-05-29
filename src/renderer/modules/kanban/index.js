@@ -1,23 +1,24 @@
 // src/renderer/modules/kanban/index.js
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getActivePathSegments } from '../../services/auth.js'
+import { icon } from '../../utils/icons.js'
 import {
   collection, addDoc, getDocs, deleteDoc, doc, updateDoc,
   query, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
 const COLUMNS = [
-  { id: 'backlog',     label: 'Беклог',      color: '#64748B', icon: '📋' },
-  { id: 'todo',        label: 'Треба зробити', color: '#4F8EF7', icon: '📌' },
-  { id: 'in_progress', label: 'В роботі',    color: '#F59E0B', icon: '⚙️' },
-  { id: 'review',      label: 'Ревью',        color: '#A78BFA', icon: '👀' },
-  { id: 'done',        label: 'Готово',       color: '#34D399', icon: '✅' },
+  { id: 'backlog',     label: 'Беклог',       color: '#64748B' },
+  { id: 'todo',        label: 'Треба зробити', color: '#4F8EF7' },
+  { id: 'in_progress', label: 'В роботі',     color: '#F59E0B' },
+  { id: 'review',      label: 'Ревью',         color: '#A78BFA' },
+  { id: 'done',        label: 'Готово',        color: '#34D399' },
 ]
 
 const PRIORITY = {
-  high:   { label: 'Високий', color: '#EF4444', dot: '🔴' },
-  medium: { label: 'Середній', color: '#F59E0B', dot: '🟡' },
-  low:    { label: 'Низький', color: '#34D399', dot: '🟢' },
+  high:   { label: 'Високий',  color: '#EF4444' },
+  medium: { label: 'Середній', color: '#F59E0B' },
+  low:    { label: 'Низький',  color: '#34D399' },
 }
 
 export async function render(container) {
@@ -44,14 +45,14 @@ export async function render(container) {
       <div class="kb-page">
         <div class="kb-header">
           <div>
-            <h1 class="kb-title">🗂 Kanban</h1>
+            <h1 class="kb-title">Kanban</h1>
             <p class="kb-subtitle">${cards.length} карток · ${cards.filter(c => c.column === 'done').length} виконано</p>
           </div>
           <div class="kb-header-right">
             <div class="kb-filter-pills">
               ${['all','high','medium','low'].map(p => `
                 <button class="kb-pill ${filterPriority === p ? 'active' : ''}" data-p="${p}">
-                  ${p === 'all' ? 'Всі' : PRIORITY[p].dot + ' ' + PRIORITY[p].label}
+                  ${p === 'all' ? 'Всі' : PRIORITY[p].label}
                 </button>`).join('')}
             </div>
             <button class="kb-add-btn" id="kb-add">+ Картка</button>
@@ -64,7 +65,7 @@ export async function render(container) {
             return `
               <div class="kb-col" data-col="${col.id}">
                 <div class="kb-col-head" style="border-top:3px solid ${col.color}">
-                  <span>${col.icon} ${col.label}</span>
+                  <span>${col.label}</span>
                   <span class="kb-col-count" style="background:${col.color}22;color:${col.color}">${colCards.length}</span>
                 </div>
                 <div class="kb-col-body">
@@ -73,15 +74,15 @@ export async function render(container) {
                       <div class="kb-card-top">
                         <span class="kb-priority-dot" style="background:${(PRIORITY[card.priority]||PRIORITY.medium).color}" title="${(PRIORITY[card.priority]||PRIORITY.medium).label}"></span>
                         <div class="kb-card-actions">
-                          <button class="kb-card-btn kb-edit" data-id="${card.id}">✏️</button>
-                          <button class="kb-card-btn kb-del" data-id="${card.id}">🗑</button>
+                          <button class="kb-card-btn kb-edit" data-id="${card.id}">${icon('pencil', 11)}</button>
+                          <button class="kb-card-btn kb-del" data-id="${card.id}">${icon('trash', 11)}</button>
                         </div>
                       </div>
                       <div class="kb-card-title">${card.title}</div>
                       ${card.desc ? `<div class="kb-card-desc">${card.desc}</div>` : ''}
                       <div class="kb-card-foot">
                         ${card.assignee ? `<span class="kb-assignee">${card.assignee[0].toUpperCase()}</span>` : ''}
-                        ${card.deadline ? `<span class="kb-deadline">📅 ${card.deadline}</span>` : ''}
+                        ${card.deadline ? `<span class="kb-deadline">${card.deadline}</span>` : ''}
                         <div class="kb-move-btns">
                           ${col.id !== 'backlog' ? `<button class="kb-mv kb-mv-left" data-id="${card.id}" data-col="${col.id}" title="← Назад">‹</button>` : ''}
                           ${col.id !== 'done' ? `<button class="kb-mv kb-mv-right" data-id="${card.id}" data-col="${col.id}" title="→ Вперед">›</button>` : ''}
@@ -101,7 +102,7 @@ export async function render(container) {
         <div class="kb-modal">
           <div class="kb-modal-head">
             <h2 id="kb-modal-title">Нова картка</h2>
-            <button id="kb-modal-close">✕</button>
+            <button id="kb-modal-close">${icon('x', 14)}</button>
           </div>
           <div class="kb-modal-body">
             <div class="kb-field">
@@ -116,13 +117,13 @@ export async function render(container) {
               <div class="kb-field">
                 <label>Колонка</label>
                 <select id="kb-f-col" class="kb-input">
-                  ${COLUMNS.map(c => `<option value="${c.id}">${c.icon} ${c.label}</option>`).join('')}
+                  ${COLUMNS.map(c => `<option value="${c.id}">${c.label}</option>`).join('')}
                 </select>
               </div>
               <div class="kb-field">
                 <label>Пріоритет</label>
                 <select id="kb-f-priority" class="kb-input">
-                  ${Object.entries(PRIORITY).map(([k,v]) => `<option value="${k}">${v.dot} ${v.label}</option>`).join('')}
+                  ${Object.entries(PRIORITY).map(([k,v]) => `<option value="${k}">${v.label}</option>`).join('')}
                 </select>
               </div>
             </div>

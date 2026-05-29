@@ -26,4 +26,10 @@ contextBridge.exposeInMainWorld('electron', {
   pdf: {
     generate: (html, filename) => ipcRenderer.invoke('pdf:generate', { html, filename }),
   },
+
+  openExternal: (url) => ipcRenderer.invoke('open-external', url),
+
+  shop: {
+    request: (opts) => ipcRenderer.invoke('shop:request', opts),
+  },
 })

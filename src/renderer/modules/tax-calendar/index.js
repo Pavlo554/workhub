@@ -1,4 +1,5 @@
 // src/renderer/modules/tax-calendar/index.js
+import { icon } from '../../utils/icons.js'
 
 const UK_MONTHS = {
   'січня':0,'лютого':1,'березня':2,'квітня':3,'травня':4,'червня':5,
@@ -62,7 +63,7 @@ function urgencyClass(days, done) {
 }
 
 function daysLabel(days, done) {
-  if (done)       return '✓ Сплачено'
+  if (done)       return `${icon('check-circle', 12)} Сплачено`
   if (days < 0)   return `Прострочено ${Math.abs(days)} дн`
   if (days === 0) return 'Сьогодні!'
   if (days === 1) return 'Завтра!'
@@ -118,7 +119,7 @@ export async function render(container) {
 
           <div class="tc-header">
             <div>
-              <h1 class="tc-title">📅 Податковий календар</h1>
+              <h1 class="tc-title">${icon('calendar', 20)} Податковий календар</h1>
               <p class="tc-subtitle">ФОП — важливі дати та дедлайни ${new Date().getFullYear()}</p>
             </div>
             <div class="tc-header-right">
@@ -132,11 +133,11 @@ export async function render(container) {
           ${upcoming ? `
           <div class="tc-next-card ${daysUntil(upcoming.date) <= 7 ? 'tc-next-critical' : daysUntil(upcoming.date) <= 30 ? 'tc-next-soon' : 'tc-next-ok'}">
             <div class="tc-next-left">
-              <div class="tc-next-eyebrow">⚡ Наступний дедлайн</div>
+              <div class="tc-next-eyebrow">${icon('warning', 13)} Наступний дедлайн</div>
               <div class="tc-next-title">${upcoming.title}</div>
               <div class="tc-next-desc">${upcoming.desc}</div>
               <div class="tc-next-date-row">
-                <span class="tc-next-date">📅 ${upcoming.date}</span>
+                <span class="tc-next-date">${icon('calendar', 12)} ${upcoming.date}</span>
                 <span class="tc-badge" style="color:${BADGE[upcoming.type].color};background:${BADGE[upcoming.type].bg}">${BADGE[upcoming.type].label}</span>
               </div>
             </div>
@@ -146,15 +147,15 @@ export async function render(container) {
             </div>
           </div>` : `
           <div class="tc-next-card tc-next-ok" style="justify-content:center;gap:16px">
-            <div style="font-size:40px">🎉</div>
+            <div style="display:flex;align-items:center;color:#34D399">${icon('check-circle', 40)}</div>
             <div><div class="tc-next-eyebrow">Все виконано!</div><div class="tc-next-title">Молодець, всі дедлайни закриті</div></div>
           </div>`}
 
           <div class="tc-toolbar">
             <div class="tc-filter-pills">
               <button class="tc-pill ${activeFilter === 'all' ? 'active' : ''}" data-filter="all">Всі (${totalCount})</button>
-              <button class="tc-pill ${activeFilter === 'payment' ? 'active' : ''}" data-filter="payment">💳 Оплати (${payCount})</button>
-              <button class="tc-pill ${activeFilter === 'report' ? 'active' : ''}" data-filter="report">📋 Звітність (${reportCount})</button>
+              <button class="tc-pill ${activeFilter === 'payment' ? 'active' : ''}" data-filter="payment">${icon('finances', 12)} Оплати (${payCount})</button>
+              <button class="tc-pill ${activeFilter === 'report' ? 'active' : ''}" data-filter="report">${icon('templates', 12)} Звітність (${reportCount})</button>
             </div>
             <button class="tc-reset-btn" id="tc-reset-btn">↺ Скинути позначки</button>
           </div>
@@ -175,7 +176,7 @@ export async function render(container) {
                   return `
                     <div class="tc-event-row ${isDone ? 'tc-row-done' : ''} ${uc}">
                       <button class="tc-check ${isDone ? 'checked' : ''}" data-date="${e.date}">
-                        ${isDone ? '✓' : ''}
+                        ${isDone ? icon('check', 12) : ''}
                       </button>
                       <div class="tc-event-date-col">
                         <div class="tc-event-date">${e.date}</div>
@@ -201,7 +202,7 @@ export async function render(container) {
 
           <!-- Progress card -->
           <div class="tc-sb-card">
-            <div class="tc-sb-title">📊 Прогрес</div>
+            <div class="tc-sb-title">${icon('bar-chart', 14)} Прогрес</div>
             <div class="tc-ring-wrap">
               <svg viewBox="0 0 100 100" class="tc-ring-svg">
                 <circle cx="50" cy="50" r="36" fill="none" stroke="var(--bg-tertiary)" stroke-width="10"/>
@@ -214,12 +215,12 @@ export async function render(container) {
             </div>
             <div class="tc-sb-stats">
               <div class="tc-sb-stat">
-                <span class="tc-sb-stat-icon" style="color:#F87171">💳</span>
+                <span class="tc-sb-stat-icon" style="color:#F87171">${icon('finances', 14)}</span>
                 <span>Оплати</span>
                 <strong>${payDone}/${payCount}</strong>
               </div>
               <div class="tc-sb-stat">
-                <span class="tc-sb-stat-icon" style="color:#FBBF24">📋</span>
+                <span class="tc-sb-stat-icon" style="color:#FBBF24">${icon('templates', 14)}</span>
                 <span>Звітність</span>
                 <strong>${repDone}/${reportCount}</strong>
               </div>
@@ -228,7 +229,7 @@ export async function render(container) {
 
           <!-- Upcoming 3 -->
           <div class="tc-sb-card">
-            <div class="tc-sb-title">⏰ Найближчі</div>
+            <div class="tc-sb-title">${icon('timer', 14)} Найближчі</div>
             ${nextThree.length ? nextThree.map(e => {
               const days = daysUntil(e.date)
               const uc   = urgencyClass(days, false)
@@ -241,12 +242,12 @@ export async function render(container) {
                   </div>
                   <div class="tc-upcoming-days ${uc}">${days}д</div>
                 </div>`
-            }).join('') : '<div class="tc-sb-empty">Всі виконані 🎉</div>'}
+            }).join('') : '<div class="tc-sb-empty">Всі виконані</div>'}
           </div>
 
           <!-- Tax calculator -->
           <div class="tc-sb-card" id="tc-calc-card">
-            <div class="tc-sb-title">🧮 Калькулятор ФОП</div>
+            <div class="tc-sb-title">${icon('finances', 14)} Калькулятор ФОП</div>
             <div class="tc-calc-groups">
               <button class="tc-calc-grp active" data-grp="2">2 група</button>
               <button class="tc-calc-grp" data-grp="3">3 група</button>
@@ -278,10 +279,10 @@ export async function render(container) {
 
           <!-- Quick tips -->
           <div class="tc-sb-card tc-sb-tips">
-            <div class="tc-sb-title">💡 Нагадування</div>
-            <div class="tc-tip">📌 ЄСВ сплачується до 20-го числа після кварталу</div>
-            <div class="tc-tip">📌 ЄП для 2-ї групи — до 20-го числа першого місяця кварталу</div>
-            <div class="tc-tip">📌 Декларація 3-ї групи — до 10 числа 3-го місяця після кварталу</div>
+            <div class="tc-sb-title">${icon('idea', 14)} Нагадування</div>
+            <div class="tc-tip">${icon('pin', 11)} ЄСВ сплачується до 20-го числа після кварталу</div>
+            <div class="tc-tip">${icon('pin', 11)} ЄП для 2-ї групи — до 20-го числа першого місяця кварталу</div>
+            <div class="tc-tip">${icon('pin', 11)} Декларація 3-ї групи — до 10 числа 3-го місяця після кварталу</div>
           </div>
 
         </div>
