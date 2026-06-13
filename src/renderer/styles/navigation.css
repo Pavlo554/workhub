@@ -144,6 +144,24 @@
 /* ── Divider ─────────────────────────────────────────────── */
 .nav-divider { height: 1px; background: var(--border); margin: 6px 0; }
 
+/* ── Language switcher ───────────────────────────────────── */
+.nav-lang-switcher {
+  display: flex; gap: 4px; padding: 6px 4px; margin-bottom: 4px;
+}
+.nav-lang-btn {
+  flex: 1; padding: 5px 4px; border-radius: 6px;
+  font-size: 11px; font-weight: 700; letter-spacing: .02em;
+  background: transparent; border: 1.5px solid transparent;
+  color: var(--text-muted); cursor: pointer; transition: all .15s;
+  display: flex; align-items: center; justify-content: center; gap: 3px;
+}
+.nav-lang-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+.nav-lang-btn.active {
+  background: rgba(79,142,247,.12);
+  border-color: rgba(79,142,247,.4);
+  color: var(--accent-blue);
+}
+
 /* ── Bottom ──────────────────────────────────────────────── */
 .nav-bottom { padding-top: 6px; border-top: 1px solid var(--border); }
 .nav-logout {

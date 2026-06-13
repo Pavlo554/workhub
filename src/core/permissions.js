@@ -1,44 +1,56 @@
-// core/permissions.js
+// core/permissions.js — єдине джерело лімітів планів
+// plan-guard.js і subscribe page мають відповідати цим значенням
 export const PLANS = {
   free: {
     label: 'FREE',
     price: 0,
     limits: {
-      clients:      10,
-      projects:     3,
-      invoices:     5,
-      storage_mb:   100,
-      team_members: 1,
-      pdf_export:   false,
-      encryption:   false,
+      clients:          50,
+      projects:         10,
+      invoices_monthly: 20,
+      passwords:        30,
+      storage_mb:       500,
+      team_members:     1,
+      pdf_export:       false,
+      encryption:       false,
     }
   },
   pro: {
     label: 'PRO',
-    price_monthly: 8,   // USD
-    price_yearly:  70,
+    price_monthly: 299,
     limits: {
-      clients:      Infinity,
-      projects:     Infinity,
-      invoices:     Infinity,
-      storage_mb:   5000,
-      team_members: 1,
-      pdf_export:   true,
-      encryption:   true,
+      clients:          Infinity,
+      projects:         Infinity,
+      invoices_monthly: Infinity,
+      passwords:        Infinity,
+      storage_mb:       5000,
+      team_members:     1,
+      pdf_export:       true,
+      encryption:       true,
     }
   },
   business: {
     label: 'BUSINESS',
-    price_monthly: 20,
-    price_yearly:  180,
+    price_monthly: 799,
     limits: {
-      clients:      Infinity,
-      projects:     Infinity,
-      invoices:     Infinity,
-      storage_mb:   20000,
-      team_members: 5,
-      pdf_export:   true,
-      encryption:   true,
+      clients:          Infinity,
+      projects:         Infinity,
+      invoices_monthly: Infinity,
+      passwords:        Infinity,
+      storage_mb:       20000,
+      team_members:     5,
+      pdf_export:       true,
+      encryption:       true,
     }
   }
+}
+
+/** Повертає ліміт для плану і ресурсу. Infinity = немає ліміту */
+export function getPlanLimit(plan, resource) {
+  return PLANS[plan]?.limits?.[resource] ?? PLANS.free.limits[resource] ?? Infinity
+}
+
+/** true якщо функція доступна для плану */
+export function planHasFeature(plan, feature) {
+  return !!PLANS[plan]?.limits?.[feature]
 }

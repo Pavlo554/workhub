@@ -7,56 +7,125 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
     }
 
+    function isNotBanned() {
+      return request.auth != null &&
+        !get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isBanned', false);
+    }
+
     function isWorkspaceMember(ownerId) {
       return request.auth != null &&
         exists(/databases/$(database)/documents/workspaces/$(ownerId)/members/$(request.auth.uid));
     }
 
+    // Fields only admin / Cloud Functions may change
+    function touchesProtectedFields() {
+      let protected = [
+        'isAdmin', 'isBanned',
+        'plan', 'subscriptionEnd', 'planExpiresAt',
+        'subscriptionStatus', 'planActivatedAt', 'planMethod'
+      ];
+      return resource == null
+        ? request.resource.data.keys().hasAny(protected)
+        : request.resource.data.diff(resource.data).affectedKeys().hasAny(protected);
+    }
+
+    // Subcollections workspace members must NOT read/write
+    function isSensitivePath(docPath) {
+      return docPath.matches('passwords/.*')    ||
+             docPath.matches('bank[_-]accounts/.*') ||
+             docPath.matches('payroll/.*')      ||
+             docPath.matches('api.keys/.*')     ||
+             docPath.matches('prro/.*');
+    }
+
+    // ── Users ──────────────────────────────────────────────────────────────
     match /users/{userId} {
-      allow read:  if request.auth != null && (request.auth.uid == userId || isAdmin());
-      allow write: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      allow write: if request.auth != null && (
+        isAdmin() ||
+        (request.auth.uid == userId && !touchesProtectedFields())
+      );
     }
 
     match /users/{userId}/{document=**} {
-      allow read, write: if request.auth != null &&
-        (request.auth.uid == userId || isAdmin() || isWorkspaceMember(userId));
+      allow read, write: if request.auth != null && isNotBanned() && (
+        request.auth.uid == userId ||
+        isAdmin() ||
+        (isWorkspaceMember(userId) && !isSensitivePath(document))
+      );
     }
 
+    // ── Tickets ────────────────────────────────────────────────────────────
     match /tickets/{ticketId} {
       allow read: if request.auth != null && (
         resource.data.userId == request.auth.uid || isAdmin()
       );
-      allow create: if request.auth != null &&
+      allow create: if request.auth != null && isNotBanned() &&
         request.auth.uid == request.resource.data.userId;
+      // Prevent userId substitution on update
       allow update: if request.auth != null && (
-        resource.data.userId == request.auth.uid || isAdmin()
+        isAdmin() ||
+        (resource.data.userId == request.auth.uid &&
+         request.resource.data.userId == resource.data.userId)
       );
     }
 
+    // ── Announcements ──────────────────────────────────────────────────────
     match /announcements/{id} {
       allow read:  if request.auth != null;
       allow write: if isAdmin();
     }
 
-    match /config/{docId} {
+    // ── Config — sensitive docs MUST come before the wildcard ──────────────
+    // Private keys: admin only (Cloud Functions should use env vars instead)
+    match /config/liqpay_keys {
+      allow read, write: if isAdmin();
+    }
+    match /config/telegram {
+      allow read, write: if isAdmin();
+    }
+
+    // Public payment config (crypto addresses, monobank jar, liqpay public key)
+    match /config/payments {
       allow read:  if request.auth != null;
       allow write: if isAdmin();
     }
 
-    match /{path=**}/pendingPayments/{paymentId} {
-      allow read:   if request.auth != null && isAdmin();
+    // All other config — wildcard explicitly excludes sensitive docs
+    // (Firestore ORs all matching rules, so the exclusion here is mandatory)
+    match /config/{docId} {
+      allow read: if request.auth != null &&
+        docId != 'liqpay_keys' && docId != 'telegram';
+      allow write: if isAdmin();
+    }
+
+    // ── Error Logs ─────────────────────────────────────────────────────────
+    match /errors/{errorId} {
       allow create: if request.auth != null;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // ── Pending Payments ───────────────────────────────────────────────────
+    match /{path=**}/pendingPayments/{paymentId} {
+      allow read:           if request.auth != null && isAdmin();
+      allow create:         if request.auth != null && isNotBanned();
       allow update, delete: if request.auth != null && isAdmin();
     }
 
+    // ── Workspaces ─────────────────────────────────────────────────────────
     match /workspaces/{workspaceId} {
-      allow read: if request.auth != null;
+      allow read:  if request.auth != null;
       allow write: if request.auth != null && request.auth.uid == workspaceId;
 
       match /members/{memberId} {
         allow read: if request.auth != null &&
           (request.auth.uid == workspaceId || request.auth.uid == memberId);
-        allow create: if request.auth != null && request.auth.uid == memberId;
+        // Require valid, unused invite code
+        allow create: if request.auth != null &&
+          request.auth.uid == memberId &&
+          request.resource.data.inviteCode != null &&
+          exists(/databases/$(database)/documents/workspaces/$(workspaceId)/invites/$(request.resource.data.inviteCode)) &&
+          get(/databases/$(database)/documents/workspaces/$(workspaceId)/invites/$(request.resource.data.inviteCode)).data.get('used', false) == false;
         allow update: if request.auth != null && request.auth.uid == workspaceId;
         allow delete: if request.auth != null &&
           (request.auth.uid == workspaceId || request.auth.uid == memberId);
@@ -65,17 +134,22 @@ service cloud.firestore {
       match /invites/{inviteCode} {
         allow read: if request.auth != null;
         allow create, delete: if request.auth != null && request.auth.uid == workspaceId;
-        allow update: if request.auth != null &&
-          (request.auth.uid == workspaceId || resource.data.used == false);
+        allow update: if request.auth != null && (
+          request.auth.uid == workspaceId ||
+          (resource.data.get('used', false) == false && request.resource.data.used == true)
+        );
       }
     }
 
+    // ── Global Invites ─────────────────────────────────────────────────────
     match /invites/{inviteCode} {
       allow read: if request.auth != null;
       allow create: if request.auth != null &&
         request.auth.uid == request.resource.data.workspaceId;
-      allow update: if request.auth != null &&
-        (request.auth.uid == resource.data.workspaceId || resource.data.used == false);
+      allow update: if request.auth != null && (
+        request.auth.uid == resource.data.workspaceId ||
+        (resource.data.get('used', false) == false && request.resource.data.used == true)
+      );
       allow delete: if request.auth != null &&
         request.auth.uid == resource.data.workspaceId;
     }

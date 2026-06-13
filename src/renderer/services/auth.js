@@ -31,6 +31,12 @@ export async function registerUser({ name, email, password }) {
 // ── Вхід ──────────────────────────────────────────────────
 export async function loginUser({ email, password }) {
   const cred = await signInWithEmailAndPassword(auth, email, password)
+  // Check ban status before allowing access
+  const snap = await getDoc(doc(db, 'users', cred.user.uid))
+  if (snap.exists() && snap.data().isBanned) {
+    await signOut(auth)
+    throw Object.assign(new Error('Ваш акаунт заблоковано адміністратором'), { code: 'auth/user-banned' })
+  }
   return cred.user
 }
 
@@ -117,6 +123,7 @@ export function getAuthErrorMessage(code) {
     'auth/invalid-credential':     'Невірний email або пароль',
     'auth/too-many-requests':      'Забагато спроб. Спробуйте пізніше',
     'auth/network-request-failed': "Помилка мережі. Перевірте з'єднання",
+    'auth/user-banned':            'Ваш акаунт заблоковано. Зверніться до підтримки',
   }
   return errors[code] || 'Сталася помилка. Спробуйте ще раз'
 }

@@ -2,28 +2,29 @@
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getUserProfile } from '../../services/auth.js'
 import { icon } from '../../utils/icons.js'
+import { t } from '../../core/i18n.js'
 import {
   collection, query, where, orderBy, getDocs, addDoc,
   updateDoc, doc, serverTimestamp, arrayUnion, limit,
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
 const TYPE_META = {
-  bug:     { iconName: 'x-circle',       label: 'Bug Report',  color: '#F87171', bg: 'rgba(248,113,113,.12)' },
-  feature: { iconName: 'idea',           label: 'Пропозиція',  color: '#A78BFA', bg: 'rgba(167,139,250,.12)' },
-  support: { iconName: 'message-circle', label: 'Підтримка',   color: '#4F8EF7', bg: 'rgba(79,142,247,.12)' },
+  bug:     { iconName: 'x-circle',       label: 'Bug',                                               color: '#F87171', bg: 'rgba(248,113,113,.12)' },
+  feature: { iconName: 'idea',           get label() { return t('support.type.idea') },              color: '#A78BFA', bg: 'rgba(167,139,250,.12)' },
+  support: { iconName: 'message-circle', get label() { return t('module.support') },                 color: '#4F8EF7', bg: 'rgba(79,142,247,.12)' },
 }
 const PRIORITY_META = {
-  low:      { label: 'Низький',    color: '#94A3B8' },
-  medium:   { label: 'Середній',  color: '#FBBF24' },
-  high:     { label: 'Високий',   color: '#FB923C' },
-  critical: { label: 'Критичний', color: '#F87171' },
+  low:      { get label() { return t('support.pri.low') },      color: '#94A3B8' },
+  medium:   { get label() { return t('support.pri.medium') },   color: '#FBBF24' },
+  high:     { get label() { return t('support.pri.high') },     color: '#FB923C' },
+  critical: { get label() { return t('support.pri.critical') }, color: '#F87171' },
 }
 const STATUS_META = {
-  new:         { iconName: 'plus',          label: 'Нова',       color: '#94A3B8' },
-  open:        { iconName: 'info',          label: 'Відкрита',   color: '#4F8EF7' },
-  in_progress: { iconName: 'refresh',       label: 'В роботі',   color: '#FBBF24' },
-  resolved:    { iconName: 'check-circle',  label: 'Вирішено',   color: '#34D399' },
-  closed:      { iconName: 'lock',          label: 'Закрита',    color: '#475569' },
+  new:         { iconName: 'plus',         get label() { return t('support.st.new') },         color: '#94A3B8' },
+  open:        { iconName: 'info',         get label() { return t('support.st.open') },        color: '#4F8EF7' },
+  in_progress: { iconName: 'refresh',      get label() { return t('support.st.in_progress') }, color: '#FBBF24' },
+  resolved:    { iconName: 'check-circle', get label() { return t('support.st.resolved') },    color: '#34D399' },
+  closed:      { iconName: 'lock',         get label() { return t('support.st.closed') },      color: '#475569' },
 }
 
 export async function render(container) {
@@ -52,22 +53,22 @@ export async function render(container) {
         <div class="sup-left">
           <div class="sup-left-head">
             <div>
-              <h2 class="sup-title">${icon('support', 18)} Підтримка</h2>
-              <p class="sup-subtitle">Заявки та баг-репорти</p>
+              <h2 class="sup-title">${icon('support', 18)} ${t('support.title')}</h2>
+              <p class="sup-subtitle">${t('support.subtitle')}</p>
             </div>
-            <button class="sup-btn-primary" id="sup-new-btn">+ Нова</button>
+            <button class="sup-btn-primary" id="sup-new-btn">${t('support.new_ticket')}</button>
           </div>
 
           <div class="sup-tabs">
-            <button class="sup-tab active" data-tab="tickets" style="display:inline-flex;align-items:center;gap:5px">${icon('ticket', 12)} Заявки</button>
-            <button class="sup-tab" data-tab="news" style="display:inline-flex;align-items:center;gap:5px">${icon('newspaper', 12)} Новини</button>
+            <button class="sup-tab active" data-tab="tickets" style="display:inline-flex;align-items:center;gap:5px">${icon('ticket', 12)} ${t('support.tickets')}</button>
+            <button class="sup-tab" data-tab="news" style="display:inline-flex;align-items:center;gap:5px">${icon('newspaper', 12)} ${t('support.news')}</button>
           </div>
 
           <div class="sup-type-pills" id="sup-type-pills">
-            <button class="sup-type-pill active" data-type="all">Всі</button>
+            <button class="sup-type-pill active" data-type="all">${t('common.all')}</button>
             <button class="sup-type-pill" data-type="bug" style="display:inline-flex;align-items:center;gap:4px">${icon('x-circle', 11)} Bug</button>
-            <button class="sup-type-pill" data-type="feature" style="display:inline-flex;align-items:center;gap:4px">${icon('idea', 11)} Ідея</button>
-            <button class="sup-type-pill" data-type="support" style="display:inline-flex;align-items:center;gap:4px">${icon('message-circle', 11)} Підтримка</button>
+            <button class="sup-type-pill" data-type="feature" style="display:inline-flex;align-items:center;gap:4px">${icon('idea', 11)} ${t('support.type.idea')}</button>
+            <button class="sup-type-pill" data-type="support" style="display:inline-flex;align-items:center;gap:4px">${icon('message-circle', 11)} ${t('module.support')}</button>
           </div>
 
           <div id="sup-tickets-panel" class="sup-panel">

@@ -1,15 +1,25 @@
 // src/renderer/services/telegram-notifications.js
-// Telegram бот для сповіщень про платежі
+import { db } from './firebase.js'
+import { doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
-// Твій Telegram Bot Token (отримай у @BotFather)
-const TELEGRAM_BOT_TOKEN = '5885495961:AAHTgHwngCc1G8A1-WrUm9Bd5n76n32X5bk'
-// Твій Telegram Chat ID (отримай у @userinfobot)
-const TELEGRAM_CHAT_ID = '-723349476'
+let _tgCfg = null
 
+async function getTgConfig() {
+  if (_tgCfg) return _tgCfg
+  const snap = await getDoc(doc(db, 'config', 'telegram'))
+  if (!snap.exists()) return null
+  const d = snap.data()
+  if (!d.botToken || !d.chatId) return null
+  _tgCfg = { botToken: d.botToken, chatId: d.chatId }
+  return _tgCfg
+}
 
 export async function sendPaymentNotification(paymentData) {
+  const cfg = await getTgConfig()
+  if (!cfg) return // Telegram not configured — skip silently
+
   const { userId, userName, userEmail, planName, amount, currency, cryptoAmount, address, paymentId } = paymentData
-  
+
   const message = `
 🔔 Нова заявка на оплату!
 
@@ -20,42 +30,25 @@ export async function sendPaymentNotification(paymentData) {
 💎 План: ${planName}
 💰 Сума: ₴${amount}
 
-🪙 Криптовалюта: ${currency}
-📊 Сума в крипті: ${cryptoAmount} ${currency}
-📍 Адреса: ${address}
+🪙 Метод: ${currency}
+${cryptoAmount ? `📊 Сума в крипті: ${cryptoAmount} ${currency}\n📍 Адреса: ${address}` : ''}
 
 🆔 Payment ID: ${paymentId}
 ⏰ Час: ${new Date().toLocaleString('uk-UA')}
-
   `.trim()
 
   try {
-    console.log('Sending Telegram notification...')
-
-    const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    const res = await fetch(`https://api.telegram.org/bot${cfg.botToken}/sendMessage`, {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        chat_id: TELEGRAM_CHAT_ID,
-        text: message,
-        parse_mode: 'HTML'
-      })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: cfg.chatId, text: message }),
     })
-
-    const data = await response.json()
-    
-    if (!data.ok) {
-      console.error('Telegram API error:', data)
-      throw new Error(`Telegram API error: ${data.description}`)
-    }
-
-    console.log('Telegram notification sent successfully!')
-    return true
-
+    const data = await res.json()
+    if (!data.ok) console.error('Telegram API error:', data.description)
+    // Invalidate cache if token changed
+    else _tgCfg = null
   } catch (err) {
-    console.error('Failed to send Telegram notification:', err)
-    throw err
+    console.error('Telegram notification failed:', err.message)
+    // Don't throw — payment flow should continue even if notification fails
   }
 }

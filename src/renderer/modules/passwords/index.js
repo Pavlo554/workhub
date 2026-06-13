@@ -3,6 +3,7 @@ import { db } from '../../services/firebase.js'
 import { getCurrentUser, getUserProfile, getActivePathSegments } from '../../services/auth.js'
 import { checkPlanLimit } from '../../services/plan-guard.js'
 import { icon } from '../../utils/icons.js'
+import { t } from '../../core/i18n.js'
 import {
   collection, addDoc, getDocs, deleteDoc,
   doc, updateDoc, query, orderBy, serverTimestamp
@@ -32,12 +33,12 @@ async function decryptPassword(b64, userId) {
 }
 
 const CAT_META = {
-  general: { label: 'Загальне',   color: '#6B7280' },
-  work:    { label: 'Робота',      color: '#4F8EF7' },
-  finance: { label: 'Фінанси',    color: '#34D399' },
-  social:  { label: 'Соцмережі',  color: '#A78BFA' },
-  email:   { label: 'Пошта',      color: '#F59E0B' },
-  other:   { label: 'Інше',        color: '#F472B6' },
+  general: { get label() { return t('passwords.cat.general') }, color: '#6B7280' },
+  work:    { get label() { return t('passwords.cat.work') },    color: '#4F8EF7' },
+  finance: { get label() { return t('passwords.cat.finance') }, color: '#34D399' },
+  social:  { get label() { return t('passwords.cat.social') },  color: '#A78BFA' },
+  email:   { get label() { return t('passwords.cat.email') },   color: '#F59E0B' },
+  other:   { get label() { return t('passwords.cat.other') },   color: '#F472B6' },
 }
 
 export async function render(container) {
@@ -51,16 +52,16 @@ export async function render(container) {
 
         <div class="pw-header">
           <div>
-            <h1 class="pw-title">Паролі</h1>
-            <p class="pw-sub" id="pw-count">Завантаження...</p>
+            <h1 class="pw-title">${t('passwords.title')}</h1>
+            <p class="pw-sub" id="pw-count">${t('common.loading')}</p>
           </div>
-          <button class="btn btn-primary" id="add-pwd-btn">+ Додати</button>
+          <button class="btn btn-primary" id="add-pwd-btn">${t('passwords.add_btn')}</button>
         </div>
 
         <!-- Search -->
         <div class="pw-search">
           <span class="pw-search-icon">${icon('search', 14)}</span>
-          <input type="text" class="pw-search-input" id="pw-search" placeholder="Пошук за сервісом або логіном..." />
+          <input type="text" class="pw-search-input" id="pw-search" placeholder="${t('passwords.search')}" />
         </div>
 
         <!-- Category filters -->

@@ -9,6 +9,7 @@ import {
   query, orderBy, where, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 import { icon } from '../../utils/icons.js'
+import { t } from '../../core/i18n.js'
 
 const PAY_METHODS = {
   card:   { label: 'Картка', iconName: 'finances'  },
@@ -41,12 +42,12 @@ export async function render(container) {
 
         <div class="inv-page-header">
           <div>
-            <h1 class="inv-page-title">Рахунки та фінанси</h1>
-            <p class="inv-page-sub" id="inv-subtitle">Завантаження...</p>
+            <h1 class="inv-page-title">${t('invoices.page_title')}</h1>
+            <p class="inv-page-sub" id="inv-subtitle">${t('common.loading')}</p>
           </div>
           <div class="inv-header-btns">
-            <button class="btn btn-secondary" id="add-expense-btn">+ Витрата</button>
-            <button class="btn btn-primary"   id="add-invoice-btn">+ Рахунок</button>
+            <button class="btn btn-secondary" id="add-expense-btn">${t('invoices.add_expense')}</button>
+            <button class="btn btn-primary"   id="add-invoice-btn">${t('invoices.add')}</button>
           </div>
         </div>
 
@@ -76,7 +77,7 @@ export async function render(container) {
           <div class="summary-card pending">
             <div class="sum-icon-wrap">${icon('timer', 22)}</div>
             <div class="sum-content">
-              <div class="sum-label">Очікується</div>
+              <div class="sum-label">${t('invoices.pending_badge')}</div>
               <div class="sum-val" id="s-pending">₴0</div>
             </div>
           </div>
@@ -91,8 +92,8 @@ export async function render(container) {
         <!-- Invoices panel -->
         <div id="panel-invoices">
           <div class="invoice-filter">
-            <button class="filter-btn active" data-filter="all">Всі</button>
-            <button class="filter-btn" data-filter="paid">Оплачені</button>
+            <button class="filter-btn active" data-filter="all">${t('invoices.filter.all')}</button>
+            <button class="filter-btn" data-filter="paid">${t('invoices.filter.paid')}</button>
             <button class="filter-btn" data-filter="unpaid">Очікуються</button>
           </div>
           <div id="invoices-list">
@@ -350,7 +351,7 @@ export async function render(container) {
         <div class="invoice-card ${inv.status} ${sel ? 'inv-selected' : ''}" data-id="${inv.id}">
           <div class="inv-card-top">
             <span class="inv-num-pill">${inv.number}</span>
-            <span class="inv-st-badge ${inv.status}">${paid ? 'Оплачено' : 'Очікується'}</span>
+            <span class="inv-st-badge ${inv.status}">${paid ? t('invoices.paid_badge') : t('invoices.pending_badge')}</span>
           </div>
           <div class="inv-card-client">${inv.client}</div>
           <div class="inv-card-desc">${inv.description}</div>
@@ -415,7 +416,7 @@ export async function render(container) {
 
           <div class="invd-top">
             <span class="inv-num-pill">${inv.number}</span>
-            <span class="inv-st-badge ${inv.status} invd-st">${paid ? 'Оплачено' : 'Очікується'}</span>
+            <span class="inv-st-badge ${inv.status} invd-st">${paid ? t('invoices.paid_badge') : t('invoices.pending_badge')}</span>
           </div>
 
           <div class="invd-client">${inv.client}</div>
@@ -578,7 +579,7 @@ export async function render(container) {
   // ── Invoice modal ─────────────────────────────────────────
   function openInvModal(inv = null) {
     editInvId = inv?.id || null
-    container.querySelector('#inv-modal-title').textContent = inv ? 'Редагувати рахунок' : 'Новий рахунок'
+    container.querySelector('#inv-modal-title').textContent = inv ? t('invoices.edit') : t('invoices.new')
     container.querySelector('#f-number').value      = inv?.number      || `INV-${String(invoices.length + 1).padStart(3, '0')}`
     container.querySelector('#f-date').value        = inv?.date        || today()
     container.querySelector('#f-client').value      = inv?.client      || ''
@@ -660,7 +661,7 @@ export async function render(container) {
   // ── Expense modal ─────────────────────────────────────────
   function openExpModal(exp = null) {
     editExpId = exp?.id || null
-    container.querySelector('#exp-modal-title').textContent = exp ? 'Редагувати витрату' : 'Нова витрата'
+    container.querySelector('#exp-modal-title').textContent = exp ? t('invoices.expense_edit') : t('invoices.expense_new')
     container.querySelector('#ef-name').value   = exp?.name   || ''
     container.querySelector('#ef-amount').value = exp?.amount || ''
     container.querySelector('#ef-date').value   = exp?.date   || today()

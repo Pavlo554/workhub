@@ -5,6 +5,7 @@ import { auth, db } from '../../services/firebase.js'
 import { signOut, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js'
 import { doc, updateDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 import { t, getLang, setLang, SUPPORTED_LANGS } from '../../../core/i18n.js'
+import { wbPrompt, wbAlert, wbConfirm } from '../../utils/dialogs.js'
 import { applyTheme, applyAccent, ACCENT_COLORS } from '../../../core/theme.js'
 import { icon } from '../../utils/icons.js'
 
@@ -37,9 +38,9 @@ export async function render(container) {
               { id: 'profile',       svgIcon: icon('clients', 16),        key: 'settings.tab.profile' },
               { id: 'language',      svgIcon: icon('globe', 16),          key: 'settings.tab.language' },
               { id: 'appearance',    svgIcon: icon('sparkles', 16),       key: 'settings.tab.appearance' },
-              { id: 'notifications', svgIcon: icon('bell', 16),           label: 'Сповіщення' },
+              { id: 'notifications', svgIcon: icon('bell', 16),           key: 'settings.tab.notifications' },
               { id: 'security',      svgIcon: icon('passwords', 16),      key: 'settings.tab.security' },
-              { id: 'payments',      svgIcon: icon('credit-card', 16),    label: 'Платежі' },
+              { id: 'payments',      svgIcon: icon('credit-card', 16),    key: 'settings.tab.payments' },
               { id: 'subscription',  svgIcon: icon('upgrade', 16),        key: 'settings.tab.subscription' },
               { id: 'danger',        svgIcon: icon('alert-triangle', 16), key: 'settings.tab.danger' },
             ].map(tab => `
@@ -81,6 +82,18 @@ export async function render(container) {
   }
 
   renderPage()
+
+  // Re-render in-place when language changes — keeps current tab, no Firebase round-trip
+  function onLangChange() { renderPage() }
+  window.addEventListener('lang-change', onLangChange)
+
+  // Cleanup when the slot is removed from DOM (route change / invalidate)
+  new MutationObserver((_, obs) => {
+    if (!document.body.contains(container)) {
+      window.removeEventListener('lang-change', onLangChange)
+      obs.disconnect()
+    }
+  }).observe(document.body, { childList: true, subtree: true })
 }
 
 // ── Tab renderer ─────────────────────────────────────────────
@@ -776,7 +789,6 @@ function attachLanguage(content) {
     } catch { /* non-critical */ }
 
     showToast(t('lang.saved'), 'success')
-    setTimeout(() => navigate('settings'), 500)
   })
 }
 
@@ -921,17 +933,17 @@ function attachPayments(content, user) {
 
 function attachDanger(content) {
   content.querySelector('#logout-btn')?.addEventListener('click', async () => {
-    if (!confirm(t('danger.logout_confirm'))) return
+    if (!await wbConfirm(t('danger.logout_confirm'), { okLabel: t('danger.logout_btn'), danger: true })) return
     try {
       await signOut(auth)
       window.location.reload()
     } catch { showToast(t('common.error'), 'error') }
   })
 
-  content.querySelector('#delete-account-btn')?.addEventListener('click', () => {
-    const answer = prompt(t('danger.delete_prompt'))
+  content.querySelector('#delete-account-btn')?.addEventListener('click', async () => {
+    const answer = await wbPrompt(t('danger.delete_prompt'))
     if (answer === 'ВИДАЛИТИ' || answer === 'DELETE' || answer === 'USUŃ') {
-      alert(t('danger.delete_wip'))
+      wbAlert(t('danger.delete_wip'), 'warning')
     }
   })
 }

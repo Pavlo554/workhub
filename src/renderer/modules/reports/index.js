@@ -5,10 +5,23 @@ import {
   collection, getDocs, query, orderBy, where,
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 import { icon } from '../../utils/icons.js'
+import { t, getLang } from '../../core/i18n.js'
 
-const MONTHS_UK = ['Січень','Лютий','Березень','Квітень','Травень','Червень',
-                   'Липень','Серпень','Вересень','Жовтень','Листопад','Грудень']
-const MONTHS_SHORT = ['Січ','Лют','Бер','Кві','Тра','Чер','Лип','Сер','Вер','Жов','Лис','Гру']
+const MONTHS = {
+  uk: ['Січень','Лютий','Березень','Квітень','Травень','Червень','Липень','Серпень','Вересень','Жовтень','Листопад','Грудень'],
+  ru: ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'],
+  en: ['January','February','March','April','May','June','July','August','September','October','November','December'],
+}
+const MONTHS_SHORT = {
+  uk: ['Січ','Лют','Бер','Кві','Тра','Чер','Лип','Сер','Вер','Жов','Лис','Гру'],
+  ru: ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'],
+  en: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+}
+function getMonths()      { return MONTHS[getLang()]       || MONTHS.uk }
+function getMonthsShort() { return MONTHS_SHORT[getLang()] || MONTHS_SHORT.uk }
+// keep legacy names for compatibility
+const MONTHS_UK    = MONTHS.uk
+const MONTHS_SHORT_UK = MONTHS_SHORT.uk
 
 export async function render(container) {
   injectStyles()
@@ -21,10 +34,10 @@ export async function render(container) {
   let cache      = null   // loaded once; re-used on tab switches
 
   const NAV_TABS = [
-    { id: 'metrics', label: 'Метрики',            iconName: 'bar-chart'    },
-    { id: 'clients', label: 'ТОП клієнти',         iconName: 'trophy'       },
-    { id: 'tasks',   label: 'Задачі',              iconName: 'check-circle' },
-    { id: 'compare', label: 'Порівняння місяців',  iconName: 'trending-up'  },
+    { id: 'metrics', get label() { return t('reports.metrics') }, iconName: 'bar-chart'    },
+    { id: 'clients', get label() { return t('reports.clients') }, iconName: 'trophy'       },
+    { id: 'tasks',   get label() { return t('reports.tasks') },   iconName: 'check-circle' },
+    { id: 'compare', get label() { return t('reports.compare') }, iconName: 'trending-up'  },
   ]
 
   container.innerHTML = `
@@ -33,9 +46,9 @@ export async function render(container) {
       <!-- ══ LEFT NAV ══ -->
       <div class="rp-nav">
         <div class="rp-nav-head">
-          <div class="rp-nav-title">${icon('bar-chart', 18)} Звіти</div>
-          <div class="rp-nav-sub">Аналітика та метрики</div>
-          <button class="rp-refresh-btn" id="rp-refresh" title="Оновити дані">↻</button>
+          <div class="rp-nav-title">${icon('bar-chart', 18)} ${t('reports.title')}</div>
+          <div class="rp-nav-sub">${t('reports.metrics')}</div>
+          <button class="rp-refresh-btn" id="rp-refresh" title="${t('reports.refresh')}">↻</button>
         </div>
         <nav class="rp-nav-tabs">
           ${NAV_TABS.map(t => `
@@ -148,7 +161,7 @@ export async function render(container) {
       const d = new Date(thisY, thisM - i, 1)
       const m = d.getMonth(), y = d.getFullYear()
       const inc = invoices.filter(inv => inv.status === 'paid' && inMonth(inv, m, y)).reduce((s,inv) => s+(inv.amount||0), 0)
-      months6.push({ label: MONTHS_SHORT[m], income: inc })
+      months6.push({ label: getMonthsShort()[m], income: inc })
     }
     const maxInc = Math.max(...months6.map(m => m.income), 1)
 
@@ -220,8 +233,8 @@ export async function render(container) {
         <div class="rp-tasks-split">
           ${(() => {
             const byStatus = {
-              new:         tasks.filter(t => t.status === 'new'         && taskInMonth(t, thisM, thisY)).length,
-              in_progress: tasks.filter(t => t.status === 'in_progress' && taskInMonth(t, thisM, thisY)).length,
+              new:         tasks.filter(t => (t.status === 'todo' || t.status === 'new')                                  && taskInMonth(t, thisM, thisY)).length,
+              in_progress: tasks.filter(t => (t.status === 'in_progress' || t.status === 'in-progress')                    && taskInMonth(t, thisM, thisY)).length,
               done:        doneThis,
             }
             const total = Object.values(byStatus).reduce((a,b) => a+b, 0) || 1
@@ -285,7 +298,7 @@ export async function render(container) {
       const taskCanvas = el.querySelector('#rp-task-canvas')
       if (taskCanvas) {
         const bySt = {
-          new:         tasks.filter(t => t.status === 'new' && taskInMonth(t, thisM, thisY)).length,
+          new:         tasks.filter(t => (t.status === 'todo' || t.status === 'new')                && taskInMonth(t, thisM, thisY)).length,
           in_progress: tasks.filter(t => (t.status === 'in_progress' || t.status === 'in-progress') && taskInMonth(t, thisM, thisY)).length,
           done:        doneThis,
         }
@@ -406,8 +419,8 @@ export async function render(container) {
 
     const filtered = allTasks.filter(inPeriod)
     const done     = filtered.filter(t => t.status === 'done')
-    const inProg   = filtered.filter(t => t.status === 'in_progress')
-    const newTasks = filtered.filter(t => t.status === 'new')
+    const inProg   = filtered.filter(t => t.status === 'in_progress' || t.status === 'in-progress')
+    const newTasks = filtered.filter(t => t.status === 'todo' || t.status === 'new')
 
     el.innerHTML = `
       <div class="rp-toolbar">
@@ -496,7 +509,7 @@ export async function render(container) {
       const paid    = invoices.filter(inv => inv.status === 'paid' && inMonth(inv, m, y)).reduce((s,inv) => s+(inv.amount||0), 0)
       const pending = invoices.filter(inv => inv.status !== 'paid' && inMonth(inv, m, y)).reduce((s,inv) => s+(inv.amount||0), 0)
       const count   = invoices.filter(inv => inMonth(inv, m, y)).length
-      months.push({ label: MONTHS_UK[m], short: MONTHS_SHORT[m], year: y, paid, pending, count })
+      months.push({ label: getMonths()[m], short: getMonthsShort()[m], year: y, paid, pending, count })
     }
 
     function inMonth(inv, m, y) {

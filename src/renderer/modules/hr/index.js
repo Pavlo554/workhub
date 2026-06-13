@@ -1,13 +1,14 @@
 // src/renderer/modules/hr/index.js
 import { icon } from '../../utils/icons.js'
+import { t } from '../../core/i18n.js'
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getActivePathSegments } from '../../services/auth.js'
 import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
 const STATUS = {
-  active:  { label: 'Активний',  color: '#34D399', bg: 'rgba(52,211,153,.12)' },
-  trial:   { label: 'Випробний', color: '#F59E0B', bg: 'rgba(245,158,11,.12)' },
-  fired:   { label: 'Звільнений',color: '#EF4444', bg: 'rgba(239,68,68,.12)' },
+  active:  { get label() { return t('hr.status_active')  || 'Active' },   color: '#34D399', bg: 'rgba(52,211,153,.12)' },
+  trial:   { get label() { return t('hr.status_trial')   || 'Trial' },    color: '#F59E0B', bg: 'rgba(245,158,11,.12)' },
+  fired:   { get label() { return t('hr.status_fired')   || 'Fired' },    color: '#EF4444', bg: 'rgba(239,68,68,.12)'  },
 }
 
 export async function render(container) {
@@ -35,27 +36,27 @@ export async function render(container) {
       <div class="hr-page">
         <div class="hr-header">
           <div>
-            <h1 class="hr-title">${icon('user', 20)} Персонал та HR</h1>
-            <p class="hr-subtitle">${active} активних · ${employees.length} всього</p>
+            <h1 class="hr-title">${icon('user', 20)} ${t('hr.title')}</h1>
+            <p class="hr-subtitle">${active} ${t('hr.active').toLowerCase()} · ${employees.length} ${t('common.total').toLowerCase()}</p>
           </div>
-          <button class="hr-add-btn" id="hr-add">+ Співробітник</button>
+          <button class="hr-add-btn" id="hr-add">${t('hr.add')}</button>
         </div>
 
         <div class="hr-kpi-row">
           <div class="hr-kpi">
             <div class="hr-kpi-icon" style="color:#4F8EF7">${icon('user', 18)}</div>
             <div class="hr-kpi-val">${employees.length}</div>
-            <div class="hr-kpi-label">Всього</div>
+            <div class="hr-kpi-label">${t('hr.total')}</div>
           </div>
           <div class="hr-kpi">
             <div class="hr-kpi-icon" style="color:#34D399">${icon('check-circle', 18)}</div>
             <div class="hr-kpi-val" style="color:#34D399">${active}</div>
-            <div class="hr-kpi-label">Активних</div>
+            <div class="hr-kpi-label">${t('hr.active')}</div>
           </div>
           <div class="hr-kpi">
             <div class="hr-kpi-icon" style="color:#F59E0B">${icon('timer', 18)}</div>
             <div class="hr-kpi-val" style="color:#F59E0B">${employees.filter(e=>e.status==='trial').length}</div>
-            <div class="hr-kpi-label">Випробний термін</div>
+            <div class="hr-kpi-label">${t('hr.hours')}</div>
           </div>
           <div class="hr-kpi">
             <div class="hr-kpi-icon" style="color:#A78BFA">${icon('finances', 18)}</div>

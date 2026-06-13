@@ -2,6 +2,9 @@
 const routes = {}
 let currentRoute = null
 const _cache = new Map() // routeName → HTMLElement
+let _pageTracker = null
+
+export function setPageTracker(fn) { _pageTracker = fn }
 
 // Auth/onboarding routes: always render fresh, never cache
 const FRESH_ROUTES = new Set([
@@ -84,4 +87,13 @@ function _syncNav(routeName) {
   document.querySelectorAll('.nav-item').forEach(el => {
     el.classList.toggle('active', el.dataset.route === routeName)
   })
+  _pageTracker?.(routeName)
 }
+
+// Re-render current module when language changes
+window.addEventListener('lang-change', () => {
+  if (!currentRoute || FRESH_ROUTES.has(currentRoute)) return
+  const saved = currentRoute
+  invalidateRoute(saved)
+  navigate(saved)
+})

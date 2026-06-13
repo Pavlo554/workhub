@@ -1,11 +1,12 @@
 // src/renderer/modules/currency/index.js
 import { icon } from '../../utils/icons.js'
+import { t } from '../../core/i18n.js'
 
 const CACHE_KEY = 'workhub_fx_rates'
 const CACHE_TTL = 3600_000 // 1 hour
 
 // Converter dropdown — popular currencies
-const CONVERTER_CONVERTER_CURRENCIES = [
+const CONVERTER_CURRENCIES = [
   { code: 'UAH', name: 'Гривня',             flag: '🇺🇦', symbol: '₴' },
   { code: 'USD', name: 'Долар США',           flag: '🇺🇸', symbol: '$' },
   { code: 'EUR', name: 'Євро',               flag: '🇪🇺', symbol: '€' },
@@ -43,21 +44,21 @@ export async function render(container) {
     <div class="fx-page">
       <div class="fx-header">
         <div>
-          <h1 class="fx-title">Валютний конвертер</h1>
-          <p class="fx-sub" id="fx-rates-ts">Завантаження курсів НБУ...</p>
+          <h1 class="fx-title">${t('currency.title')}</h1>
+          <p class="fx-sub" id="fx-rates-ts">${t('common.loading')}</p>
         </div>
-        <button class="fx-refresh-btn" id="fx-refresh" title="Оновити курси">↻ Оновити</button>
+        <button class="fx-refresh-btn" id="fx-refresh" title="${t('currency.refresh')}">${t('currency.refresh')}</button>
       </div>
 
       <!-- Converter card -->
       <div class="fx-converter-card">
         <div class="fx-converter-row">
           <div class="fx-input-group">
-            <label class="fx-label">Сума</label>
+            <label class="fx-label">${t('currency.amount')}</label>
             <div class="fx-amount-wrap">
               <input type="number" class="fx-amount-input" id="fx-from-amount" value="100" min="0" step="any">
               <select class="fx-currency-select" id="fx-from-cur">
-                ${CONVERTER_CONVERTER_CURRENCIES.map(c => `<option value="${c.code}" ${c.code === 'USD' ? 'selected' : ''}>${c.flag} ${c.code} — ${c.name}</option>`).join('')}
+                ${CONVERTER_CURRENCIES.map(c => `<option value="${c.code}" ${c.code === 'USD' ? 'selected' : ''}>${c.flag} ${c.code} — ${c.name}</option>`).join('')}
               </select>
             </div>
           </div>
@@ -65,11 +66,11 @@ export async function render(container) {
           <button class="fx-swap-btn" id="fx-swap" title="Поміняти місцями">⇄</button>
 
           <div class="fx-input-group">
-            <label class="fx-label">Результат</label>
+            <label class="fx-label">${t('currency.result')}</label>
             <div class="fx-amount-wrap">
               <input type="number" class="fx-amount-input fx-result" id="fx-to-amount" readonly>
               <select class="fx-currency-select" id="fx-to-cur">
-                ${CONVERTER_CONVERTER_CURRENCIES.map(c => `<option value="${c.code}" ${c.code === 'UAH' ? 'selected' : ''}>${c.flag} ${c.code} — ${c.name}</option>`).join('')}
+                ${CONVERTER_CURRENCIES.map(c => `<option value="${c.code}" ${c.code === 'UAH' ? 'selected' : ''}>${c.flag} ${c.code} — ${c.name}</option>`).join('')}
               </select>
             </div>
           </div>
@@ -83,7 +84,7 @@ export async function render(container) {
       <!-- Rates table — all NBU currencies -->
       <div class="fx-card">
         <div class="fx-card-head">
-          <span class="fx-card-title">${icon('bar-chart', 14)} Всі курси НБУ до гривні</span>
+          <span class="fx-card-title">${icon('bar-chart', 14)} ${t('currency.rates')}</span>
           <div style="display:flex;align-items:center;gap:10px">
             <input class="fx-search" id="fx-search" placeholder="Пошук валюти..." type="text">
             <span class="fx-rates-date" id="fx-rates-date"></span>
@@ -99,7 +100,7 @@ export async function render(container) {
       <!-- Cross rates -->
       <div class="fx-card">
         <div class="fx-card-head">
-          <span class="fx-card-title">${icon('refresh', 14)} Крос-курси</span>
+          <span class="fx-card-title">${icon('refresh', 14)} ${t('currency.cross')}</span>
         </div>
         <div id="fx-cross-table" class="fx-cross-wrap">
           <div class="fx-loading"><div class="spinner"></div></div>
@@ -198,7 +199,7 @@ function renderRatesGrid(container, rates, allItems, search) {
   const safeRates = rates || {}
   let items = allItems && allItems.length > 0
     ? allItems
-    : CONVERTER_CONVERTER_CURRENCIES.filter(c => c.code !== 'UAH').map(c => ({
+    : CONVERTER_CURRENCIES.filter(c => c.code !== 'UAH').map(c => ({
         cc: c.code, txt: c.name, rate: safeRates[c.code] || 0, exchangedate: ''
       }))
 
@@ -291,9 +292,9 @@ function updateTimestamp(container, rates, exchangeDate) {
   const ts = container.querySelector('#fx-rates-ts')
   if (!ts) return
   const isLive = !!rates.USD && Math.abs(rates.USD - 44.26) > 0.5
-  if (isLive && exchangeDate) {
+  if (exchangeDate) {
     ts.textContent = `Офіційний курс НБУ · Дані на ${exchangeDate}`
-  } else if (isLive) {
+  } else if (rates.USD) {
     ts.textContent = `Офіційний курс НБУ · Завантажено ${new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}`
   } else {
     ts.textContent = 'Офлайн — приблизні значення'

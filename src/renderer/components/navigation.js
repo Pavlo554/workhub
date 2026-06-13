@@ -1,39 +1,49 @@
-import { navigate } from '../../core/router.js'
+import { navigate, clearModuleCache } from '../../core/router.js'
 import { logoutUser, getCurrentUser, updateProfileCache } from '../services/auth.js'
 import { getProfessionConfig } from '../../core/profession-config.js'
 import { icon } from '../utils/icons.js'
+import { t } from '../../core/i18n.js'
 import { db } from '../services/firebase.js'
 import {
   collection, getDocs, addDoc, deleteDoc, doc, updateDoc,
   serverTimestamp, query, orderBy, limit,
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
+// labelKey maps to i18n keys; fallback label is Ukrainian
 const MODULE_META = {
-  dashboard:          { label: 'Дашборд' },
-  clients:            { label: 'Клієнти' },
-  projects:           { label: 'Проекти' },
-  invoices:           { label: 'Рахунки' },
-  contracts:          { label: 'Договори' },
-  tasks:              { label: 'Задачі' },
-  finances:           { label: 'Фінанси' },
-  'tax-calendar':     { label: 'Податки' },
-  appointments:       { label: 'Розклад' },
-  services:           { label: 'Послуги' },
-  'content-plan':     { label: 'Контент' },
-  accounts:           { label: 'Акаунти' },
-  passwords:          { label: 'Паролі' },
-  notes:              { label: 'Нотатки' },
-  documents:          { label: 'Документи' },
-  'api-keys':         { label: 'API та інтеграції' },
-  timer:              { label: 'Таймер' },
-  kanban:             { label: 'Kanban' },
-  templates:          { label: 'Шаблони' },
-  warehouse:          { label: 'Склад' },
-  portfolio:          { label: 'Портфоліо' },
-  hr:                 { label: 'Персонал' },
-  currency:           { label: 'Валюти' },
-  reports:            { label: 'Звіти' },
-  support:            { label: 'Підтримка' },
+  dashboard:       { labelKey: 'module.dashboard',  label: 'Дашборд' },
+  clients:         { labelKey: 'module.clients',    label: 'Клієнти' },
+  projects:        { labelKey: 'module.projects',   label: 'Проекти' },
+  invoices:        { labelKey: 'module.invoices',   label: 'Рахунки' },
+  contracts:       { labelKey: 'module.contracts',  label: 'Договори' },
+  tasks:           { labelKey: 'module.tasks',      label: 'Задачі' },
+  finances:        { labelKey: 'module.finances',   label: 'Фінанси' },
+  'tax-calendar':  { labelKey: 'module.tax-calendar', label: 'Податки' },
+  appointments:    { labelKey: 'module.appointments', label: 'Розклад' },
+  services:        { labelKey: 'module.services',   label: 'Послуги' },
+  'content-plan':  { labelKey: 'module.smm',        label: 'Контент' },
+  accounts:        { labelKey: 'module.accounts',   label: 'Акаунти' },
+  passwords:       { labelKey: 'module.passwords',  label: 'Паролі' },
+  notes:           { labelKey: 'module.notes',      label: 'Нотатки' },
+  documents:       { labelKey: 'module.documents',  label: 'Документи' },
+  'api-keys':      { labelKey: 'module.api',        label: 'API та інтеграції' },
+  timer:           { labelKey: 'module.timer',      label: 'Таймер' },
+  kanban:          { labelKey: 'module.kanban',     label: 'Kanban' },
+  templates:       { labelKey: 'module.templates',  label: 'Шаблони' },
+  warehouse:       { labelKey: 'module.warehouse',  label: 'Склад' },
+  portfolio:       { labelKey: 'module.portfolio',  label: 'Портфоліо' },
+  hr:              { labelKey: 'module.hr',         label: 'Персонал' },
+  currency:        { labelKey: 'module.currency',   label: 'Валюти' },
+  reports:         { labelKey: 'module.reports',    label: 'Звіти' },
+  support:         { labelKey: 'module.support',    label: 'Підтримка' },
+  cashbook:        { labelKey: 'module.cashbook',   label: 'Каса' },
+  bank:            { labelKey: 'module.bank',        label: 'Банк' },
+  payroll:         { labelKey: 'module.payroll',    label: 'Зарплата' },
+  prro:            { labelKey: 'module.prro',        label: 'ПРРО' },
+}
+
+function modLabel(m) {
+  return m.labelKey ? t(m.labelKey) : m.label
 }
 
 const PLAN_COLORS = { free: '#8B97B0', pro: '#5B8DEF', business: '#A78BFA' }
@@ -103,7 +113,7 @@ export function renderNavigation(sidebar, profile) {
       </div>
 
       <nav class="nav-menu" id="nav-menu">
-        <div class="nav-section-label">Головне</div>
+        <div class="nav-section-label">${t('nav.main')}</div>
         ${[...modules].sort((a, b) => {
           const keys = Object.keys(MODULE_META)
           return keys.indexOf(a) - keys.indexOf(b)
@@ -112,40 +122,40 @@ export function renderNavigation(sidebar, profile) {
           if (!m) return ''
           return `<button class="nav-item" data-route="${id}">
             <span class="nav-item-icon">${icon(id)}</span>
-            <span class="nav-item-label">${m.label}</span>
+            <span class="nav-item-label">${modLabel(m)}</span>
           </button>`
         }).join('')}
 
         ${isOwner ? `
         <button class="nav-modules-edit-btn" id="nav-modules-edit-btn">
           ${icon('plus', 14)}
-          <span>Налаштувати модулі</span>
+          <span>${t('nav.configure')}</span>
         </button>` : ''}
 
         <div class="nav-divider"></div>
-        <div class="nav-section-label">Акаунт</div>
+        <div class="nav-section-label">${t('nav.account')}</div>
 
         ${isOwner ? `
         <button class="nav-item nav-item-cabinet" data-route="business">
           <span class="nav-item-icon">${icon('business')}</span>
-          <span class="nav-item-label">Мій кабінет</span>
+          <span class="nav-item-label">${t('nav.cabinet')}</span>
         </button>` : ''}
 
         <button class="nav-item" data-route="settings">
           <span class="nav-item-icon">${icon('settings')}</span>
-          <span class="nav-item-label">Налаштування</span>
+          <span class="nav-item-label">${t('nav.settings')}</span>
         </button>
 
         ${!isMember && plan === 'free' ? `
         <button class="nav-item nav-item-upgrade" data-route="subscribe">
           <span class="nav-item-icon">${icon('upgrade')}</span>
-          <span class="nav-item-label">Перейти на PRO</span>
+          <span class="nav-item-label">${t('nav.upgrade')}</span>
         </button>` : ''}
 
         ${!profile?.workspaceId ? `
         <button class="nav-item nav-item-join" data-route="join">
           <span class="nav-item-icon">${icon('join')}</span>
-          <span class="nav-item-label">Долучитись до команди</span>
+          <span class="nav-item-label">${t('nav.join')}</span>
         </button>` : ''}
       </nav>
 
@@ -153,16 +163,16 @@ export function renderNavigation(sidebar, profile) {
         ${profile?.isWorkspaceOwner ? `
         <button class="nav-item nav-item-team" data-route="team">
           <span class="nav-item-icon">${icon('team')}</span>
-          <span class="nav-item-label">Команда</span>
+          <span class="nav-item-label">${t('nav.team')}</span>
         </button>` : ''}
         ${profile?.isAdmin ? `
         <button class="nav-item nav-item-admin" data-route="admin">
           <span class="nav-item-icon">${icon('admin')}</span>
-          <span class="nav-item-label">Адмін панель</span>
+          <span class="nav-item-label">${t('nav.admin')}</span>
         </button>` : ''}
         <button class="nav-logout" id="nav-logout-btn">
           ${icon('logout', 15)}
-          <span>Вийти</span>
+          <span>${t('nav.logout')}</span>
         </button>
       </div>
 
@@ -205,6 +215,8 @@ export function renderNavigation(sidebar, profile) {
   sidebar.querySelector('#nav-user-btn').addEventListener('click', () => navigate('profile'))
   sidebar.querySelector('#nav-logout-btn').addEventListener('click', async () => { await logoutUser() })
 
+  sidebar._profile = profile
+
   if (isOwner) {
     sidebar.querySelector('#nav-modules-edit-btn')?.addEventListener('click', () => {
       openModulesPanel(sidebar, profile, modules)
@@ -237,7 +249,7 @@ function openModulesPanel(sidebar, profile, currentModules) {
           return `
             <button class="nav-mod-chip ${active ? 'active' : ''}" data-mod="${id}">
               <span class="nav-mod-chip-icon">${icon(id, 18)}</span>
-              <span class="nav-mod-chip-label">${m.label}</span>
+              <span class="nav-mod-chip-label">${modLabel(m)}</span>
               <span class="nav-mod-chip-check">${icon('check', 9)}</span>
             </button>`
         }).join('')}
@@ -464,6 +476,7 @@ function renderSwitcher(switcher, businesses, profile, user, sidebar) {
 
       await updateDoc(doc(db, 'users', user.uid), patch)
       updateProfileCache(user.uid, patch)
+      clearModuleCache()   // force fresh render for all modules after business switch
       renderNavigation(sidebar, { ...profile, ...patch })
       navigate('dashboard')
     })

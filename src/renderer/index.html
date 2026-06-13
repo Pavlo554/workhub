@@ -1,45 +1,11 @@
 <!DOCTYPE html>
 <html lang="uk">
-<!-- <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
- <meta http-equiv="Content-Security-Policy" content="
-    default-src 'self';
-    script-src 'self' https://www.gstatic.com;
-    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-    font-src 'self' https://fonts.gstatic.com;
-    connect-src 'self' https://*.firebaseio.com https://*.googleapis.com wss://*.firebaseio.com;
-  " />
-  <meta http-equiv="Content-Security-Policy" content="
-  default-src 'self';
-  script-src 'self' https://www.gstatic.com https://cdnjs.cloudflare.com;
-  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-  font-src 'self' https://fonts.gstatic.com;
-  connect-src 'self' https://*.firebaseio.com https://*.googleapis.com wss://*.firebaseio.com;
-" />
-  <title>WorkHub</title>
-
-
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-
- 
-  <link rel="stylesheet" href="./styles/variables.css" />
-  <link rel="stylesheet" href="./styles/reset.css" />
-  <link rel="stylesheet" href="./styles/base.css" />
-  <link rel="stylesheet" href="./styles/titlebar.css" />
-  <link rel="stylesheet" href="./styles/auth.css" />
-  <link rel="stylesheet" href="./styles/navigation.css" />
-  <link rel="stylesheet" href="./styles/dashboard.css" />
-  <link rel="stylesheet" href="./styles/animations.css" />
-</head> -->
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
-    script-src 'self' https://www.gstatic.com https://cdnjs.cloudflare.com;
+    script-src 'self' https://www.gstatic.com https://cdnjs.cloudflare.com https://www.googletagmanager.com;
     style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
     font-src 'self' https://fonts.gstatic.com;
     img-src 'self' data: blob: https://*.googleapis.com https://*.firebasestorage.app;
@@ -50,18 +16,31 @@
       https://api.telegram.org
       https://api.coingecko.com
       https://bank.gov.ua
+      https://www.google-analytics.com
+      https://analytics.google.com
+      https://www.googletagmanager.com
       wss://*.firebaseio.com;
   ">
   <title>WorkHub</title>
-  <link rel="stylesheet" href="./styles/variables.css" />
-  <link rel="stylesheet" href="./styles/reset.css" />
-  <link rel="stylesheet" href="./styles/base.css" />
-  <link rel="stylesheet" href="./styles/titlebar.css" />
-  <link rel="stylesheet" href="./styles/auth.css" />
-  <link rel="stylesheet" href="./styles/navigation.css" />
-  <link rel="stylesheet" href="./styles/dashboard.css" />
-  <link rel="stylesheet" href="./styles/animations.css" />
-  <link rel="stylesheet" href="./styles/global-polish.css" />
+
+  <!-- DNS prefetch for external resources -->
+  <link rel="dns-prefetch" href="https://www.gstatic.com">
+  <link rel="dns-prefetch" href="https://firestore.googleapis.com">
+  <link rel="dns-prefetch" href="https://identitytoolkit.googleapis.com">
+  <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+
+  <!-- Critical CSS first (blocking is OK — small files) -->
+  <link rel="stylesheet" href="./styles/variables.css">
+  <link rel="stylesheet" href="./styles/reset.css">
+  <link rel="stylesheet" href="./styles/base.css">
+  <link rel="stylesheet" href="./styles/titlebar.css">
+  <link rel="stylesheet" href="./styles/auth.css">
+  <link rel="stylesheet" href="./styles/navigation.css">
+  <link rel="stylesheet" href="./styles/dashboard.css">
+  <link rel="stylesheet" href="./styles/animations.css">
+  <link rel="stylesheet" href="./styles/global-polish.css">
+
+  <!-- Fonts with display=swap — text shows immediately in fallback font -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -91,8 +70,9 @@
   <div id="app">
     <div id="page-container"></div>
   </div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <!-- jsPDF and Chart.js load async — do NOT block app startup -->
+  <script async src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script async src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <script type="module" src="./app.js"></script>
 </body>
 </html>

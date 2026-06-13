@@ -1,8 +1,19 @@
 const { app, BrowserWindow, ipcMain, shell, nativeImage } = require('electron')
+const { autoUpdater } = require('electron-updater')
 const path        = require('path')
 const { spawn }   = require('child_process')
 const os          = require('os')
 const fs          = require('fs')
+
+// ── Fix GPU/cache errors (quota_database, gpu_disk_cache) ─────
+app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
+app.commandLine.appendSwitch('disable-background-networking')
+
+// Clear corrupted cache directories on startup
+app.on('ready', () => {
+  const cacheDir = path.join(app.getPath('userData'), 'GPUCache')
+  try { fs.rmSync(cacheDir, { recursive: true, force: true }) } catch {}
+})
 
 // ── Timer tracker state ────────────────────────────────────
 let trackerProcess = null
@@ -274,19 +285,25 @@ function createWindow() {
     minWidth: 960,
     minHeight: 600,
     frame: false,
-    backgroundColor: '#0D0F14',
+    backgroundColor: '#0D0F14',  // matches app bg — no white flash
     icon: appIcon,
     webPreferences: {
-      preload: path.join(__dirname, '../preload/preload.js'),
+      preload:          path.join(__dirname, '../preload/preload.js'),
       contextIsolation: true,
-      nodeIntegration: false,
+      nodeIntegration:  false,
+      // Speed optimizations
+      backgroundThrottling: false,  // don't throttle when window is hidden
+      spellcheck:           false,  // not needed in desktop app
+      enableWebSQL:         false,
     },
     show: false,
+    paintWhenInitiallyHidden: true,  // pre-render before show
   })
 
   mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
 
-  mainWindow.once('ready-to-show', () => {
+  // Show as soon as first paint is done (faster than ready-to-show)
+  mainWindow.webContents.once('did-finish-load', () => {
     mainWindow.setIcon(appIcon)
     mainWindow.show()
   })
@@ -371,11 +388,33 @@ ipcMain.on('window-maximize', () => {
 })
 ipcMain.on('window-close', () => mainWindow.close())
 
-app.whenReady().then(createWindow)
+// ── Auto-updater ──────────────────────────────────────────
+function setupUpdater() {
+  autoUpdater.autoDownload    = true
+  autoUpdater.autoInstallOnAppQuit = true
+
+  autoUpdater.on('update-available',  (info) => mainWindow?.webContents.send('updater:available',  info))
+  autoUpdater.on('download-progress', (p)    => mainWindow?.webContents.send('updater:progress',   p))
+  autoUpdater.on('update-downloaded', (info) => mainWindow?.webContents.send('updater:downloaded', info))
+  autoUpdater.on('error', (err) => console.error('[updater]', err.message))
+}
+
+ipcMain.handle('updater:install', () => {
+  autoUpdater.quitAndInstall(false, true)
+})
+
+app.whenReady().then(() => {
+  createWindow()
+  if (app.isPackaged) {
+    setupUpdater()
+    autoUpdater.checkForUpdates().catch(() => {})
+  }
+})
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
+
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow()

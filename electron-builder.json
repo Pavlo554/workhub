@@ -8,6 +8,7 @@
   },
   "files": [
     "src/**/*",
+    "assets/**/*",
     "package.json",
     "!src/**/*.map",
     "!**/node_modules/.cache/**"
@@ -29,6 +30,12 @@
     ],
     "category": "Office"
   },
+  "publish": [{
+    "provider": "github",
+    "owner": "ТВІЙ_GITHUB_USERNAME",
+    "repo": "workhub-releases",
+    "private": false
+  }],
   "nsis": {
     "oneClick": false,
     "allowToChangeInstallationDirectory": true,

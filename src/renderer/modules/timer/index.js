@@ -2,18 +2,19 @@
 import { db } from '../../services/firebase.js'
 import { getCurrentUser } from '../../services/auth.js'
 import { icon } from '../../utils/icons.js'
+import { t } from '../../core/i18n.js'
 import {
   collection, addDoc, getDocs, query,
   orderBy, serverTimestamp,
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
 const BREAK_TYPES = [
-  { id: 'lunch',   iconName: 'coffee',    label: 'Обід'          },
-  { id: 'smoke',   iconName: 'x',         label: 'Покурити'      },
-  { id: 'coffee',  iconName: 'coffee',    label: 'Кава'          },
-  { id: 'away',    iconName: 'user',      label: 'Відійшов'      },
-  { id: 'project', iconName: 'refresh',   label: 'Інший проект'  },
-  { id: 'pause',   iconName: 'timer',     label: 'Пауза'         },
+  { id: 'lunch',   iconName: 'coffee',  get label() { return t('timer.break_type.lunch') } },
+  { id: 'smoke',   iconName: 'x',       get label() { return t('timer.break_type.smoke') } },
+  { id: 'coffee',  iconName: 'coffee',  get label() { return t('timer.break_type.coffee') } },
+  { id: 'away',    iconName: 'user',    get label() { return t('timer.break_type.away') } },
+  { id: 'project', iconName: 'refresh', get label() { return t('timer.break_type.project') } },
+  { id: 'pause',   iconName: 'timer',   get label() { return t('timer.break_type.pause') } },
 ]
 
 export async function render(container) {
@@ -25,15 +26,15 @@ export async function render(container) {
       <!-- Left: timer -->
       <div class="tp-left">
         <div class="tp-header">
-          <h1 class="tp-title" style="display:flex;align-items:center;gap:8px">${icon('timer', 22)} Таймер</h1>
-          <p class="tp-sub">Відслідковуйте час роботи та перерви</p>
+          <h1 class="tp-title" style="display:flex;align-items:center;gap:8px">${icon('timer', 22)} ${t('timer.title')}</h1>
+          <p class="tp-sub">${t('timer.sessions')}</p>
         </div>
 
         <div class="tp-card" id="tp-card">
           <!-- Status badge -->
           <div class="tp-status-badge" id="tp-status-badge">
             <span class="tp-dot tp-dot--idle" id="tp-dot"></span>
-            <span id="tp-status-text">Очікування…</span>
+            <span id="tp-status-text">${t('timer.waiting')}</span>
           </div>
 
           <!-- Clock -->
@@ -46,24 +47,24 @@ export async function render(container) {
           <div class="tp-current-task" id="tp-current-task" style="display:none">
             <span class="tp-task-icon">${icon('pin', 14)}</span>
             <span id="tp-task-display">—</span>
-            <button class="tp-change-task-btn" id="tp-change-task-btn">змінити</button>
+            <button class="tp-change-task-btn" id="tp-change-task-btn">${t('timer.change')}</button>
           </div>
 
           <!-- Task input (shown when idle) -->
           <div id="tp-task-input-wrap">
             <input type="text" class="tp-task-input" id="tp-task"
-              placeholder="Назва задачі або проекту (необов'язково)" maxlength="120"/>
+              placeholder="${t('timer.task_placeholder')}" maxlength="120"/>
           </div>
 
           <!-- Main button -->
           <button class="tp-btn tp-btn--start" id="tp-toggle">
             <span class="tp-btn-icon">▶</span>
-            <span class="tp-btn-label">Почати роботу</span>
+            <span class="tp-btn-label">${t('timer.start_work')}</span>
           </button>
 
           <!-- Break buttons (shown when working) -->
           <div class="tp-break-row" id="tp-break-row" style="display:none">
-            <div class="tp-break-label">Перерва:</div>
+            <div class="tp-break-label">${t('timer.break')}:</div>
             <div class="tp-break-btns">
               ${BREAK_TYPES.map(b => `
                 <button class="tp-break-btn" data-break="${b.id}" title="${b.label}" style="display:inline-flex;align-items:center;gap:4px">

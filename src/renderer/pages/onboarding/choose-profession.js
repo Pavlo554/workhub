@@ -1,5 +1,5 @@
 import { db } from '../../services/firebase.js'
-import { getCurrentUser } from '../../services/auth.js'
+import { getCurrentUser, updateProfileCache } from '../../services/auth.js'
 import { navigate } from '../../../core/router.js'
 import { icon } from '../../utils/icons.js'
 import { doc, setDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
@@ -299,22 +299,22 @@ export async function render(container) {
   })
 
   // Save and continue
-  container.querySelector('#next-modules-btn').addEventListener('click', async () => {
+  container.querySelector('#next-modules-btn').addEventListener('click', () => {
     const btn = container.querySelector('#next-modules-btn')
     btn.disabled = true
-    btn.innerHTML = '<div class="spinner"></div> Зберігаємо...'
-    try {
-      const user = getCurrentUser()
-      const modules = ['dashboard', ...Array.from(selectedModules)]
-      await setDoc(doc(db, 'users', user.uid), {
-        profession:      selectedProfession,
-        selectedModules: modules,
-      }, { merge: true })
-      navigate('setup-business')
-    } catch (err) {
-      console.error(err)
-      btn.disabled = false
-      btn.textContent = 'Продовжити →'
-    }
+    btn.innerHTML = '<div class="spinner"></div>'
+
+    const user    = getCurrentUser()
+    const modules = ['dashboard', ...Array.from(selectedModules)]
+
+    // Оновлюємо кеш і переходимо одразу — без очікування Firestore
+    updateProfileCache(user.uid, { profession: selectedProfession, selectedModules: modules })
+    navigate('setup-business')
+
+    // Фоновий запис у Firestore
+    setDoc(doc(db, 'users', user.uid), {
+      profession:      selectedProfession,
+      selectedModules: modules,
+    }, { merge: true }).catch(err => console.error('[choose-profession] save error:', err))
   })
 }
