@@ -4,9 +4,10 @@ import { getCurrentUser, getUserProfile, updateProfileCache } from '../../servic
 import { navigate } from '../../../core/router.js'
 import {
   collection, collectionGroup, getDocs, getDoc, doc, setDoc,
-  updateDoc, deleteDoc, serverTimestamp, query, orderBy, where, limit, addDoc, arrayUnion
+  updateDoc, deleteDoc, serverTimestamp, query, orderBy, where, limit, addDoc, arrayUnion, writeBatch
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 import { icon } from '../../utils/icons.js'
+import { wbConfirm, wbAlert } from '../../utils/dialogs.js'
 
 const PLAN_META = {
   free:     { label: 'FREE',     color: '#94A3B8', price: 0 },
@@ -20,6 +21,7 @@ const TABS = [
   { id: 'payments',       iconName: 'credit-card',  label: 'Платежі' },
   { id: 'support',        iconName: 'support',      label: 'Підтримка' },
   { id: 'notifications',  iconName: 'bell',         label: 'Новини' },
+  { id: 'errors',         iconName: 'alert-triangle', label: 'Помилки' },
 ]
 
 const TICKET_TYPE_META = {
@@ -180,7 +182,27 @@ export async function render(container) {
               </div>
             </div>
             <div style="font-size:11px;color:var(--text-muted);margin-top:8px">
-              Ключі з кабінету liqpay.ua → Бізнес → Склад
+              Ключі з кабінету liqpay.ua → Бізнес → Склад. Приватний ключ зберігається в захищеному документі.
+            </div>
+          </div>
+
+          <!-- Telegram notifications -->
+          <div style="margin-bottom:18px;padding:16px;background:rgba(79,142,247,.06);border:1px solid rgba(79,142,247,.25);border-radius:12px">
+            <div style="font-size:12px;font-weight:700;color:#4F8EF7;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">
+              Telegram — Сповіщення про платежі
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div>
+                <label style="font-size:12px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">Bot Token</label>
+                <input class="adm-input" id="cfg-tg-token" placeholder="5885495961:AAH..." type="password">
+              </div>
+              <div>
+                <label style="font-size:12px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">Chat ID</label>
+                <input class="adm-input" id="cfg-tg-chatid" placeholder="-100123456789">
+              </div>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:8px">
+              Токен від @BotFather, Chat ID від @userinfobot
             </div>
           </div>
 
@@ -286,6 +308,17 @@ export async function render(container) {
         </div>
       </div>
 
+      <!-- ── ERRORS ── -->
+      <div id="tab-errors" class="adm-panel" style="display:none">
+        <div class="adm-card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <div class="adm-card-title">Журнал помилок</div>
+            <button class="adm-btn adm-btn-secondary" id="clear-errors-btn">Очистити всі</button>
+          </div>
+          <div id="errors-list"><div class="adm-loading"></div></div>
+        </div>
+      </div>
+
     </div>
   `
 
@@ -375,15 +408,27 @@ export async function render(container) {
 
   // ── Payment config ────────────────────────────────────────
   async function loadPayCfg() {
-    const snap = await getDoc(doc(db, 'config', 'payments'))
-    if (!snap.exists()) return
-    const d = snap.data()
-    container.querySelector('#cfg-liqpay-pub').value  = d.liqpayPublicKey  || ''
-    container.querySelector('#cfg-liqpay-priv').value = d.liqpayPrivateKey || ''
-    container.querySelector('#cfg-usdt').value = d.address_usdt || ''
-    container.querySelector('#cfg-btc').value  = d.address_btc  || ''
-    container.querySelector('#cfg-eth').value  = d.address_eth  || ''
-    container.querySelector('#cfg-mono').value = d.monobankJar  || ''
+    const [paySnap, keysSnap, tgSnap] = await Promise.all([
+      getDoc(doc(db, 'config', 'payments')),
+      getDoc(doc(db, 'config', 'liqpay_keys')),
+      getDoc(doc(db, 'config', 'telegram')),
+    ])
+    if (paySnap.exists()) {
+      const d = paySnap.data()
+      container.querySelector('#cfg-liqpay-pub').value = d.liqpayPublicKey  || ''
+      container.querySelector('#cfg-usdt').value       = d.address_usdt     || ''
+      container.querySelector('#cfg-btc').value        = d.address_btc      || ''
+      container.querySelector('#cfg-eth').value        = d.address_eth      || ''
+      container.querySelector('#cfg-mono').value       = d.monobankJar      || ''
+    }
+    if (keysSnap.exists()) {
+      container.querySelector('#cfg-liqpay-priv').value = keysSnap.data().privateKey || ''
+    }
+    if (tgSnap.exists()) {
+      const t = tgSnap.data()
+      container.querySelector('#cfg-tg-token').value  = t.botToken || ''
+      container.querySelector('#cfg-tg-chatid').value = t.chatId   || ''
+    }
   }
 
   container.querySelector('#save-pay-cfg').addEventListener('click', async () => {
@@ -391,15 +436,29 @@ export async function render(container) {
     const st  = container.querySelector('#pay-cfg-status')
     btn.disabled = true
     try {
-      await setDoc(doc(db, 'config', 'payments'), {
-        liqpayPublicKey:  container.querySelector('#cfg-liqpay-pub').value.trim()  || null,
-        liqpayPrivateKey: container.querySelector('#cfg-liqpay-priv').value.trim() || null,
-        address_usdt: container.querySelector('#cfg-usdt').value.trim() || null,
-        address_btc:  container.querySelector('#cfg-btc').value.trim()  || null,
-        address_eth:  container.querySelector('#cfg-eth').value.trim()  || null,
-        monobankJar:  container.querySelector('#cfg-mono').value.trim() || null,
-        updatedAt: serverTimestamp(),
-      })
+      const privateKey = container.querySelector('#cfg-liqpay-priv').value.trim()
+      const tgToken    = container.querySelector('#cfg-tg-token').value.trim()
+      const tgChatId   = container.querySelector('#cfg-tg-chatid').value.trim()
+
+      await Promise.all([
+        // Public payment config
+        setDoc(doc(db, 'config', 'payments'), {
+          liqpayPublicKey: container.querySelector('#cfg-liqpay-pub').value.trim() || null,
+          address_usdt:    container.querySelector('#cfg-usdt').value.trim() || null,
+          address_btc:     container.querySelector('#cfg-btc').value.trim()  || null,
+          address_eth:     container.querySelector('#cfg-eth').value.trim()  || null,
+          monobankJar:     container.querySelector('#cfg-mono').value.trim() || null,
+          updatedAt:       serverTimestamp(),
+        }),
+        // LiqPay private key — admin-only doc
+        privateKey
+          ? setDoc(doc(db, 'config', 'liqpay_keys'), { privateKey, updatedAt: serverTimestamp() })
+          : Promise.resolve(),
+        // Telegram config — admin-only doc
+        (tgToken || tgChatId)
+          ? setDoc(doc(db, 'config', 'telegram'), { botToken: tgToken || null, chatId: tgChatId || null, updatedAt: serverTimestamp() })
+          : Promise.resolve(),
+      ])
       st.textContent = 'Збережено'
       setTimeout(() => { st.textContent = '' }, 3000)
     } catch (err) {
@@ -422,7 +481,61 @@ export async function render(container) {
     renderPayments()
     renderTickets()
     renderAnnouncements()
+    loadAndRenderErrors()
+
+    sweepExpiredSubscriptions(allUsers).then(count => {
+      if (count > 0) {
+        renderOverview(); renderAnalytics(); renderUsersTable()
+        showToast(`Скинуто ${count} прострочених підписок`)
+      }
+    })
   }
+
+  async function loadAndRenderErrors() {
+    const el = container.querySelector('#errors-list')
+    if (!el) return
+    try {
+      const snap = await getDocs(query(collection(db, 'errors'), orderBy('createdAt', 'desc'), limit(100)))
+      const errors = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      if (!errors.length) { el.innerHTML = `<div class="adm-empty">Помилок немає</div>`; return }
+      el.innerHTML = errors.map(e => {
+        const ts = e.createdAt?.toDate?.()?.toLocaleString('uk-UA') || '—'
+        const typeColor = e.type === 'uncaught' ? '#F87171' : e.type === 'promise' ? '#FBBF24' : '#94A3B8'
+        return `
+          <div class="err-row" data-id="${e.id}">
+            <div class="err-top">
+              <span class="err-type" style="color:${typeColor}">${e.type || 'error'}</span>
+              <span class="err-route">${e.route || '—'}</span>
+              <span class="err-ver">v${e.appVersion || '?'}</span>
+              <span class="err-ts">${ts}</span>
+              <button class="err-del" data-id="${e.id}">✕</button>
+            </div>
+            <div class="err-msg">${e.message || ''}</div>
+            ${e.stack ? `<pre class="err-stack">${e.stack.slice(0, 500)}</pre>` : ''}
+            ${e.userEmail ? `<div class="err-user">${icon('user', 12)} ${e.userEmail}</div>` : ''}
+          </div>`
+      }).join('')
+
+      el.querySelectorAll('.err-del').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          await deleteDoc(doc(db, 'errors', btn.dataset.id))
+          btn.closest('.err-row').remove()
+        })
+      })
+    } catch (err) {
+      el.innerHTML = `<div class="adm-empty" style="color:#F87171">Помилка завантаження: ${err.message}</div>`
+    }
+  }
+
+  container.querySelector('#clear-errors-btn')?.addEventListener('click', async () => {
+    if (!await wbConfirm('Видалити всі помилки?')) return
+    const snap = await getDocs(collection(db, 'errors'))
+    const batch = writeBatch(db)
+    snap.docs.forEach(d => batch.delete(d.ref))
+    await batch.commit()
+    container.querySelector('#errors-list').innerHTML = `<div class="adm-empty">Помилок немає</div>`
+    showToast('Журнал очищено')
+  })
 
   await Promise.all([loadAndRender(), loadPayCfg()])
 
@@ -431,9 +544,41 @@ export async function render(container) {
   // ═══════════════════════════════════════════════════════════
   async function loadAllUsers() {
     try {
-      const snap = await getDocs(query(collection(db, 'users'), orderBy('createdAt', 'desc')))
+      const snap = await getDocs(query(collection(db, 'users'), orderBy('createdAt', 'desc'), limit(500)))
       return snap.docs.map(d => ({ id: d.id, ...d.data() }))
     } catch (err) { console.error(err); return [] }
+  }
+
+  // Знижує всіх юзерів з простроченою підпискою до FREE (викликається у фоні)
+  async function sweepExpiredSubscriptions(users) {
+    const now     = new Date()
+    const expired = users.filter(u => {
+      if (u.plan === 'free' || u.subscriptionStatus === 'expired') return false
+      // Перевіряємо обидва можливі поля для дати закінчення
+      const raw = u.subscriptionEnd ?? u.planExpiresAt ?? null
+      if (!raw) return false
+      const end = raw?.toDate ? raw.toDate() : new Date(raw)
+      return !isNaN(end.getTime()) && end < now
+    })
+    if (!expired.length) return 0
+
+    const batch = writeBatch(db)
+    for (const u of expired) {
+      batch.update(doc(db, 'users', u.id), {
+        plan:               'free',
+        subscriptionStatus: 'expired',
+        updatedAt:          serverTimestamp(),
+      })
+      // Оновлюємо локальний масив
+      Object.assign(u, { plan: 'free', subscriptionStatus: 'expired' })
+    }
+    try {
+      await batch.commit()
+      console.log(`[Admin] Знижено ${expired.length} прострочених підписок`)
+    } catch (err) {
+      console.error('[Admin] sweepExpiredSubscriptions error:', err)
+    }
+    return expired.length
   }
 
   async function loadAllPayments() {
@@ -667,7 +812,9 @@ export async function render(container) {
           ${list.map(u => {
             const pm     = PLAN_META[u.plan || 'free'] || PLAN_META.free
             const regD   = u.createdAt?.toDate?.()?.toLocaleDateString('uk-UA') || '—'
-            const subEnd = u.subscriptionEnd ? new Date(u.subscriptionEnd).toLocaleDateString('uk-UA') : '—'
+            const _rawExpiry = u.subscriptionEnd ?? u.planExpiresAt ?? null
+            const _expiryDate = _rawExpiry ? (_rawExpiry?.toDate ? _rawExpiry.toDate() : new Date(_rawExpiry)) : null
+            const subEnd = _expiryDate && !isNaN(_expiryDate) ? _expiryDate.toLocaleDateString('uk-UA') : '—'
             const banned = u.isBanned
             return `
               <tr class="${banned ? 'adm-row-banned' : ''}" data-uid="${u.id}" style="cursor:pointer">
@@ -765,16 +912,30 @@ export async function render(container) {
             </div>
 
             <div class="adm-detail-actions">
-              <button class="adm-btn adm-btn-primary" data-uid="${uid}" data-plan="${u.plan||'free'}" id="ud-change-plan">Змінити план</button>
+              <button class="adm-btn adm-btn-primary" id="ud-change-plan">${icon('credit-card',13)} Змінити план</button>
+              <button class="adm-btn adm-btn-secondary" id="ud-edit-profile">${icon('edit',13)} Редагувати профіль</button>
+              <button class="adm-btn adm-btn-secondary" id="ud-edit-modules">${icon('grid',13)} Редагувати модулі</button>
               <button class="adm-btn ${u.isBanned ? 'adm-btn-success' : 'adm-btn-danger'}" id="ud-ban-btn">
                 ${u.isBanned ? 'Розбанити' : 'Забанити'}
               </button>
               ${!u.isAdmin ? `<button class="adm-btn adm-btn-ghost" id="ud-admin-btn">Зробити адміном</button>` : '<div class="adm-admin-badge" style="margin-top:8px">Адміністратор</div>'}
+              <button class="adm-btn adm-btn-ghost" id="ud-reset-onb" title="Скинути онбординг">↺ Скинути онбординг</button>
             </div>
+
+            ${u.adminNote ? `<div class="adm-admin-note" id="ud-note-display">${icon('pencil',12)} ${u.adminNote}</div>` : ''}
+            <button class="adm-btn adm-btn-ghost adm-btn-sm" id="ud-add-note" style="margin-top:8px;font-size:11px">
+              ${icon('pencil',11)} ${u.adminNote ? 'Редагувати нотатку' : '+ Нотатка адміна'}
+            </button>
           </div>
 
           <!-- Right: businesses + modules -->
           <div class="adm-detail-right">
+
+            <div class="adm-detail-uid">
+              <span style="font-family:monospace;font-size:11px;color:var(--text-muted)">${u.id}</span>
+              <button class="adm-btn adm-btn-ghost adm-btn-sm" id="ud-copy-uid">${icon('copy',11)} Копіювати UID</button>
+            </div>
+
             <h3 class="adm-detail-section">Бізнеси (${businesses.length + 1})</h3>
             <div class="adm-biz-list">
               <div class="adm-biz-item adm-biz-main">
@@ -796,19 +957,36 @@ export async function render(container) {
             </div>
 
             <h3 class="adm-detail-section" style="margin-top:20px">Активні модулі (${modules.length})</h3>
-            <div class="adm-modules-wrap">
+            <div class="adm-modules-wrap" id="ud-modules-display">
               ${modules.length ? modules.map(id => {
-                const labels = { dashboard:'Дашборд',clients:'Клієнти',projects:'Проекти',invoices:'Рахунки',contracts:'Договори',tasks:'Задачі',timer:'Таймер',finances:'Фінанси','tax-calendar':'Податки',appointments:'Розклад',services:'Послуги','content-plan':'Контент',accounts:'Акаунти',passwords:'Паролі',notes:'Нотатки',documents:'Документи','api-keys':'API' }
+                const labels = { dashboard:'Дашборд',clients:'Клієнти',projects:'Проекти',invoices:'Рахунки',contracts:'Договори',tasks:'Задачі',timer:'Таймер',finances:'Фінанси','tax-calendar':'Податки',appointments:'Розклад',services:'Послуги','content-plan':'Контент',accounts:'Акаунти',passwords:'Паролі',notes:'Нотатки',documents:'Документи','api-keys':'API',hr:'Персонал',warehouse:'Склад',kanban:'Kanban',reports:'Звіти',support:'Підтримка',portfolio:'Портфоліо',templates:'Шаблони',currency:'Валюти',cashbook:'Каса',bank:'Банк',payroll:'Зарплата',prro:'ПРРО' }
                 return `<span class="adm-mod-chip">${icon(id, 12)} ${labels[id]||id}</span>`
               }).join('') : '<span style="color:var(--text-muted);font-size:13px">Немає модулів</span>'}
             </div>
 
-            ${u.subscriptionEnd ? `
-              <h3 class="adm-detail-section" style="margin-top:20px">Підписка</h3>
-              <div class="adm-detail-meta">
-                ${metaRow('', 'Діє до', new Date(u.subscriptionEnd).toLocaleDateString('uk-UA'))}
-                ${metaRow('', 'Статус', u.subscriptionStatus === 'active' ? '<span style="color:#34D399">Активна</span>' : '<span style="color:#94A3B8">Неактивна</span>')}
-              </div>` : ''}
+            ${(() => {
+              const rawExp = u.subscriptionEnd ?? u.planExpiresAt ?? null
+              if ((u.plan === 'free' || !u.plan) && !rawExp) return ''
+              let endStr = '—', daysLeft = null
+              if (rawExp) {
+                const end = rawExp?.toDate ? rawExp.toDate() : new Date(rawExp)
+                if (!isNaN(end.getTime())) {
+                  endStr   = end.toLocaleDateString('uk-UA')
+                  daysLeft = Math.ceil((end - new Date()) / (1000 * 60 * 60 * 24))
+                }
+              }
+              const daysColor  = daysLeft === null ? '#94A3B8' : daysLeft > 7 ? '#34D399' : daysLeft > 3 ? '#FBBF24' : daysLeft > 0 ? '#FB923C' : '#F87171'
+              const daysLabel  = daysLeft === null ? '—' : daysLeft > 0 ? `${daysLeft} дн.` : 'Прострочено'
+              const statusColor = u.subscriptionStatus === 'active' && (daysLeft === null || daysLeft > 0) ? '#34D399' : '#F87171'
+              const statusLabel = u.subscriptionStatus === 'active' && (daysLeft === null || daysLeft > 0) ? 'Активна' : 'Прострочена / Неактивна'
+              return `
+                <h3 class="adm-detail-section" style="margin-top:20px">Підписка</h3>
+                <div class="adm-detail-meta">
+                  ${metaRow('', 'Діє до', endStr)}
+                  ${daysLeft !== null ? metaRow('', 'Залишилось', `<strong style="color:${daysColor}">${daysLabel}</strong>`) : ''}
+                  ${metaRow('', 'Статус', `<span style="color:${statusColor}">${statusLabel}</span>`)}
+                </div>`
+            })()}
           </div>
 
         </div>
@@ -820,6 +998,192 @@ export async function render(container) {
     modal.querySelector('#ud-change-plan')?.addEventListener('click', () => { modal.remove(); openChangePlanModal(uid, u.plan || 'free') })
     modal.querySelector('#ud-ban-btn')?.addEventListener('click', async () => { modal.remove(); await toggleBan(uid, u.isBanned) })
     modal.querySelector('#ud-admin-btn')?.addEventListener('click', async () => { modal.remove(); await makeAdmin(uid) })
+    modal.querySelector('#ud-edit-profile')?.addEventListener('click', () => openEditProfileModal(uid, u, modal))
+    modal.querySelector('#ud-edit-modules')?.addEventListener('click', () => openEditModulesModal(uid, u, modal))
+    modal.querySelector('#ud-copy-uid')?.addEventListener('click', () => {
+      navigator.clipboard?.writeText(uid)
+      showToast('UID скопійовано')
+    })
+    modal.querySelector('#ud-reset-onb')?.addEventListener('click', async () => {
+      if (!await wbConfirm(`Скинути онбординг для ${u.name || u.email}? Користувач побачить екран вибору ніші.`, { okLabel: 'Скинути' })) return
+      try {
+        await updateDoc(doc(db, 'users', uid), { onboardingDone: false, profession: null, accountType: null })
+        const idx = allUsers.findIndex(x => x.id === uid)
+        if (idx !== -1) { allUsers[idx].onboardingDone = false; allUsers[idx].profession = null }
+        modal.remove(); showToast('Онбординг скинуто')
+      } catch (err) { showToast('Помилка: ' + err.message, 'error') }
+    })
+    modal.querySelector('#ud-add-note')?.addEventListener('click', () => openAddNoteModal(uid, u, modal))
+  }
+
+  // ── Edit profile modal ────────────────────────────────────
+  function openEditProfileModal(uid, u, parentModal) {
+    parentModal?.remove()
+    const modal = document.createElement('div')
+    modal.className = 'adm-overlay'
+    modal.innerHTML = `
+      <div class="adm-modal" style="max-width:440px">
+        <div class="adm-modal-head">
+          <h2>${icon('edit',18)} Редагувати профіль</h2>
+          <button class="adm-modal-close" id="ep-close">${icon('x',14)}</button>
+        </div>
+        <div class="adm-modal-body" style="gap:12px">
+          <div class="adm-field"><label>Ім'я</label>
+            <input class="adm-input" id="ep-name" value="${u.name||''}" placeholder="Ім'я користувача">
+          </div>
+          <div class="adm-field"><label>Назва бізнесу</label>
+            <input class="adm-input" id="ep-biz" value="${u.businessName||''}" placeholder="Назва бізнесу">
+          </div>
+          <div class="adm-field"><label>Телефон</label>
+            <input class="adm-input" id="ep-phone" value="${u.phone||''}" placeholder="+380XXXXXXXXX">
+          </div>
+          <div class="adm-field"><label>Місто</label>
+            <input class="adm-input" id="ep-city" value="${u.city||''}" placeholder="Київ">
+          </div>
+          <div class="adm-field"><label>Ніша</label>
+            <select class="adm-input adm-select" id="ep-profession">
+              <option value="">— не обрано —</option>
+              <option value="freelancer" ${u.profession==='freelancer'?'selected':''}>Фрілансер</option>
+              <option value="accountant" ${u.profession==='accountant'?'selected':''}>Бухгалтер / ФОП</option>
+              <option value="smm"        ${u.profession==='smm'?'selected':''}>SMM / Маркетолог</option>
+              <option value="beauty"     ${u.profession==='beauty'?'selected':''}>Салон краси</option>
+            </select>
+          </div>
+        </div>
+        <div class="adm-modal-foot">
+          <button class="adm-btn adm-btn-ghost" id="ep-cancel">Скасувати</button>
+          <button class="adm-btn adm-btn-primary" id="ep-save">Зберегти</button>
+        </div>
+      </div>`
+    document.body.appendChild(modal)
+    modal.querySelector('#ep-close').addEventListener('click',  () => { modal.remove(); openUserDetail(uid) })
+    modal.querySelector('#ep-cancel').addEventListener('click', () => { modal.remove(); openUserDetail(uid) })
+    modal.addEventListener('click', e => { if (e.target === modal) { modal.remove(); openUserDetail(uid) } })
+    modal.querySelector('#ep-save').addEventListener('click', async () => {
+      const btn = modal.querySelector('#ep-save')
+      btn.disabled = true; btn.textContent = '...'
+      try {
+        const upd = {
+          name:         modal.querySelector('#ep-name').value.trim() || null,
+          businessName: modal.querySelector('#ep-biz').value.trim()  || null,
+          phone:        modal.querySelector('#ep-phone').value.trim() || null,
+          city:         modal.querySelector('#ep-city').value.trim()  || null,
+          profession:   modal.querySelector('#ep-profession').value   || null,
+          updatedAt:    serverTimestamp(),
+        }
+        await updateDoc(doc(db, 'users', uid), upd)
+        const idx = allUsers.findIndex(x => x.id === uid)
+        if (idx !== -1) Object.assign(allUsers[idx], upd)
+        modal.remove(); renderUsersTable()
+        showToast('Профіль оновлено')
+        openUserDetail(uid)
+      } catch (err) { showToast('Помилка: ' + err.message, 'error'); btn.disabled = false; btn.textContent = 'Зберегти' }
+    })
+  }
+
+  // ── Edit modules modal ────────────────────────────────────
+  const ALL_MODULE_IDS = ['dashboard','clients','projects','invoices','contracts','tasks','timer','kanban','finances','tax-calendar','appointments','services','content-plan','accounts','passwords','notes','documents','api-keys','hr','warehouse','reports','support','portfolio','templates','currency','cashbook','bank','payroll','prro']
+  const MODULE_LABELS  = { dashboard:'Дашборд',clients:'Клієнти',projects:'Проекти',invoices:'Рахунки',contracts:'Договори',tasks:'Задачі',timer:'Таймер',kanban:'Kanban',finances:'Фінанси','tax-calendar':'Податки',appointments:'Розклад',services:'Послуги','content-plan':'Контент',accounts:'Акаунти',passwords:'Паролі',notes:'Нотатки',documents:'Документи','api-keys':'API',hr:'Персонал',warehouse:'Склад',reports:'Звіти',support:'Підтримка',portfolio:'Портфоліо',templates:'Шаблони',currency:'Валюти',cashbook:'Каса',bank:'Банк',payroll:'Зарплата',prro:'ПРРО' }
+
+  function openEditModulesModal(uid, u, parentModal) {
+    parentModal?.remove()
+    const current = u.selectedModules || []
+    const modal = document.createElement('div')
+    modal.className = 'adm-overlay'
+    modal.innerHTML = `
+      <div class="adm-modal" style="max-width:600px">
+        <div class="adm-modal-head">
+          <h2>${icon('grid',18)} Модулі користувача</h2>
+          <button class="adm-modal-close" id="em-close">${icon('x',14)}</button>
+        </div>
+        <div class="adm-modal-body" style="gap:10px">
+          <div style="display:flex;gap:8px;margin-bottom:4px">
+            <button class="adm-btn adm-btn-ghost adm-btn-sm" id="em-all">Обрати всі</button>
+            <button class="adm-btn adm-btn-ghost adm-btn-sm" id="em-none">Зняти всі</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px" id="em-grid">
+            ${ALL_MODULE_IDS.map(id => `
+              <label style="display:flex;align-items:center;gap:6px;background:var(--bg-tertiary);border:1.5px solid ${current.includes(id)?'var(--accent-blue)':'var(--border)'};border-radius:8px;padding:7px 10px;cursor:pointer;font-size:12px;font-weight:500;transition:border .15s">
+                <input type="checkbox" value="${id}" ${current.includes(id)?'checked':''} style="display:none">
+                <span>${icon(id,12)}</span>
+                <span>${MODULE_LABELS[id]||id}</span>
+              </label>`).join('')}
+          </div>
+        </div>
+        <div class="adm-modal-foot">
+          <button class="adm-btn adm-btn-ghost" id="em-cancel">Скасувати</button>
+          <button class="adm-btn adm-btn-primary" id="em-save">Зберегти</button>
+        </div>
+      </div>`
+    document.body.appendChild(modal)
+
+    // Highlight checked
+    modal.querySelectorAll('#em-grid label').forEach(lbl => {
+      const cb = lbl.querySelector('input')
+      lbl.style.borderColor = cb.checked ? 'var(--accent-blue)' : 'var(--border)'
+      lbl.style.color       = cb.checked ? 'var(--accent-blue)' : ''
+      cb.addEventListener('change', () => {
+        lbl.style.borderColor = cb.checked ? 'var(--accent-blue)' : 'var(--border)'
+        lbl.style.color       = cb.checked ? 'var(--accent-blue)' : ''
+      })
+    })
+
+    modal.querySelector('#em-all').addEventListener('click',  () => modal.querySelectorAll('#em-grid input').forEach(c => { c.checked = true;  c.dispatchEvent(new Event('change')) }))
+    modal.querySelector('#em-none').addEventListener('click', () => modal.querySelectorAll('#em-grid input').forEach(c => { c.checked = false; c.dispatchEvent(new Event('change')) }))
+    modal.querySelector('#em-close').addEventListener('click',  () => { modal.remove(); openUserDetail(uid) })
+    modal.querySelector('#em-cancel').addEventListener('click', () => { modal.remove(); openUserDetail(uid) })
+    modal.addEventListener('click', e => { if (e.target === modal) { modal.remove(); openUserDetail(uid) } })
+
+    modal.querySelector('#em-save').addEventListener('click', async () => {
+      const btn = modal.querySelector('#em-save')
+      btn.disabled = true; btn.textContent = '...'
+      const selected = [...modal.querySelectorAll('#em-grid input:checked')].map(c => c.value)
+      try {
+        await updateDoc(doc(db, 'users', uid), { selectedModules: selected, updatedAt: serverTimestamp() })
+        const idx = allUsers.findIndex(x => x.id === uid)
+        if (idx !== -1) allUsers[idx].selectedModules = selected
+        modal.remove(); showToast(`Модулі збережено (${selected.length})`)
+        openUserDetail(uid)
+      } catch (err) { showToast('Помилка: ' + err.message, 'error'); btn.disabled = false; btn.textContent = 'Зберегти' }
+    })
+  }
+
+  // ── Add/edit admin note ───────────────────────────────────
+  function openAddNoteModal(uid, u, parentModal) {
+    parentModal?.remove()
+    const modal = document.createElement('div')
+    modal.className = 'adm-overlay'
+    modal.innerHTML = `
+      <div class="adm-modal" style="max-width:400px">
+        <div class="adm-modal-head">
+          <h2>${icon('pencil',18)} Нотатка адміна</h2>
+          <button class="adm-modal-close" id="an-close">${icon('x',14)}</button>
+        </div>
+        <div class="adm-modal-body">
+          <textarea class="adm-input adm-textarea" id="an-text" rows="4" placeholder="Внутрішня нотатка про цього користувача…">${u.adminNote||''}</textarea>
+          <p style="font-size:11px;color:var(--text-muted);margin-top:6px">Нотатка видна тільки адміністраторам</p>
+        </div>
+        <div class="adm-modal-foot">
+          <button class="adm-btn adm-btn-ghost" id="an-cancel">Скасувати</button>
+          <button class="adm-btn adm-btn-primary" id="an-save">Зберегти</button>
+        </div>
+      </div>`
+    document.body.appendChild(modal)
+    modal.querySelector('#an-close').addEventListener('click',  () => { modal.remove(); openUserDetail(uid) })
+    modal.querySelector('#an-cancel').addEventListener('click', () => { modal.remove(); openUserDetail(uid) })
+    modal.addEventListener('click', e => { if (e.target === modal) { modal.remove(); openUserDetail(uid) } })
+    modal.querySelector('#an-save').addEventListener('click', async () => {
+      const note = modal.querySelector('#an-text').value.trim()
+      const btn  = modal.querySelector('#an-save')
+      btn.disabled = true; btn.textContent = '...'
+      try {
+        await updateDoc(doc(db, 'users', uid), { adminNote: note || null })
+        const idx = allUsers.findIndex(x => x.id === uid)
+        if (idx !== -1) allUsers[idx].adminNote = note || null
+        modal.remove(); showToast('Нотатку збережено')
+        openUserDetail(uid)
+      } catch (err) { showToast('Помилка: ' + err.message, 'error'); btn.disabled = false; btn.textContent = 'Зберегти' }
+    })
   }
 
   function metaRow(icon, label, val) {
@@ -829,7 +1193,7 @@ export async function render(container) {
 
   // ── Make admin ────────────────────────────────────────────
   async function makeAdmin(uid) {
-    if (!confirm('Зробити цього користувача адміністратором?')) return
+    if (!await wbConfirm('Зробити цього користувача адміністратором?', { okLabel: 'Так, зробити адміном' })) return
     try {
       await updateDoc(doc(db, 'users', uid), { isAdmin: true })
       const u = allUsers.find(u => u.id === uid); if (u) u.isAdmin = true
@@ -840,7 +1204,7 @@ export async function render(container) {
   // ── Ban / unban ───────────────────────────────────────────
   async function toggleBan(uid, isBanned) {
     const action = isBanned ? 'розбанити' : 'забанити'
-    if (!confirm(`Ви впевнені що хочете ${action} цього користувача?`)) return
+    if (!await wbConfirm(`Ви впевнені що хочете ${action} цього користувача?`, { okLabel: isBanned ? 'Розбанити' : 'Забанити', danger: !isBanned })) return
     try {
       await updateDoc(doc(db, 'users', uid), { isBanned: !isBanned, updatedAt: serverTimestamp() })
       const u = allUsers.find(u => u.id === uid); if (u) u.isBanned = !isBanned
@@ -878,7 +1242,7 @@ export async function render(container) {
           </div>
           <div class="adm-field">
             <label>Підписка до</label>
-            <input type="date" class="adm-input" id="cp-end" value="${u.subscriptionEnd ? u.subscriptionEnd.split('T')[0] : nextMonth()}">
+            <input type="date" class="adm-input" id="cp-end" value="${(() => { const r = u.subscriptionEnd ?? u.planExpiresAt; if (!r) return nextMonth(); const d = r?.toDate ? r.toDate() : new Date(r); return isNaN(d) ? nextMonth() : d.toISOString().split('T')[0] })()}">
           </div>
           <div class="adm-field">
             <label>Коментар (необов'язково)</label>
@@ -1221,7 +1585,7 @@ export async function render(container) {
     const headers = ['UID', 'Ім\'я', 'Email', 'Бізнес', 'Ніша', 'План', 'Підписка до', 'Зареєстрований', 'Забанований']
     const rows = allUsers.map(u => [
       u.id, u.name||'', u.email||'', u.businessName||'', u.profession||'',
-      u.plan||'free', u.subscriptionEnd ? new Date(u.subscriptionEnd).toLocaleDateString('uk-UA') : '',
+      u.plan||'free', (() => { const r = u.subscriptionEnd ?? u.planExpiresAt; if (!r) return ''; const d = r?.toDate ? r.toDate() : new Date(r); return isNaN(d) ? '' : d.toLocaleDateString('uk-UA') })(),
       u.createdAt?.toDate?.()?.toLocaleDateString('uk-UA') || '',
       u.isBanned ? 'Так' : 'Ні',
     ])
@@ -1419,6 +1783,11 @@ function injectStyles() {
     .adm-meta-label   { color:var(--text-muted); width:70px; flex-shrink:0; }
     .adm-meta-val     { flex:1; text-align:left; font-weight:500; overflow:hidden; text-overflow:ellipsis; }
     .adm-detail-actions { display:flex; flex-direction:column; gap:8px; width:100%; margin-top:8px; }
+    .adm-btn-secondary  { background:var(--bg-tertiary); border:1.5px solid var(--border); color:var(--text-primary); }
+    .adm-btn-secondary:hover { border-color:var(--accent-blue); color:var(--accent-blue); }
+    .adm-btn-sm         { padding:4px 10px; font-size:11px; font-weight:600; }
+    .adm-admin-note     { font-size:12px; color:#F59E0B; background:rgba(245,158,11,.08); border:1px solid rgba(245,158,11,.25); border-radius:8px; padding:8px 12px; margin-top:10px; display:flex; align-items:flex-start; gap:6px; line-height:1.5; }
+    .adm-detail-uid     { display:flex; align-items:center; gap:8px; justify-content:space-between; background:var(--bg-tertiary); border-radius:8px; padding:8px 12px; margin-bottom:12px; }
     .adm-detail-section { font-size:13px; font-weight:700; color:var(--text-secondary); border-bottom:1px solid var(--border); padding-bottom:8px; margin-bottom:12px; }
     .adm-biz-list     { display:flex; flex-direction:column; gap:8px; }
     .adm-biz-item     { display:flex; align-items:center; gap:10px; padding:10px 12px; background:var(--bg-tertiary); border-radius:var(--radius-md); }
@@ -1460,6 +1829,19 @@ function injectStyles() {
     .adm-loading-big { display:flex; justify-content:center; padding:60px; }
     .adm-loading-big::after { content:''; width:32px; height:32px; border:3px solid var(--border); border-top-color:var(--accent-blue); border-radius:50%; animation:adm-spin .7s linear infinite; }
     @keyframes adm-spin { to{transform:rotate(360deg)} }
+
+    /* Error log */
+    .err-row { padding:14px; border:1px solid var(--border); border-radius:10px; margin-bottom:10px; background:var(--bg-secondary); }
+    .err-top { display:flex; align-items:center; gap:10px; margin-bottom:6px; font-size:12px; flex-wrap:wrap; }
+    .err-type { font-weight:700; text-transform:uppercase; letter-spacing:.05em; }
+    .err-route { color:var(--text-muted); }
+    .err-ver { color:var(--text-muted); }
+    .err-ts { color:var(--text-muted); margin-left:auto; }
+    .err-del { background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:14px; padding:0 4px; }
+    .err-del:hover { color:#F87171; }
+    .err-msg { font-size:13px; color:var(--text-primary); margin-bottom:4px; }
+    .err-stack { font-size:11px; color:var(--text-muted); white-space:pre-wrap; word-break:break-all; margin:6px 0 0; padding:8px; background:var(--bg-primary); border-radius:6px; max-height:120px; overflow:auto; }
+    .err-user { font-size:12px; color:var(--text-muted); margin-top:6px; display:flex; align-items:center; gap:4px; }
 
     /* Toast */
     .adm-toast { position:fixed; bottom:24px; right:24px; padding:12px 20px; border-radius:var(--radius-md); font-size:14px; font-weight:600; box-shadow:var(--shadow-xl); z-index:9999; opacity:0; transform:translateY(8px); transition:all .25s; border-left:3px solid #34D399; background:var(--bg-secondary); border:1px solid var(--border); }

@@ -2,15 +2,16 @@
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getActivePathSegments } from '../../services/auth.js'
 import { icon } from '../../utils/icons.js'
+import { t } from '../../core/i18n.js'
 import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
 const CATS = [
-  { id: 'invoice',  label: 'Рахунок',      color: '#4F8EF7' },
-  { id: 'contract', label: 'Договір',      color: '#A78BFA' },
-  { id: 'proposal', label: 'КП',           color: '#34D399' },
-  { id: 'email',    label: 'Email',        color: '#F59E0B' },
-  { id: 'message',  label: 'Повідомлення', color: '#F472B6' },
-  { id: 'other',    label: 'Інше',         color: '#94A3B8' },
+  { id: 'invoice',  get label() { return t('templates.type.invoice') },  color: '#4F8EF7' },
+  { id: 'contract', get label() { return t('templates.type.contract') }, color: '#A78BFA' },
+  { id: 'proposal', get label() { return t('templates.type.proposal') }, color: '#34D399' },
+  { id: 'email',    label: 'Email',                                       color: '#F59E0B' },
+  { id: 'message',  get label() { return t('templates.type.message') },  color: '#F472B6' },
+  { id: 'other',    get label() { return t('templates.type.other') },    color: '#94A3B8' },
 ]
 
 export async function render(container) {
@@ -37,14 +38,14 @@ export async function render(container) {
       <div class="tpl-page">
         <div class="tpl-header">
           <div>
-            <h1 class="tpl-title">Шаблони</h1>
-            <p class="tpl-subtitle">${templates.length} шаблонів · швидке копіювання тексту</p>
+            <h1 class="tpl-title">${t('templates.title')}</h1>
+            <p class="tpl-subtitle">${templates.length} ${t('templates.title').toLowerCase()}</p>
           </div>
-          <button class="tpl-add-btn" id="tpl-add">+ Шаблон</button>
+          <button class="tpl-add-btn" id="tpl-add">${t('templates.add')}</button>
         </div>
 
         <div class="tpl-cats">
-          <button class="tpl-cat ${activeCat === 'all' ? 'active' : ''}" data-cat="all">Всі (${templates.length})</button>
+          <button class="tpl-cat ${activeCat === 'all' ? 'active' : ''}" data-cat="all">${t('common.all')} (${templates.length})</button>
           ${CATS.map(c => {
             const cnt = templates.filter(t => t.category === c.id).length
             if (!cnt && activeCat !== c.id) return ''

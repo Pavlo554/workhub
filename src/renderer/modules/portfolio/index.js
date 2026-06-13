@@ -1,16 +1,17 @@
 // src/renderer/modules/portfolio/index.js
 import { icon } from '../../utils/icons.js'
+import { t } from '../../core/i18n.js'
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getActivePathSegments } from '../../services/auth.js'
 import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
 const TYPES = [
-  { id: 'web',     label: 'Веб',         iconName: 'globe',      color: '#4F8EF7' },
-  { id: 'design',  label: 'Дизайн',      iconName: 'image',      color: '#A78BFA' },
-  { id: 'smm',     label: 'SMM',         iconName: 'smartphone', color: '#F472B6' },
-  { id: 'video',   label: 'Відео',       iconName: 'film',       color: '#F59E0B' },
-  { id: 'photo',   label: 'Фото',        iconName: 'camera',     color: '#34D399' },
-  { id: 'other',   label: 'Інше',        iconName: 'briefcase',  color: '#94A3B8' },
+  { id: 'web',    get label() { return t('portfolio.type.web') },    iconName: 'globe',      color: '#4F8EF7' },
+  { id: 'design', get label() { return t('portfolio.type.design') }, iconName: 'image',      color: '#A78BFA' },
+  { id: 'smm',    get label() { return t('portfolio.type.smm') },    iconName: 'smartphone', color: '#F472B6' },
+  { id: 'video',  get label() { return t('portfolio.type.video') },  iconName: 'film',       color: '#F59E0B' },
+  { id: 'photo',  get label() { return t('portfolio.type.photo') },  iconName: 'camera',     color: '#34D399' },
+  { id: 'other',  get label() { return t('portfolio.type.other') },  iconName: 'briefcase',  color: '#94A3B8' },
 ]
 
 export async function render(container) {
@@ -36,14 +37,14 @@ export async function render(container) {
       <div class="pf-page">
         <div class="pf-header">
           <div>
-            <h1 class="pf-title">${icon('image', 20)} Портфоліо</h1>
-            <p class="pf-subtitle">${items.length} проектів</p>
+            <h1 class="pf-title">${icon('image', 20)} ${t('portfolio.title')}</h1>
+            <p class="pf-subtitle">${items.length} ${t('portfolio.projects')}</p>
           </div>
-          <button class="pf-add-btn" id="pf-add">+ Проект</button>
+          <button class="pf-add-btn" id="pf-add">${t('portfolio.add')}</button>
         </div>
 
         <div class="pf-filter">
-          <button class="pf-pill ${activeType==='all'?'active':''}" data-type="all">Всі (${items.length})</button>
+          <button class="pf-pill ${activeType==='all'?'active':''}" data-type="all">${t('common.all')} (${items.length})</button>
           ${TYPES.map(t => {
             const cnt = items.filter(i => i.type === t.id).length
             if (!cnt) return ''

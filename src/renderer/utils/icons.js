@@ -244,6 +244,19 @@ const p = {
     '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
   search:
     '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+
+  // ── 1C-style modules ──────────────────────────────────────
+  cashbook:
+    '<path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="12" y2="16"/>',
+  bank:
+    '<line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 20 7 4 7"/>',
+  payroll:
+    '<rect width="14" height="17" x="5" y="3" rx="2"/><path d="M9 8h6"/><path d="M9 12h4"/><path d="M15 16a2 2 0 1 0 4 0 2 2 0 0 0-4 0"/><path d="M17 14v-1"/><path d="M17 20v-1"/>',
+  minus:
+    '<path d="M5 12h14"/>',
+  prro:
+    '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 8h.01"/><path d="M11 8h.01"/><path d="M15 8h.01"/><path d="M7 12h2"/><path d="M11 12h2"/><path d="M15 12h2"/>',
+
   warehouse:
     '<path d="M22 8.35V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8.35A2 2 0 0 1 3.26 6.5l8-3.2a2 2 0 0 1 1.48 0l8 3.2A2 2 0 0 1 22 8.35Z"/><path d="M6 18h12"/><path d="M6 14h12"/><rect width="8" height="8" x="8" y="14"/>',
 }

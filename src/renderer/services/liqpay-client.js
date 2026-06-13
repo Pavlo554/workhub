@@ -18,11 +18,14 @@ function b64encode(str) {
 }
 
 export async function getLiqPayKeys() {
-  const snap = await getDoc(doc(db, 'config', 'payments'))
-  if (!snap.exists()) return null
-  const d = snap.data()
-  if (!d.liqpayPublicKey || !d.liqpayPrivateKey) return null
-  return { publicKey: d.liqpayPublicKey, privateKey: d.liqpayPrivateKey }
+  const [paySnap, keysSnap] = await Promise.all([
+    getDoc(doc(db, 'config', 'payments')),
+    getDoc(doc(db, 'config', 'liqpay_keys')),
+  ])
+  const publicKey  = paySnap.exists()  ? paySnap.data().liqpayPublicKey : null
+  const privateKey = keysSnap.exists() ? keysSnap.data().privateKey     : null
+  if (!publicKey || !privateKey) return null
+  return { publicKey, privateKey }
 }
 
 export async function createLiqPayUrl(uid, planId, months = 1, webhookUrl = null) {

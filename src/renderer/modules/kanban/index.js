@@ -2,23 +2,24 @@
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getActivePathSegments } from '../../services/auth.js'
 import { icon } from '../../utils/icons.js'
+import { t } from '../../core/i18n.js'
 import {
   collection, addDoc, getDocs, deleteDoc, doc, updateDoc,
   query, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
 const COLUMNS = [
-  { id: 'backlog',     label: 'Беклог',       color: '#64748B' },
-  { id: 'todo',        label: 'Треба зробити', color: '#4F8EF7' },
-  { id: 'in_progress', label: 'В роботі',     color: '#F59E0B' },
-  { id: 'review',      label: 'Ревью',         color: '#A78BFA' },
-  { id: 'done',        label: 'Готово',        color: '#34D399' },
+  { id: 'backlog',     get label() { return t('kanban.col.backlog') },      color: '#64748B' },
+  { id: 'todo',        get label() { return t('kanban.col.todo') },         color: '#4F8EF7' },
+  { id: 'in_progress', get label() { return t('kanban.col.in_progress') },  color: '#F59E0B' },
+  { id: 'review',      get label() { return t('kanban.col.review') },       color: '#A78BFA' },
+  { id: 'done',        get label() { return t('kanban.col.done') },         color: '#34D399' },
 ]
 
 const PRIORITY = {
-  high:   { label: 'Високий',  color: '#EF4444' },
-  medium: { label: 'Середній', color: '#F59E0B' },
-  low:    { label: 'Низький',  color: '#34D399' },
+  high:   { get label() { return t('tasks.priority.high') },   color: '#EF4444' },
+  medium: { get label() { return t('tasks.priority.medium') }, color: '#F59E0B' },
+  low:    { get label() { return t('tasks.priority.low') },    color: '#34D399' },
 }
 
 export async function render(container) {
@@ -45,8 +46,8 @@ export async function render(container) {
       <div class="kb-page">
         <div class="kb-header">
           <div>
-            <h1 class="kb-title">Kanban</h1>
-            <p class="kb-subtitle">${cards.length} карток · ${cards.filter(c => c.column === 'done').length} виконано</p>
+            <h1 class="kb-title">${t('kanban.title')}</h1>
+            <p class="kb-subtitle">${cards.length} · ${cards.filter(c => c.column === 'done').length} ${t('tasks.done_count')}</p>
           </div>
           <div class="kb-header-right">
             <div class="kb-filter-pills">
@@ -55,7 +56,7 @@ export async function render(container) {
                   ${p === 'all' ? 'Всі' : PRIORITY[p].label}
                 </button>`).join('')}
             </div>
-            <button class="kb-add-btn" id="kb-add">+ Картка</button>
+            <button class="kb-add-btn" id="kb-add">${t('kanban.add_card')}</button>
           </div>
         </div>
 
@@ -164,7 +165,7 @@ export async function render(container) {
     container.querySelectorAll('.kb-del').forEach(b =>
       b.addEventListener('click', async e => {
         e.stopPropagation()
-        if (!confirm('Видалити картку?')) return
+        if (!confirm(t('kanban.delete_confirm'))) return
         await deleteDoc(doc(db, ...base, 'kanban', b.dataset.id))
         await load()
       })

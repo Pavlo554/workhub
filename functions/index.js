@@ -35,10 +35,14 @@ exports.createLiqPayOrder = functions
     }
 
     // Read LiqPay keys from Firestore (only accessible server-side via Admin SDK)
-    const cfgSnap = await db.collection('config').doc('payments').get()
+    const [cfgSnap, keysSnap] = await Promise.all([
+      db.collection('config').doc('payments').get(),
+      db.collection('config').doc('liqpay_keys').get(),
+    ])
     const cfg = cfgSnap.exists ? cfgSnap.data() : {}
-    const publicKey  = cfg.liqpayPublicKey
-    const privateKey = cfg.liqpayPrivateKey
+    const keys = keysSnap.exists ? keysSnap.data() : {}
+    const publicKey  = cfg.liqpayPublicKey  || keys.publicKey
+    const privateKey = keys.privateKey      || cfg.liqpayPrivateKey
 
     if (!publicKey || !privateKey) {
       throw new functions.https.HttpsError('failed-precondition', 'LiqPay keys not configured')
@@ -86,8 +90,8 @@ exports.liqpayWebhook = functions
       const { data, signature } = req.body
       if (!data || !signature) { res.status(400).send('Missing data'); return }
 
-      const cfgSnap = await db.collection('config').doc('payments').get()
-      const privateKey = cfgSnap.exists ? cfgSnap.data()?.liqpayPrivateKey : null
+      const keysSnap   = await db.collection('config').doc('liqpay_keys').get()
+      const privateKey = keysSnap.exists ? keysSnap.data()?.privateKey : null
       if (!privateKey) { res.status(500).send('LiqPay not configured'); return }
 
       // Verify signature
@@ -122,17 +126,19 @@ exports.liqpayWebhook = functions
 
       if (!PLAN_PRICES[planId]) { res.status(400).send('Unknown plan'); return }
 
-      // Calculate expiry date
-      const now    = new Date()
-      const expiry = new Date(now.getFullYear(), now.getMonth() + months, now.getDate())
+      // Calculate expiry date — setMonth handles month-end overflow correctly
+      const expiry = new Date()
+      expiry.setMonth(expiry.getMonth() + months)
 
       // Activate subscription in Firestore
       await db.collection('users').doc(uid).update({
-        plan:             planId,
-        planExpiresAt:    admin.firestore.Timestamp.fromDate(expiry),
-        planActivatedAt:  admin.firestore.FieldValue.serverTimestamp(),
-        planMethod:       'liqpay',
-        updatedAt:        admin.firestore.FieldValue.serverTimestamp(),
+        plan:               planId,
+        subscriptionEnd:    expiry.toISOString(),
+        subscriptionStatus: 'active',
+        planExpiresAt:      admin.firestore.Timestamp.fromDate(expiry),
+        planActivatedAt:    admin.firestore.FieldValue.serverTimestamp(),
+        planMethod:         'liqpay',
+        updatedAt:          admin.firestore.FieldValue.serverTimestamp(),
       })
 
       // Mark pending payment as approved

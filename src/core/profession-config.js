@@ -2,7 +2,7 @@
 export const PROFESSIONS = {
   freelancer: {
     id: 'freelancer', label: 'Фрілансер', iconName: 'laptop', color: '#4F8EF7',
-    modules: ['dashboard','clients','projects','invoices','contracts','tasks','timer','kanban','portfolio','templates','passwords','notes','documents','reports','support'],
+    modules: ['dashboard','clients','projects','invoices','contracts','cashbook','bank','tasks','timer','kanban','portfolio','templates','passwords','notes','documents','reports','support'],
     quickActions: [
       { label: 'Новий клієнт',  iconName: 'user',     action: 'new-client' },
       { label: 'Новий рахунок', iconName: 'invoices', action: 'new-invoice' },
@@ -12,7 +12,7 @@ export const PROFESSIONS = {
   },
   accountant: {
     id: 'accountant', label: 'Бухгалтер / ФОП', iconName: 'bar-chart', color: '#34D399',
-    modules: ['dashboard','clients','invoices','contracts','tax-calendar','currency','templates','passwords','notes','documents','reports','support'],
+    modules: ['dashboard','clients','invoices','contracts','cashbook','bank','payroll','prro','tax-calendar','currency','templates','passwords','notes','documents','reports','support'],
     quickActions: [
       { label: 'Новий клієнт',    iconName: 'user',     action: 'new-client' },
       { label: 'Нова транзакція', iconName: 'finances', action: 'new-transaction' },
@@ -31,7 +31,7 @@ export const PROFESSIONS = {
   },
   beauty: {
     id: 'beauty', label: 'Салон краси', iconName: 'sparkles', color: '#F472B6',
-    modules: ['dashboard','clients','appointments','services','finances','warehouse','hr','notes','reports','support'],
+    modules: ['dashboard','clients','appointments','services','finances','cashbook','bank','payroll','prro','warehouse','hr','notes','reports','support'],
     quickActions: [
       { label: 'Новий запис',   iconName: 'appointments', action: 'new-appointment' },
       { label: 'Новий клієнт', iconName: 'user',          action: 'new-client' },

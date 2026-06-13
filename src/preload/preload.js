@@ -32,4 +32,11 @@ contextBridge.exposeInMainWorld('electron', {
   shop: {
     request: (opts) => ipcRenderer.invoke('shop:request', opts),
   },
+
+  updater: {
+    onAvailable:  (cb) => ipcRenderer.on('updater:available',  (_, info) => cb(info)),
+    onProgress:   (cb) => ipcRenderer.on('updater:progress',   (_, p)    => cb(p)),
+    onDownloaded: (cb) => ipcRenderer.on('updater:downloaded', (_, info) => cb(info)),
+    installNow:   ()   => ipcRenderer.invoke('updater:install'),
+  },
 })

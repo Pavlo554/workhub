@@ -1,7 +1,16 @@
 // src/renderer/app.js
-import { addRoute, navigate, clearModuleCache } from '../core/router.js'
-import { onAuthChange, getUserProfile } from './services/auth.js'
-import { initTheme } from '../core/theme.js'
+import { addRoute, navigate, clearModuleCache, setPageTracker } from '../core/router.js'
+import { onAuthChange, getUserProfile }                         from './services/auth.js'
+import { checkSubscriptionExpiry }                              from './services/subscription-guard.js'
+import { initTheme }                                            from '../core/theme.js'
+import { renderNavigation }                                     from './components/navigation.js'
+import { trackPage, identifyUser }                              from './services/analytics.js'
+import { initAutoUpdater }                                      from './services/updater.js'
+import { initErrorLogger }                                      from './services/error-logger.js'
+
+initErrorLogger()
+setPageTracker(trackPage)
+initAutoUpdater()
 
 initTheme()
 
@@ -21,6 +30,7 @@ addRoute('profile',           () => import('./pages/profile/index.js'))
 addRoute('settings',          () => import('./pages/settings/index.js'))
 addRoute('subscribe',         () => import('./pages/subscribe/index.js'))
 addRoute('admin',             () => import('./pages/admin/index.js'))
+addRoute('legal',             () => import('./pages/legal/index.js'))
 addRoute('team',              () => import('./pages/team/index.js'))
 addRoute('join',              () => import('./pages/join/index.js'))
 addRoute('business',          () => import('./pages/business/index.js'))
@@ -51,6 +61,12 @@ addRoute('contracts',         () => import('./modules/contracts/index.js'))
 // ── Модулі Бухгалтер ──────────────────────────────────────
 addRoute('finances',          () => import('./modules/finances/index.js'))
 addRoute('tax-calendar',      () => import('./modules/tax-calendar/index.js'))
+
+// ── Модулі 1С-стиль (Каса / Банк / Зарплата) ─────────────
+addRoute('cashbook',          () => import('./modules/cashbook/index.js'))
+addRoute('bank',              () => import('./modules/bank/index.js'))
+addRoute('payroll',           () => import('./modules/payroll/index.js'))
+addRoute('prro',              () => import('./modules/prro/index.js'))
 
 // ── Модулі Салон краси ────────────────────────────────────
 addRoute('appointments',      () => import('./modules/appointments/index.js'))
@@ -85,6 +101,8 @@ onAuthChange(async (user) => {
     }
     showSidebar(profile)
     navigate('dashboard')
+    identifyUser(user.uid, { plan: profile.plan ?? 'free', profession: profile.profession ?? 'unknown', role: 'owner' })
+    checkSubscriptionExpiry(user.uid, profile)
     return
   }
 
@@ -112,22 +130,39 @@ onAuthChange(async (user) => {
   // Все ок — показуємо app
   showSidebar(profile)
   navigate('dashboard')
+
+  identifyUser(user.uid, {
+    plan:       profile.plan        ?? 'free',
+    profession: profile.profession  ?? 'unknown',
+    role:       profile.accountType ?? 'unknown',
+  })
+
+  // Перевірка терміну підписки (після рендеру UI)
+  checkSubscriptionExpiry(user.uid, profile)
 })
 
 // ── Sidebar ───────────────────────────────────────────────
+let _cachedProfile = null
+
 function showSidebar(profile) {
+  _cachedProfile = profile
   let sidebar = document.getElementById('sidebar')
   if (!sidebar) {
     sidebar = document.createElement('div')
     sidebar.id = 'sidebar'
     document.getElementById('app').prepend(sidebar)
   }
-  
-  // Завжди оновлюємо навігацію з актуальним профілем
-  import('./components/navigation.js').then(m => m.renderNavigation(sidebar, profile))
+  // navigation.js already imported at top — no dynamic import delay
+  renderNavigation(sidebar, profile)
 }
 
 function hideSidebar() {
   document.getElementById('sidebar')?.remove()
   clearModuleCache()
 }
+
+// Re-render sidebar when language changes (router handles current page separately)
+window.addEventListener('lang-change', () => {
+  const sidebar = document.getElementById('sidebar')
+  if (sidebar && _cachedProfile) renderNavigation(sidebar, _cachedProfile)
+})

@@ -1,29 +1,103 @@
 // src/renderer/pages/team/index.js
 import { getCurrentUser, getUserProfile, updateProfileCache } from '../../services/auth.js'
 import { icon } from '../../utils/icons.js'
+import { t } from '../../../core/i18n.js'
+import { wbPrompt, wbAlert } from '../../utils/dialogs.js'
 import {
   ensureWorkspace, getWorkspace, getMembers, getPendingInvites,
   createInvite, deleteInvite, removeMember, updateMember, updateWorkspaceName,
 } from '../../services/workspace.js'
 
-// Всі доступні модулі для призначення
-const ALL_MODULES = [
-  { id: 'dashboard',    label: 'Дашборд' },
-  { id: 'clients',      label: 'Клієнти' },
-  { id: 'projects',     label: 'Проекти' },
-  { id: 'invoices',     label: 'Рахунки' },
-  { id: 'contracts',    label: 'Договори' },
-  { id: 'tasks',        label: 'Задачі' },
-  { id: 'timer',        label: 'Таймер' },
-  { id: 'finances',     label: 'Фінанси' },
-  { id: 'tax-calendar', label: 'Податки' },
-  { id: 'appointments', label: 'Розклад' },
-  { id: 'services',     label: 'Послуги' },
-  { id: 'content-plan', label: 'Контент' },
-  { id: 'accounts',     label: 'Акаунти' },
-  { id: 'passwords',    label: 'Паролі' },
-  { id: 'notes',        label: 'Нотатки' },
+// Всі модулі, згруповані по категоріях
+const MODULE_GROUPS = [
+  {
+    label: 'Основне',
+    modules: [
+      { id: 'dashboard',    get label() { return t('module.dashboard') } },
+      { id: 'clients',      get label() { return t('module.clients') } },
+      { id: 'tasks',        get label() { return t('module.tasks') } },
+      { id: 'kanban',       get label() { return t('module.kanban') } },
+      { id: 'notes',        get label() { return t('module.notes') } },
+      { id: 'documents',    get label() { return t('module.documents') } },
+      { id: 'passwords',    get label() { return t('module.passwords') } },
+      { id: 'templates',    get label() { return t('module.templates') } },
+      { id: 'reports',      get label() { return t('module.reports') } },
+      { id: 'support',      get label() { return t('module.support') } },
+      { id: 'api-keys',     get label() { return t('module.api') } },
+    ],
+  },
+  {
+    label: 'Фінанси та облік',
+    modules: [
+      { id: 'invoices',     get label() { return t('module.invoices') } },
+      { id: 'finances',     get label() { return 'Фінанси' } },
+      { id: 'cashbook',     get label() { return t('module.cashbook') } },
+      { id: 'bank',         get label() { return t('module.bank') } },
+      { id: 'payroll',      get label() { return t('module.payroll') } },
+      { id: 'prro',         get label() { return t('module.prro') } },
+      { id: 'currency',     get label() { return t('module.currency') } },
+      { id: 'tax-calendar', get label() { return 'Податки' } },
+    ],
+  },
+  {
+    label: 'Проекти та робота',
+    modules: [
+      { id: 'projects',     get label() { return 'Проекти' } },
+      { id: 'contracts',    get label() { return 'Договори' } },
+      { id: 'timer',        get label() { return t('module.timer') } },
+      { id: 'portfolio',    get label() { return t('module.portfolio') } },
+    ],
+  },
+  {
+    label: 'Персонал та склад',
+    modules: [
+      { id: 'hr',           get label() { return t('module.hr') } },
+      { id: 'warehouse',    get label() { return t('module.warehouse') } },
+    ],
+  },
+  {
+    label: 'Сервіс та розклад',
+    modules: [
+      { id: 'appointments', get label() { return 'Розклад' } },
+      { id: 'services',     get label() { return 'Послуги' } },
+    ],
+  },
+  {
+    label: 'SMM / Маркетинг',
+    modules: [
+      { id: 'content-plan', get label() { return t('module.smm') } },
+      { id: 'accounts',     get label() { return 'Акаунти' } },
+    ],
+  },
 ]
+
+// Flat list for backward compatibility
+const ALL_MODULES = MODULE_GROUPS.flatMap(g => g.modules)
+
+function renderModuleGrid(selectedIds = null) {
+  const allChecked = selectedIds === null
+  return MODULE_GROUPS.map(group => `
+    <div class="tm-mod-group">
+      <div class="tm-mod-group-header">
+        <span class="tm-mod-group-label">${group.label}</span>
+        <button class="tm-mod-group-toggle" data-group="${group.label}" type="button">всі</button>
+      </div>
+      <div class="tm-mod-group-grid">
+        ${group.modules.map(m => {
+          const checked = allChecked || (selectedIds || []).includes(m.id)
+          return `
+            <label class="tm-module-check">
+              <input type="checkbox" value="${m.id}" ${checked ? 'checked' : ''}>
+              <span class="tm-module-box">
+                <span class="tm-module-icon">${icon(m.id, 13)}</span>
+                <span>${m.label}</span>
+              </span>
+            </label>`
+        }).join('')}
+      </div>
+    </div>
+  `).join('')
+}
 
 export async function render(container) {
   injectStyles()
@@ -64,17 +138,15 @@ export async function render(container) {
         <div class="tm-modal-body">
           <label class="tm-label">Посада / роль <span class="tm-req">*</span></label>
           <input type="text" class="input" id="tm-role-input" placeholder="Розробник, Дизайнер, Менеджер…" maxlength="40">
-          <label class="tm-label" style="margin-top:20px">Доступ до розділів</label>
+          <div class="tm-mods-header" style="margin-top:20px">
+            <label class="tm-label">Доступ до розділів</label>
+            <div class="tm-mods-actions">
+              <button class="tm-mods-all" id="tm-invite-check-all" type="button">Обрати всі</button>
+              <button class="tm-mods-none" id="tm-invite-check-none" type="button">Зняти всі</button>
+            </div>
+          </div>
           <div class="tm-modules-grid" id="tm-modules-grid">
-            ${ALL_MODULES.map(m => `
-              <label class="tm-module-check">
-                <input type="checkbox" value="${m.id}" checked>
-                <span class="tm-module-box">
-                  <span class="tm-module-icon">${icon(m.id, 13)}</span>
-                  <span>${m.label}</span>
-                </span>
-              </label>
-            `).join('')}
+            ${renderModuleGrid(null)}
           </div>
           <div id="tm-code-wrap" style="display:none">
             <div class="tm-code-block">
@@ -104,7 +176,13 @@ export async function render(container) {
         <div class="tm-modal-body">
           <label class="tm-label">Посада / роль</label>
           <input type="text" class="input" id="tm-edit-role" placeholder="Розробник…" maxlength="40">
-          <label class="tm-label" style="margin-top:20px">Доступ до розділів</label>
+          <div class="tm-mods-header" style="margin-top:20px">
+            <label class="tm-label">Доступ до розділів</label>
+            <div class="tm-mods-actions">
+              <button class="tm-mods-all" id="tm-edit-check-all" type="button">Обрати всі</button>
+              <button class="tm-mods-none" id="tm-edit-check-none" type="button">Зняти всі</button>
+            </div>
+          </div>
           <div class="tm-modules-grid" id="tm-edit-modules"></div>
         </div>
         <div class="tm-modal-foot">
@@ -168,7 +246,7 @@ export async function render(container) {
 
     // Rename workspace
     body.querySelector('#tm-ws-edit-btn').addEventListener('click', async () => {
-      const name = prompt('Нова назва команди:', workspace?.name || '')
+      const name = await wbPrompt('Нова назва команди:', workspace?.name || '')
       if (name?.trim()) {
         await updateWorkspaceName(workspaceId, name.trim())
         workspace.name = name.trim()
@@ -190,7 +268,7 @@ export async function render(container) {
     })
     body.querySelectorAll('.tm-invite-del').forEach(btn => {
       btn.addEventListener('click', async () => {
-        if (!confirm('Видалити це запрошення?')) return
+        if (!await wbConfirm('Видалити це запрошення?', { okLabel: 'Видалити', danger: true })) return
         await deleteInvite(workspaceId, btn.dataset.code)
         await loadData()
       })
@@ -198,10 +276,20 @@ export async function render(container) {
   }
 
   function memberCard(m) {
-    const mods = (m.modules || []).map(id => {
+    const ids    = m.modules || []
+    const SHOW   = 5
+    const chips  = ids.slice(0, SHOW).map(id => {
       const meta = ALL_MODULES.find(x => x.id === id)
-      return meta ? `<span class="tm-mod-chip">${meta.icon} ${meta.label}</span>` : ''
+      return meta ? `<span class="tm-mod-chip">${icon(meta.id, 11)} ${meta.label}</span>` : ''
     }).join('')
+    const extra  = ids.length > SHOW
+      ? `<span class="tm-mod-chip tm-mod-more">+${ids.length - SHOW}</span>`
+      : ''
+    const groupSummary = MODULE_GROUPS.map(g => {
+      const count = ids.filter(id => g.modules.some(m => m.id === id)).length
+      if (count === 0) return ''
+      return `<span class="tm-grp-pill">${g.label} <b>${count}</b></span>`
+    }).filter(Boolean).join('')
 
     return `
       <div class="tm-member-card">
@@ -209,11 +297,12 @@ export async function render(container) {
         <div class="tm-member-info">
           <div class="tm-member-name">${m.name || 'Без імені'}</div>
           <div class="tm-member-role">${m.role || '—'}</div>
-          <div class="tm-member-mods">${mods}</div>
+          <div class="tm-member-mods">${chips}${extra}</div>
+          ${groupSummary ? `<div class="tm-grp-summary">${groupSummary}</div>` : ''}
         </div>
         <div class="tm-member-actions">
           <button class="btn btn-secondary tm-member-edit" data-uid="${m.id}">${icon('edit', 13)} Доступ</button>
-          <button class="btn btn-ghost tm-member-remove" data-uid="${m.id}" data-name="${m.name}">Видалити</button>
+          <button class="btn btn-ghost tm-member-remove" data-uid="${m.id}" data-name="${m.name || ''}">Видалити</button>
         </div>
       </div>
     `
@@ -228,8 +317,8 @@ export async function render(container) {
     container.querySelector('#tm-role-input').value = ''
     container.querySelector('#tm-code-wrap').style.display = 'none'
     container.querySelector('#tm-invite-foot').style.display = 'flex'
-    // Reset all checkboxes to checked
-    container.querySelectorAll('#tm-modules-grid input[type=checkbox]').forEach(c => c.checked = true)
+    container.querySelector('#tm-modules-grid').innerHTML = renderModuleGrid(null)
+    bindGroupToggles('#tm-modules-grid')
     container.querySelector('#tm-invite-modal').style.display = 'flex'
   }
 
@@ -239,6 +328,19 @@ export async function render(container) {
     container.querySelector('#tm-invite-modal').style.display = 'none'
   }
 
+  container.querySelector('#tm-invite-check-all').addEventListener('click', () => {
+    container.querySelectorAll('#tm-modules-grid input[type=checkbox]').forEach(c => c.checked = true)
+  })
+  container.querySelector('#tm-invite-check-none').addEventListener('click', () => {
+    container.querySelectorAll('#tm-modules-grid input[type=checkbox]').forEach(c => c.checked = false)
+  })
+  container.querySelector('#tm-edit-check-all').addEventListener('click', () => {
+    container.querySelectorAll('#tm-edit-modules input[type=checkbox]').forEach(c => c.checked = true)
+  })
+  container.querySelector('#tm-edit-check-none').addEventListener('click', () => {
+    container.querySelectorAll('#tm-edit-modules input[type=checkbox]').forEach(c => c.checked = false)
+  })
+
   container.querySelector('#tm-generate-btn').addEventListener('click', async () => {
     const role = container.querySelector('#tm-role-input').value.trim()
     if (!role) {
@@ -247,7 +349,7 @@ export async function render(container) {
       return
     }
     const modules = [...container.querySelectorAll('#tm-modules-grid input:checked')].map(c => c.value)
-    if (modules.length === 0) { alert('Оберіть хоча б один розділ'); return }
+    if (modules.length === 0) { wbAlert('Оберіть хоча б один розділ', 'warning'); return }
 
     const btn = container.querySelector('#tm-generate-btn')
     btn.disabled = true
@@ -277,15 +379,8 @@ export async function render(container) {
 
     container.querySelector('#tm-edit-role').value = member.role || ''
     const grid = container.querySelector('#tm-edit-modules')
-    grid.innerHTML = ALL_MODULES.map(m => `
-      <label class="tm-module-check">
-        <input type="checkbox" value="${m.id}" ${(member.modules || []).includes(m.id) ? 'checked' : ''}>
-        <span class="tm-module-box">
-          <span class="tm-module-icon">${icon(m.id, 13)}</span>
-          <span>${m.label}</span>
-        </span>
-      </label>
-    `).join('')
+    grid.innerHTML = renderModuleGrid(member.modules || [])
+    bindGroupToggles('#tm-edit-modules')
 
     container.querySelector('#tm-edit-modal').dataset.uid = uid
     container.querySelector('#tm-edit-modal').style.display = 'flex'
@@ -313,9 +408,27 @@ export async function render(container) {
 
   // ── Remove member ─────────────────────────────────────────
   async function confirmRemove(uid, name) {
-    if (!confirm(`Видалити "${name}" з команди?`)) return
+    if (!await wbConfirm(`Видалити «${name}» з команди?`, { okLabel: 'Видалити', danger: true })) return
     await removeMember(workspaceId, uid)
     await loadData()
+  }
+
+  // ── Module group toggles ──────────────────────────────────
+  function bindGroupToggles(containerSelector) {
+    const el = container.querySelector(containerSelector)
+    if (!el) return
+    el.querySelectorAll('.tm-mod-group-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const groupLabel = btn.dataset.group
+        const group = MODULE_GROUPS.find(g => g.label === groupLabel)
+        if (!group) return
+        const ids = group.modules.map(m => m.id)
+        const checkboxes = [...el.querySelectorAll('input[type=checkbox]')].filter(c => ids.includes(c.value))
+        const allChecked = checkboxes.every(c => c.checked)
+        checkboxes.forEach(c => c.checked = !allChecked)
+        btn.textContent = allChecked ? 'всі' : 'зняти'
+      })
+    })
   }
 
   // ── Helpers ───────────────────────────────────────────────
@@ -387,7 +500,11 @@ function injectStyles() {
     .tm-member-name   { font-weight: 700; font-size: 15px; margin-bottom: 2px; }
     .tm-member-role   { font-size: 12px; color: var(--accent-blue); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
     .tm-member-mods   { display: flex; flex-wrap: wrap; gap: 5px; }
-    .tm-mod-chip      { background: var(--bg-tertiary); border-radius: var(--radius-full); padding: 3px 8px; font-size: 11px; font-weight: 500; }
+    .tm-mod-chip      { background: var(--bg-tertiary); border-radius: var(--radius-full); padding: 3px 8px; font-size: 11px; font-weight: 500; display:inline-flex; align-items:center; gap:4px; }
+    .tm-mod-more      { background: rgba(79,142,247,.12); color: var(--accent-blue); font-weight: 700; }
+    .tm-grp-summary   { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+    .tm-grp-pill      { font-size: 11px; color: var(--text-muted); background: var(--bg-primary); border: 1px solid var(--border); border-radius: 20px; padding: 2px 8px; }
+    .tm-grp-pill b    { color: var(--text-secondary); font-weight: 700; }
     .tm-member-actions { display: flex; gap: 8px; flex-shrink: 0; }
 
     /* Pending invites */
@@ -408,8 +525,8 @@ function injectStyles() {
     .tm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 24px; }
     .tm-modal {
       background: var(--bg-secondary); border: 1px solid var(--border);
-      border-radius: var(--radius-xl); width: 100%; max-width: 580px;
-      max-height: 88vh; display: flex; flex-direction: column;
+      border-radius: var(--radius-xl); width: 100%; max-width: 760px;
+      max-height: 90vh; display: flex; flex-direction: column;
       box-shadow: var(--shadow-xl);
       animation: tm-in .2s cubic-bezier(.34,1.2,.64,1);
     }
@@ -424,7 +541,7 @@ function injectStyles() {
     .tm-label { display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
     .tm-req   { color: #F87171; }
 
-    .tm-modules-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .tm-modules-grid { display: flex; flex-direction: column; }
     .tm-module-check { cursor: pointer; }
     .tm-module-check input { display: none; }
     .tm-module-box {
@@ -457,6 +574,32 @@ function injectStyles() {
     /* Ghost btn */
     .btn-ghost { background: transparent; border: 1px solid transparent; color: var(--text-muted); }
     .btn-ghost:hover { border-color: #F87171; color: #F87171; background: rgba(239,68,68,.08); }
+
+    /* Module groups */
+    .tm-mods-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .tm-mods-header .tm-label { margin-bottom: 0; }
+    .tm-mods-actions { display: flex; gap: 6px; }
+    .tm-mods-all, .tm-mods-none {
+      background: none; border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text-muted); font-size: 12px; padding: 3px 10px; cursor: pointer;
+      transition: all .15s;
+    }
+    .tm-mods-all:hover  { border-color: var(--accent-blue); color: var(--accent-blue); }
+    .tm-mods-none:hover { border-color: #F87171; color: #F87171; }
+
+    .tm-mod-group { margin-bottom: 18px; }
+    .tm-mod-group-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .tm-mod-group-label {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .06em; color: var(--text-muted);
+    }
+    .tm-mod-group-toggle {
+      background: none; border: 1px solid var(--border); border-radius: 5px;
+      color: var(--text-muted); font-size: 11px; padding: 2px 8px; cursor: pointer;
+      transition: all .15s;
+    }
+    .tm-mod-group-toggle:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
+    .tm-mod-group-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
   `
   document.head.appendChild(s)
 }

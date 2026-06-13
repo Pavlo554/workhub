@@ -9,6 +9,7 @@ import {
   ref, uploadBytes, getDownloadURL, deleteObject
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js'
 import { icon } from '../../utils/icons.js'
+import { t } from '../../core/i18n.js'
 
 export async function render(container) {
   injectStyles()
@@ -21,10 +22,10 @@ export async function render(container) {
 
         <div class="tk-header">
           <div>
-            <h1 class="tk-title">Задачі</h1>
-            <p class="tk-sub" id="tasks-count">Завантаження...</p>
+            <h1 class="tk-title">${t('tasks.title')}</h1>
+            <p class="tk-sub" id="tasks-count">${t('common.loading')}</p>
           </div>
-          <button class="btn btn-primary" id="add-task-btn">+ Нова задача</button>
+          <button class="btn btn-primary" id="add-task-btn">${t('tasks.add')}</button>
         </div>
 
         <!-- Progress bar -->
@@ -36,16 +37,16 @@ export async function render(container) {
         <!-- Filters -->
         <div class="tk-toolbar">
           <div class="tk-filters" id="filter-tabs">
-            <button class="tk-filter active" data-filter="all">Всі</button>
-            <button class="tk-filter" data-filter="todo">До виконання</button>
-            <button class="tk-filter" data-filter="in-progress">В процесі</button>
-            <button class="tk-filter" data-filter="done">Виконані</button>
+            <button class="tk-filter active" data-filter="all">${t('tasks.all')}</button>
+            <button class="tk-filter" data-filter="todo">${t('tasks.todo')}</button>
+            <button class="tk-filter" data-filter="in_progress">${t('tasks.in_progress')}</button>
+            <button class="tk-filter" data-filter="done">${t('tasks.done')}</button>
           </div>
           <div class="tk-priority-filter" id="tk-pri-filter">
-            <button class="tk-pri-btn active" data-pri="all">Всі</button>
-            <button class="tk-pri-btn" data-pri="high"   style="--pc:#EF4444">Високий</button>
-            <button class="tk-pri-btn" data-pri="medium" style="--pc:#F59E0B">Середній</button>
-            <button class="tk-pri-btn" data-pri="low"    style="--pc:#34D399">Низький</button>
+            <button class="tk-pri-btn active" data-pri="all">${t('common.all')}</button>
+            <button class="tk-pri-btn" data-pri="high"   style="--pc:#EF4444">${t('tasks.priority.high')}</button>
+            <button class="tk-pri-btn" data-pri="medium" style="--pc:#F59E0B">${t('tasks.priority.medium')}</button>
+            <button class="tk-pri-btn" data-pri="low"    style="--pc:#34D399">${t('tasks.priority.low')}</button>
           </div>
         </div>
 
@@ -115,7 +116,7 @@ export async function render(container) {
               <label>Статус</label>
               <select id="f-status" class="input">
                 <option value="todo">До виконання</option>
-                <option value="in-progress">В процесі</option>
+                <option value="in_progress">В процесі</option>
                 <option value="done">Виконано</option>
               </select>
             </div>
@@ -190,11 +191,18 @@ export async function render(container) {
   }
 
   // ── Load tasks ────────────────────────────────────────────
+  // Normalize legacy statuses from old data
+  function normStatus(s) {
+    if (s === 'in-progress' || s === 'in_progress') return 'in_progress'
+    if (s === 'new') return 'todo'
+    return s || 'todo'
+  }
+
   async function loadTasks() {
     try {
       const q    = query(collection(db, ...base, 'tasks'), orderBy('createdAt', 'desc'))
       const snap = await getDocs(q)
-      tasks      = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      tasks      = snap.docs.map(d => { const d2 = d.data(); return { id: d.id, ...d2, status: normStatus(d2.status) } })
       renderList()
       updateCount()
     } catch (err) {
@@ -205,19 +213,19 @@ export async function render(container) {
     }
   }
 
-  const PRI_META = {
-    high:   { label: 'Високий',  color: '#EF4444', bg: 'rgba(239,68,68,.12)'  },
-    medium: { label: 'Середній', color: '#F59E0B', bg: 'rgba(245,158,11,.12)' },
-    low:    { label: 'Низький',  color: '#34D399', bg: 'rgba(52,211,153,.12)' },
+    const PRI_META = {
+    high:   { get label() { return t('tasks.priority.high') },   color: '#EF4444', bg: 'rgba(239,68,68,.12)'  },
+    medium: { get label() { return t('tasks.priority.medium') }, color: '#F59E0B', bg: 'rgba(245,158,11,.12)' },
+    low:    { get label() { return t('tasks.priority.low') },    color: '#34D399', bg: 'rgba(52,211,153,.12)' },
   }
   const ST_META = {
-    'todo':        { label: 'До виконання', color: '#6B7280', bg: 'rgba(107,114,128,.12)' },
-    'in-progress': { label: 'В процесі',    color: '#4F8EF7', bg: 'rgba(79,142,247,.12)'  },
-    'done':        { label: 'Виконано',     color: '#34D399', bg: 'rgba(52,211,153,.12)'  },
+    'todo':        { get label() { return t('tasks.todo') },        color: '#6B7280', bg: 'rgba(107,114,128,.12)' },
+    'in_progress': { get label() { return t('tasks.in_progress') }, color: '#4F8EF7', bg: 'rgba(79,142,247,.12)'  },
+    'done':        { get label() { return t('tasks.done') },        color: '#34D399', bg: 'rgba(52,211,153,.12)'  },
   }
 
   // ── Render list ───────────────────────────────────────────
-  const STATUS_ORDER   = { 'todo': 0, 'in-progress': 1, 'done': 2 }
+  const STATUS_ORDER   = { 'todo': 0, 'in_progress': 1, 'done': 2 }
   const PRIORITY_ORDER = { 'high': 0, 'medium': 1, 'low': 2 }
 
   function renderList() {

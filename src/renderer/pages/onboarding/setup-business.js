@@ -2,9 +2,13 @@
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getUserProfile, updateProfileCache } from '../../services/auth.js'
 import { navigate } from '../../../core/router.js'
+import { renderNavigation } from '../../components/navigation.js'
 import { doc, updateDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
 export async function render(container) {
+  const user    = getCurrentUser()
+  const profile = await getUserProfile(user.uid)
+
   container.innerHTML = `
     <div class="onboarding-page">
       <div class="onboarding-content" style="max-width:480px">
@@ -19,23 +23,27 @@ export async function render(container) {
         <form class="auth-form" id="setup-form" novalidate>
           <div class="field">
             <label>Назва бізнесу або ваше ім'я *</label>
-            <input id="biz-name" type="text" class="input" placeholder="ФОП Іванов або Design Studio" />
+            <input id="biz-name" type="text" class="input" placeholder="ФОП Іванов або Design Studio"
+                   value="${profile?.businessName || ''}" />
           </div>
           <div class="field">
             <label>Телефон</label>
-            <input id="biz-phone" type="tel" class="input" placeholder="+380 XX XXX XX XX" />
+            <input id="biz-phone" type="tel" class="input" placeholder="+380 XX XXX XX XX"
+                   value="${profile?.phone || ''}" />
           </div>
           <div class="field">
             <label>Місто</label>
-            <input id="biz-city" type="text" class="input" placeholder="Київ" />
+            <input id="biz-city" type="text" class="input" placeholder="Київ"
+                   value="${profile?.city || ''}" />
           </div>
           <div class="field">
             <label>Сайт або Instagram</label>
-            <input id="biz-site" type="text" class="input" placeholder="@username або yoursite.com" />
+            <input id="biz-site" type="text" class="input" placeholder="@username або yoursite.com"
+                   value="${profile?.website || ''}" />
           </div>
           <div style="display:flex;gap:12px;margin-top:8px">
             <button type="button" class="btn btn-secondary" id="back-btn">← Назад</button>
-            <button type="submit" class="btn btn-primary btn-full" id="submit-btn">Розпочати роботу</button>
+            <button type="submit" class="btn btn-primary btn-full" id="submit-btn">Розпочати роботу →</button>
           </div>
         </form>
       </div>
@@ -57,38 +65,34 @@ export async function render(container) {
 
     const btn = container.querySelector('#submit-btn')
     btn.disabled = true
-    btn.innerHTML = '<div class="spinner"></div> Налаштовуємо...'
+    btn.innerHTML = '<div class="spinner"></div> Відкриваємо...'
 
-    try {
-      const user   = getCurrentUser()
-      const data   = {
-        businessName,
-        phone:          container.querySelector('#biz-phone').value.trim() || null,
-        city:           container.querySelector('#biz-city').value.trim()  || null,
-        website:        container.querySelector('#biz-site').value.trim()  || null,
-        onboardingDone: true,
-        updatedAt:      serverTimestamp(),
-      }
-      await updateDoc(doc(db, 'users', user.uid), data)
-      updateProfileCache(user.uid, data)
-
-      // Показуємо сайдбар і переходимо на дашборд
-      const updatedProfile = await getUserProfile(user.uid)
-      const { renderNavigation } = await import('../../components/navigation.js')
-      let sidebar = document.getElementById('sidebar')
-      if (!sidebar) {
-        sidebar = document.createElement('div')
-        sidebar.id = 'sidebar'
-        document.getElementById('app').prepend(sidebar)
-      }
-      renderNavigation(sidebar, updatedProfile)
-      navigate('dashboard')
-    } catch (err) {
-      errorBox.textContent = 'Помилка збереження. Спробуйте ще раз'
-      errorBox.style.display = 'flex'
-      btn.disabled = false
-      btn.innerHTML = 'Розпочати роботу'
+    const user = getCurrentUser()
+    const patch = {
+      businessName,
+      phone:          container.querySelector('#biz-phone').value.trim() || null,
+      city:           container.querySelector('#biz-city').value.trim()  || null,
+      website:        container.querySelector('#biz-site').value.trim()  || null,
+      onboardingDone: true,
     }
+
+    // Оновлюємо кеш ОДРАЗУ — без очікування Firestore
+    updateProfileCache(user.uid, patch)
+    const updatedProfile = await getUserProfile(user.uid) // instant from cache
+
+    // Показуємо sidebar і переходимо одразу
+    let sidebar = document.getElementById('sidebar')
+    if (!sidebar) {
+      sidebar = document.createElement('div')
+      sidebar.id = 'sidebar'
+      document.getElementById('app').prepend(sidebar)
+    }
+    renderNavigation(sidebar, updatedProfile)
+    navigate('dashboard')
+
+    // Фоновий запис у Firestore (не блокує UI)
+    updateDoc(doc(db, 'users', user.uid), { ...patch, updatedAt: serverTimestamp() })
+      .catch(err => console.error('[setup-business] save error:', err))
   })
 
   setTimeout(() => container.querySelector('#biz-name').focus(), 100)

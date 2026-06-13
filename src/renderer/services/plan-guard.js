@@ -1,8 +1,7 @@
 // src/renderer/services/plan-guard.js
-// Перевірка лімітів плану та показ промпту для оновлення
-
 import { navigate } from '../../core/router.js'
 import { icon } from '../utils/icons.js'
+import { getPlanLimit } from '../../core/permissions.js'
 
 /**
  * Показує модалку "досягнуто ліміту FREE"
@@ -56,22 +55,27 @@ export function showUpgradePrompt(title, message) {
  * @param {number} current   — поточна кількість
  * @returns {boolean} true = дозволено, false = заблоковано (показана підказка)
  */
+const RESOURCE_LABELS = {
+  'clients':          { label: 'клієнтів',          unit: 'клієнтів' },
+  'invoices-monthly': { label: 'рахунків на місяць', unit: 'рахунків цього місяця' },
+  'invoices_monthly': { label: 'рахунків на місяць', unit: 'рахунків цього місяця' },
+  'projects':         { label: 'проектів',           unit: 'проектів' },
+  'passwords':        { label: 'паролів',            unit: 'паролів' },
+}
+
 export function checkPlanLimit(profile, resource, current) {
-  if (profile?.plan && profile.plan !== 'free') return true
+  const plan  = profile?.plan || 'free'
+  if (plan !== 'free') return true
 
-  const limits = {
-    'clients':          { limit: 50,  label: 'клієнтів',          unit: 'клієнтів' },
-    'invoices-monthly': { limit: 20,  label: 'рахунків на місяць', unit: 'рахунків цього місяця' },
-    'projects':         { limit: 10,  label: 'проектів',           unit: 'проектів' },
-    'passwords':        { limit: 30,  label: 'паролів',            unit: 'паролів' },
-  }
+  // Normalize resource key: invoices-monthly → invoices_monthly
+  const key   = resource.replace('-', '_')
+  const limit = getPlanLimit('free', key)
+  if (current < limit) return true
 
-  const rule = limits[resource]
-  if (!rule || current < rule.limit) return true
-
+  const meta = RESOURCE_LABELS[resource] || RESOURCE_LABELS[key] || { label: resource, unit: resource }
   showUpgradePrompt(
-    `Ліміт FREE плану: ${rule.limit} ${rule.label}`,
-    `Ви досягли ліміту ${rule.limit} ${rule.unit}. Оновіть план щоб продовжити.`
+    `Ліміт FREE плану: ${limit} ${meta.label}`,
+    `Ви досягли ліміту ${limit} ${meta.unit}. Оновіть план щоб продовжити.`
   )
   return false
 }

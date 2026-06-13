@@ -86,42 +86,38 @@ export async function render(container) {
     nextBtn.disabled = true
     nextBtn.innerHTML = '<div class="spinner"></div>'
 
-    try {
-      const user = getCurrentUser()
+    const user = getCurrentUser()
 
-      if (selected === 'owner') {
-        const updates = { accountType: 'owner' }
-        await updateDoc(doc(db, 'users', user.uid), updates)
-        updateProfileCache(user.uid, updates)
+    if (selected === 'owner') {
+      // Оновлюємо кеш і переходимо одразу — без очікування Firestore
+      updateProfileCache(user.uid, { accountType: 'owner' })
 
-        // Якщо вже проходив онбординг раніше — одразу на dashboard
-        if (profile?.onboardingDone) {
-          const { renderNavigation } = await import('../../components/navigation.js')
-          const updatedProfile = { ...profile, accountType: 'owner' }
-          let sidebar = document.getElementById('sidebar')
-          if (!sidebar) {
-            sidebar = document.createElement('div')
-            sidebar.id = 'sidebar'
-            document.getElementById('app').prepend(sidebar)
-          }
-          renderNavigation(sidebar, updatedProfile)
-          navigate('dashboard')
-        } else {
-          navigate('choose-profession')
+      if (profile?.onboardingDone) {
+        const { renderNavigation } = await import('../../components/navigation.js')
+        const updatedProfile = { ...profile, accountType: 'owner' }
+        let sidebar = document.getElementById('sidebar')
+        if (!sidebar) {
+          sidebar = document.createElement('div')
+          sidebar.id = 'sidebar'
+          document.getElementById('app').prepend(sidebar)
         }
+        renderNavigation(sidebar, updatedProfile)
+        navigate('dashboard')
       } else {
-        // Працівник — одразу завершуємо онбординг і кидаємо на join
-        await updateDoc(doc(db, 'users', user.uid), {
-          accountType:    'worker',
-          onboardingDone: true,
-        })
-        updateProfileCache(user.uid, { accountType: 'worker', onboardingDone: true })
-        navigate('join')
+        navigate('choose-profession')
       }
-    } catch (err) {
-      console.error(err)
-      nextBtn.disabled = false
-      nextBtn.innerHTML = 'Продовжити →'
+
+      // Фоновий запис у Firestore
+      updateDoc(doc(db, 'users', user.uid), { accountType: 'owner' })
+        .catch(err => console.error('[choose-role] save error:', err))
+
+    } else {
+      // Працівник
+      updateProfileCache(user.uid, { accountType: 'worker', onboardingDone: true })
+      navigate('join')
+
+      updateDoc(doc(db, 'users', user.uid), { accountType: 'worker', onboardingDone: true })
+        .catch(err => console.error('[choose-role] save error:', err))
     }
   })
 }

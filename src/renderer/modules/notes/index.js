@@ -3,18 +3,19 @@ import { db } from '../../services/firebase.js'
 import { getCurrentUser, getActivePathSegments } from '../../services/auth.js'
 import { debounce } from '../../../core/utils.js'
 import { icon } from '../../utils/icons.js'
+import { t } from '../../core/i18n.js'
 import {
   collection, addDoc, getDocs, deleteDoc,
   doc, updateDoc, query, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
 const COLOR_META = {
-  default: { bg: 'var(--bg-secondary)', accent: '#6B7280', dot: '#6B7280', label: 'Звичайна'  },
-  yellow:  { bg: '#1E1900',             accent: '#F59E0B', dot: '#F59E0B', label: 'Жовта'     },
-  green:   { bg: '#001A0E',             accent: '#34D399', dot: '#34D399', label: 'Зелена'    },
-  blue:    { bg: '#001020',             accent: '#4F8EF7', dot: '#4F8EF7', label: 'Синя'      },
-  purple:  { bg: '#130020',             accent: '#A78BFA', dot: '#A78BFA', label: 'Фіолетова' },
-  red:     { bg: '#200000',             accent: '#F87171', dot: '#F87171', label: 'Червона'   },
+  default: { bg: 'var(--bg-secondary)', accent: '#6B7280', dot: '#6B7280', get label() { return t('notes.color.default') } },
+  yellow:  { bg: '#1E1900',             accent: '#F59E0B', dot: '#F59E0B', get label() { return t('notes.color.yellow') } },
+  green:   { bg: '#001A0E',             accent: '#34D399', dot: '#34D399', get label() { return t('notes.color.green') } },
+  blue:    { bg: '#001020',             accent: '#4F8EF7', dot: '#4F8EF7', get label() { return t('notes.color.blue') } },
+  purple:  { bg: '#130020',             accent: '#A78BFA', dot: '#A78BFA', get label() { return t('notes.color.purple') } },
+  red:     { bg: '#200000',             accent: '#F87171', dot: '#F87171', get label() { return t('notes.color.red') } },
 }
 
 export async function render(container) {
@@ -28,21 +29,21 @@ export async function render(container) {
 
         <div class="nt-header">
           <div>
-            <h1 class="nt-title">Нотатки</h1>
-            <p class="nt-sub" id="nt-count">Завантаження...</p>
+            <h1 class="nt-title">${t('notes.title')}</h1>
+            <p class="nt-sub" id="nt-count">${t('common.loading')}</p>
           </div>
-          <button class="btn btn-primary" id="add-note-btn">+ Нова</button>
+          <button class="btn btn-primary" id="add-note-btn">${t('notes.new')}</button>
         </div>
 
         <!-- Search -->
         <div class="nt-search">
           <span class="nt-search-icon">${icon('search', 14)}</span>
-          <input type="text" class="nt-search-input" id="nt-search" placeholder="Пошук..." />
+          <input type="text" class="nt-search-input" id="nt-search" placeholder="${t('common.search')}" />
         </div>
 
         <!-- Color filters -->
         <div class="nt-color-filters" id="nt-color-filters">
-          <button class="nt-cf active" data-color="all">Всі</button>
+          <button class="nt-cf active" data-color="all">${t('notes.all')}</button>
           ${Object.entries(COLOR_META).map(([k, v]) =>
             `<button class="nt-cf" data-color="${k}">
               <span class="nt-cf-dot" style="background:${v.dot}"></span>${v.label}

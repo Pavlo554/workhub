@@ -3,6 +3,7 @@ import { icon } from '../../utils/icons.js'
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getActivePathSegments } from '../../services/auth.js'
 import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, setDoc, getDoc, writeBatch, query, orderBy, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
+import { t } from '../../core/i18n.js'
 
 const CATS = [
   { id: 'materials', label: 'Матеріали',  iconName: 'droplet',   color: '#4F8EF7' },
@@ -55,13 +56,13 @@ export async function render(container) {
       <div class="wh-page">
         <div class="wh-header">
           <div>
-            <h1 class="wh-title">${icon('warehouse', 20)} Склад та матеріали</h1>
+            <h1 class="wh-title">${icon('warehouse', 20)} ${t('warehouse.title')}</h1>
             <p class="wh-subtitle">${totalItems} позицій${shopCfg ? ` · <span class="wh-shop-status-dot"></span> ${shopCfg.storeName || shopCfg.url || 'Магазин'} підключено` : ''}</p>
           </div>
           <div style="display:flex;gap:8px;align-items:center">
-            ${shopCfg ? `<button class="wh-sync-btn" id="wh-sync" title="Синхронізувати з магазином">${icon('refresh', 14)} Синхронізувати</button>` : ''}
-            <button class="wh-shop-btn ${shopCfg ? 'connected' : ''}" id="wh-shop">${icon('external-link', 14)} ${shopCfg ? 'Магазин' : 'Підключити магазин'}</button>
-            <button class="wh-add-btn" id="wh-add">+ Позиція</button>
+            ${shopCfg ? `<button class="wh-sync-btn" id="wh-sync">${icon('refresh', 14)} ${t('warehouse.sync')}</button>` : ''}
+            <button class="wh-shop-btn ${shopCfg ? 'connected' : ''}" id="wh-shop">${icon('external-link', 14)} ${shopCfg ? t('module.warehouse') : t('warehouse.connect_shop')}</button>
+            <button class="wh-add-btn" id="wh-add">${t('warehouse.add')}</button>
           </div>
         </div>
 
@@ -69,22 +70,22 @@ export async function render(container) {
           <div class="wh-kpi">
             <div class="wh-kpi-icon" style="color:#4F8EF7">${icon('warehouse', 18)}</div>
             <div class="wh-kpi-val">${totalItems}</div>
-            <div class="wh-kpi-label">Всього позицій</div>
+            <div class="wh-kpi-label">${t('warehouse.total')}</div>
           </div>
           <div class="wh-kpi">
             <div class="wh-kpi-icon" style="color:${lowStock>0?'#F59E0B':'#34D399'}">${icon('alert-triangle', 18)}</div>
             <div class="wh-kpi-val" style="color:${lowStock>0?'#F59E0B':'#34D399'}">${lowStock}</div>
-            <div class="wh-kpi-label">Закінчуються</div>
+            <div class="wh-kpi-label">${t('warehouse.low_stock')}</div>
           </div>
           <div class="wh-kpi">
             <div class="wh-kpi-icon" style="color:#34D399">${icon('finances', 18)}</div>
             <div class="wh-kpi-val">₴${totalValue.toLocaleString('uk-UA')}</div>
-            <div class="wh-kpi-label">Загальна вартість</div>
+            <div class="wh-kpi-label">${t('warehouse.value')}</div>
           </div>
           <div class="wh-kpi">
             <div class="wh-kpi-icon" style="color:#F87171">${icon('x-circle', 18)}</div>
             <div class="wh-kpi-val" style="color:${items.filter(i=>(i.qty||0)===0).length>0?'#F87171':'var(--text-primary)'}">${items.filter(i=>(i.qty||0)===0).length}</div>
-            <div class="wh-kpi-label">Закінчились</div>
+            <div class="wh-kpi-label">${t('warehouse.out_of_stock')}</div>
           </div>
         </div>
 
@@ -102,7 +103,7 @@ export async function render(container) {
         ${filtered.length ? `
         <div class="wh-table-wrap">
           <table class="wh-table">
-            <thead><tr><th>Назва</th><th>Категорія</th><th>Кількість</th><th>Ціна/од</th><th>Вартість</th><th>Постачальник</th><th></th></tr></thead>
+            <thead><tr><th>${t('warehouse.name')}</th><th>${t('warehouse.category')}</th><th>${t('warehouse.qty')}</th><th>${t('warehouse.price')}</th><th>${t('warehouse.total_val')}</th><th>${t('warehouse.supplier')}</th><th></th></tr></thead>
             <tbody>
               ${filtered.map(item => {
                 const cat = CATS.find(c => c.id === item.category) || CATS.at(-1)
@@ -143,8 +144,8 @@ export async function render(container) {
         </div>` : `
         <div class="wh-empty">
           <div style="display:flex;align-items:center;justify-content:center;margin-bottom:12px;color:var(--text-muted);opacity:.4">${icon('warehouse', 48)}</div>
-          <div class="wh-empty-title">${search ? 'Нічого не знайдено' : 'Склад порожній'}</div>
-          <div class="wh-empty-desc">${search ? 'Спробуйте змінити запит' : 'Додайте першу позицію'}</div>
+          <div class="wh-empty-title">${search ? t('common.empty') : t('warehouse.empty')}</div>
+          <div class="wh-empty-desc">${search ? '' : t('warehouse.add')}</div>
         </div>`}
       </div>
 
@@ -424,7 +425,7 @@ export async function render(container) {
             source: 'shop', sourceId: String(p.id), sourcePlatform: platform,
           })
         }
-        if (batch.length < 100) break
+        if (batch.length < 100 || page >= 20) break
         page++
       }
     } else if (platform === 'shopify') {

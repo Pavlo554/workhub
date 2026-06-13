@@ -8,6 +8,7 @@ import {
   query, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 import { icon } from '../../utils/icons.js'
+import { t } from '../../core/i18n.js'
 
 // ── Constants ─────────────────────────────────────────────
 
@@ -80,15 +81,15 @@ export async function render(container) {
 
         <div class="cl-header">
           <div>
-            <h1 class="cl-title">Клієнти</h1>
-            <p class="cl-sub" id="cl-sub">Завантаження...</p>
+            <h1 class="cl-title">${t('clients.title')}</h1>
+            <p class="cl-sub" id="cl-sub">${t('common.loading')}</p>
           </div>
           <div class="cl-header-actions">
             <div class="cl-tabs" id="cl-tabs">
-              <button class="cl-tab active" data-tab="list">Список</button>
-              <button class="cl-tab" data-tab="analytics">Аналітика</button>
+              <button class="cl-tab active" data-tab="list">${t('common.list')}</button>
+              <button class="cl-tab" data-tab="analytics">${t('common.analytics')}</button>
             </div>
-            <button class="btn btn-primary" id="cl-add-btn">+ Клієнт</button>
+            <button class="btn btn-primary" id="cl-add-btn">${t('clients.add')}</button>
           </div>
         </div>
 
@@ -97,7 +98,7 @@ export async function render(container) {
           <div class="cl-toolbar">
             <div class="cl-search">
               <span style="display:flex;align-items:center;color:var(--text-muted)">${icon('search', 14)}</span>
-              <input id="cl-search" class="cl-search-input" placeholder="Пошук за іменем, email, телефоном..." />
+              <input id="cl-search" class="cl-search-input" placeholder="${t('clients.search')}" />
             </div>
             <div class="cl-filters" id="cl-filters">
               <button class="cl-filter active" data-st="all">Всі</button>
@@ -282,8 +283,8 @@ export async function render(container) {
       el.innerHTML = `
         <div class="cl-empty">
           <div class="cl-empty-icon">${icon('clients', 32)}</div>
-          <div class="cl-empty-title">${searchQ || activeFilter !== 'all' ? 'Нічого не знайдено' : 'Клієнтів ще немає'}</div>
-          <div class="cl-empty-desc">${searchQ || activeFilter !== 'all' ? 'Спробуйте змінити фільтр' : 'Натисніть "+ Клієнт" щоб додати'}</div>
+          <div class="cl-empty-title">${searchQ || activeFilter !== 'all' ? t('clients.no_results') : t('clients.empty')}</div>
+          <div class="cl-empty-desc">${searchQ || activeFilter !== 'all' ? '' : t('clients.empty_desc')}</div>
         </div>`
       return
     }
@@ -322,7 +323,7 @@ export async function render(container) {
     el.querySelectorAll('.cl-del-btn').forEach(btn => {
       btn.addEventListener('click', async e => {
         e.stopPropagation()
-        if (!confirm('Видалити клієнта?')) return
+        if (!confirm(t('clients.delete_confirm'))) return
         if (selectedId === btn.dataset.id) closeDetail()
         await deleteDoc(doc(db, ...base, 'clients', btn.dataset.id))
         await load()
@@ -701,7 +702,7 @@ export async function render(container) {
   // ── Modal ─────────────────────────────────────────────────
   function openModal(client = null) {
     editingId = client?.id || null
-    container.querySelector('#cl-modal-title').textContent = client ? 'Редагувати клієнта' : 'Новий клієнт'
+    container.querySelector('#cl-modal-title').textContent = client ? t('clients.form_title_edit') : t('clients.form_title_new')
     container.querySelector('#f-name').value     = client?.name     || ''
     container.querySelector('#f-phone').value    = client?.phone    || ''
     container.querySelector('#f-email').value    = client?.email    || ''

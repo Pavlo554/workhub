@@ -15,6 +15,7 @@
     "crypto-js": "^4.2.0",
     "date-fns": "^3.6.0",
     "electron-store": "^8.2.0",
+    "electron-updater": "^6.8.9",
     "firebase": "^10.14.1",
     "jspdf": "^4.1.0",
     "puppeteer": "^21.x",
