@@ -8,11 +8,12 @@
     script-src 'self' https://www.gstatic.com https://cdnjs.cloudflare.com https://www.googletagmanager.com;
     style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
     font-src 'self' https://fonts.gstatic.com;
-    img-src 'self' data: blob: https://*.googleapis.com https://*.firebasestorage.app;
+    img-src 'self' data: blob: https://*.googleapis.com https://*.firebasestorage.app https://www.googletagmanager.com https://www.google-analytics.com;
     connect-src 'self'
       https://*.firebaseio.com
       https://*.googleapis.com
       https://*.firebasestorage.app
+      https://*.cloudfunctions.net
       https://api.telegram.org
       https://api.coingecko.com
       https://bank.gov.ua

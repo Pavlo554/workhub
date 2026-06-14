@@ -1,7 +1,8 @@
 // src/renderer/modules/invoices/index.js
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getUserProfile, getActivePathSegments } from '../../services/auth.js'
-import { checkPlanLimit } from '../../services/plan-guard.js'
+import { checkPlanLimit, showUpgradePrompt } from '../../services/plan-guard.js'
+import { planHasFeature } from '../../../core/permissions.js'
 import { generateInvoicePDF } from './invoice-pdf.js'
 import { generatePaymentLink } from '../../services/liqpay.js'
 import {
@@ -462,7 +463,13 @@ export async function render(container) {
 
     detEl.querySelector('#invd-close').addEventListener('click', closeInvDetail)
     detEl.querySelector('#invd-edit').addEventListener('click', () => openInvModal(inv))
-    detEl.querySelector('#invd-pdf').addEventListener('click', () => generateInvoicePDF(inv, profile))
+    detEl.querySelector('#invd-pdf').addEventListener('click', () => {
+      if (!planHasFeature(profile?.plan || 'free', 'pdf_export')) {
+        showUpgradePrompt('PDF експорт — PRO функція', 'Завантаження PDF доступне на планах PRO та BUSINESS.')
+        return
+      }
+      generateInvoicePDF(inv, profile)
+    })
     detEl.querySelector('#invd-pay-link')?.addEventListener('click', async () => {
       const btn = detEl.querySelector('#invd-pay-link')
       const orig = btn.textContent

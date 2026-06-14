@@ -16,6 +16,8 @@ import {
 export async function registerUser({ name, email, password }) {
   const cred = await createUserWithEmailAndPassword(auth, email, password)
   await updateProfile(cred.user, { displayName: name })
+  // merge:true — onAuthStateChanged fires before this line, so choose-role may
+  // have already created the doc; merge ensures we don't wipe those fields
   await setDoc(doc(db, 'users', cred.user.uid), {
     name,
     email,
@@ -24,20 +26,15 @@ export async function registerUser({ name, email, password }) {
     businessName:   null,
     onboardingDone: false,
     createdAt:      serverTimestamp(),
-  })
+  }, { merge: true })
   return cred.user
 }
 
 // ── Вхід ──────────────────────────────────────────────────
 export async function loginUser({ email, password }) {
   const cred = await signInWithEmailAndPassword(auth, email, password)
-  // Check ban status before allowing access
-  const snap = await getDoc(doc(db, 'users', cred.user.uid))
-  if (snap.exists() && snap.data().isBanned) {
-    await signOut(auth)
-    throw Object.assign(new Error('Ваш акаунт заблоковано адміністратором'), { code: 'auth/user-banned' })
-  }
   return cred.user
+  // Ban check happens in app.js after getUserProfile to avoid double Firestore read
 }
 
 // ── Вихід ─────────────────────────────────────────────────

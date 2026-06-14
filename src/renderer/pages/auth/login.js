@@ -102,5 +102,11 @@ export async function render(container) {
       : 'Увійти'
   }
 
+  const banError = sessionStorage.getItem('auth-error')
+  if (banError) {
+    sessionStorage.removeItem('auth-error')
+    showMsg(banError)
+  }
+
   setTimeout(() => emailEl.focus(), 100)
 }

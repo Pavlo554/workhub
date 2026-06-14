@@ -37,6 +37,12 @@ export async function navigate(routeName, params = {}) {
     return
   }
 
+  // Clear direct children left by FRESH routes (login/register render into root directly,
+  // not into a .mod-slot — so _showOnly never removes them, causing visual overlap)
+  for (const child of [...root.children]) {
+    if (!child.classList.contains('mod-slot')) child.remove()
+  }
+
   // ── Cached: show instantly, zero Firestore reads ──────────
   if (_cache.has(routeName)) {
     _showOnly(routeName)

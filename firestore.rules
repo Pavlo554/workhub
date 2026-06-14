@@ -30,28 +30,46 @@ service cloud.firestore {
     }
 
     // Subcollections workspace members must NOT read/write
-    function isSensitivePath(docPath) {
-      return docPath.matches('passwords/.*')    ||
-             docPath.matches('bank[_-]accounts/.*') ||
-             docPath.matches('payroll/.*')      ||
-             docPath.matches('api.keys/.*')     ||
-             docPath.matches('prro/.*');
+    // Takes the first path segment (subcollection name), not the full path
+    function isSensitivePath(subcol) {
+      return subcol == 'passwords'    ||
+             subcol == 'bank_accounts' ||
+             subcol == 'bank-accounts' ||
+             subcol == 'payroll'      ||
+             subcol == 'api-keys'     ||
+             subcol == 'api_keys'     ||
+             subcol == 'prro';
     }
 
     // ── Users ──────────────────────────────────────────────────────────────
     match /users/{userId} {
       allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
-      allow write: if request.auth != null && (
+
+      // New account creation: allow only safe default values
+      allow create: if request.auth != null &&
+        request.auth.uid == userId &&
+        request.resource.data.get('plan', 'free') == 'free' &&
+        request.resource.data.get('isAdmin', false) == false &&
+        request.resource.data.get('isBanned', false) == false &&
+        !request.resource.data.keys().hasAny(['subscriptionEnd', 'planExpiresAt', 'subscriptionStatus', 'planActivatedAt', 'planMethod']);
+
+      // Updates: user cannot change protected fields
+      allow update: if request.auth != null && (
         isAdmin() ||
         (request.auth.uid == userId && !touchesProtectedFields())
       );
+
+      allow delete: if isAdmin();
     }
 
-    match /users/{userId}/{document=**} {
+    // {subcol}/{doc=**} requires at least ONE path segment after userId,
+    // so it never accidentally matches the /users/{userId} document itself
+    // (rules_version 2 allows {x=**} to match zero segments — that's the bug we avoid)
+    match /users/{userId}/{subcol}/{doc=**} {
       allow read, write: if request.auth != null && isNotBanned() && (
         request.auth.uid == userId ||
         isAdmin() ||
-        (isWorkspaceMember(userId) && !isSensitivePath(document))
+        (isWorkspaceMember(userId) && !isSensitivePath(subcol))
       );
     }
 

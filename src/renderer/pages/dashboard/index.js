@@ -300,38 +300,57 @@ async function renderDashboard(container, profile, user) {
   // Skeleton
   container.innerHTML = `
     <div class="db-page">
-      <div class="db-header">
-        <div class="db-header-left">
-          <div class="db-greeting">${getGreeting()}, ${name}</div>
-          <div class="db-meta">
-            <span class="db-biz">${profile?.businessName || 'Мій бізнес'}</span>
-            <span class="db-sep">·</span>
-            <span class="db-prof">${config.label}</span>
-            <span class="db-sep">·</span>
-            <span class="db-date">${getTodayLabel()}</span>
+
+      <!-- ── Hero header ── -->
+      <div class="db-hero">
+        <div class="db-hero-orb db-hero-orb-1"></div>
+        <div class="db-hero-orb db-hero-orb-2"></div>
+        <div class="db-hero-content">
+          <div class="db-hero-left">
+            <div class="db-greeting">${getGreeting()}, ${name}</div>
+            <div class="db-meta">
+              <span class="db-biz">${profile?.businessName || 'Мій бізнес'}</span>
+              <span class="db-sep">·</span>
+              <span class="db-prof">${config.label}</span>
+              <span class="db-sep">·</span>
+              <span class="db-date">${getTodayLabel()}</span>
+            </div>
           </div>
-        </div>
-        <div class="db-quick-actions" id="db-quick-actions">
-          ${config.quickActions.map(a => `
-            <button class="db-qa-btn" data-route="${actionToRoute(a.action)}">
-              ${a.label}
-            </button>
-          `).join('')}
+          <div class="db-quick-actions" id="db-quick-actions">
+            ${config.quickActions.map(a => `
+              <button class="db-qa-btn" data-route="${actionToRoute(a.action)}">
+                ${a.label}
+              </button>
+            `).join('')}
+          </div>
         </div>
       </div>
 
-      <!-- KPI row -->
+      <!-- ── KPI row ── -->
       <div class="db-kpi-row" id="db-kpi-row">
         ${[0,1,2,3].map(() => `<div class="db-kpi-card db-kpi-loading"><div class="db-kpi-shimmer"></div></div>`).join('')}
       </div>
 
-      <!-- Two-col body -->
+      <!-- ── Two-col body ── -->
       <div class="db-body">
         <div class="db-col-main">
-          <!-- Recent clients -->
+
+          <!-- Revenue chart ПЕРШИЙ -->
+          ${config.modules.includes('invoices') ? `
+          <div class="db-section db-chart-section" id="db-revenue-chart">
+            <div class="db-section-header">
+              <span class="db-section-title">Дохід за 6 місяців</span>
+              <button class="db-section-link" data-route="reports">Детальніше →</button>
+            </div>
+            <div class="db-section-body" style="padding:16px 20px;position:relative;height:190px">
+              <canvas id="db-revenue-canvas"></canvas>
+            </div>
+          </div>` : ''}
+
+          <!-- Clients -->
           <div class="db-section" id="db-recent-clients">
             <div class="db-section-header">
-              <span class="db-section-title">${icon('clients', 14)} Останні клієнти</span>
+              <span class="db-section-title">Останні клієнти</span>
               <button class="db-section-link" data-route="clients">Всі →</button>
             </div>
             <div class="db-section-body db-loading-rows">
@@ -339,11 +358,11 @@ async function renderDashboard(container, profile, user) {
             </div>
           </div>
 
-          <!-- Recent invoices (if has module) -->
+          <!-- Invoices -->
           ${config.modules.includes('invoices') ? `
           <div class="db-section" id="db-recent-invoices">
             <div class="db-section-header">
-              <span class="db-section-title">${icon('invoices', 14)} Останні рахунки</span>
+              <span class="db-section-title">Останні рахунки</span>
               <button class="db-section-link" data-route="invoices">Всі →</button>
             </div>
             <div class="db-section-body db-loading-rows">
@@ -351,23 +370,11 @@ async function renderDashboard(container, profile, user) {
             </div>
           </div>` : ''}
 
-          <!-- Revenue chart -->
-          ${config.modules.includes('invoices') ? `
-          <div class="db-section" id="db-revenue-chart">
-            <div class="db-section-header">
-              <span class="db-section-title">${icon('reports', 14)} Дохід (6 міс.)</span>
-              <button class="db-section-link" data-route="reports">Детальніше →</button>
-            </div>
-            <div class="db-section-body" style="padding:16px 18px;position:relative;height:170px">
-              <canvas id="db-revenue-canvas"></canvas>
-            </div>
-          </div>` : ''}
-
-          <!-- Content plan (SMM) -->
+          <!-- Content plan -->
           ${config.modules.includes('content-plan') ? `
           <div class="db-section" id="db-recent-posts">
             <div class="db-section-header">
-              <span class="db-section-title">${icon('content-plan', 14)} Контент-план</span>
+              <span class="db-section-title">Контент-план</span>
               <button class="db-section-link" data-route="content-plan">Всі →</button>
             </div>
             <div class="db-section-body db-loading-rows">
@@ -379,7 +386,7 @@ async function renderDashboard(container, profile, user) {
 
         <div class="db-col-side">
 
-          <!-- ── Today card ── -->
+          <!-- Today card -->
           <div class="db-today-card">
             <div class="db-today-inner">
               <div class="db-today-day">${new Date().toLocaleDateString('uk-UA', { weekday: 'long' })}</div>
@@ -391,7 +398,30 @@ async function renderDashboard(container, profile, user) {
             </div>
           </div>
 
-          <!-- ── Module grid — always fills space ── -->
+          <!-- Tasks -->
+          <div class="db-section" id="db-tasks-section">
+            <div class="db-section-header">
+              <span class="db-section-title">Відкриті задачі</span>
+              <button class="db-section-link" data-route="tasks">Всі →</button>
+            </div>
+            <div class="db-section-body" id="db-tasks-body">
+              <div class="db-loading-rows">${[0,1,2,3].map(() => `<div class="db-row-shimmer"></div>`).join('')}</div>
+            </div>
+          </div>
+
+          <!-- Projects -->
+          ${config.modules.includes('projects') ? `
+          <div class="db-section" id="db-projects-section">
+            <div class="db-section-header">
+              <span class="db-section-title">Активні проекти</span>
+              <button class="db-section-link" data-route="projects">Всі →</button>
+            </div>
+            <div class="db-section-body" id="db-projects-body">
+              <div class="db-loading-rows">${[0,1].map(() => `<div class="db-row-shimmer"></div>`).join('')}</div>
+            </div>
+          </div>` : ''}
+
+          <!-- Module grid -->
           <div class="db-modgrid-card">
             <div class="db-modgrid-title">Швидкий перехід</div>
             <div class="db-modgrid">
@@ -406,34 +436,11 @@ async function renderDashboard(container, profile, user) {
             </div>
           </div>
 
-          <!-- ── Tasks compact ── -->
-          <div class="db-section" id="db-tasks-section">
-            <div class="db-section-header">
-              <span class="db-section-title">${icon('tasks', 14)} Задачі</span>
-              <button class="db-section-link" data-route="tasks">Всі →</button>
-            </div>
-            <div class="db-section-body" id="db-tasks-body">
-              <div class="db-loading-rows">${[0,1,2,3].map(() => `<div class="db-row-shimmer"></div>`).join('')}</div>
-            </div>
-          </div>
-
-          <!-- ── Active projects ── -->
-          ${config.modules.includes('projects') ? `
-          <div class="db-section" id="db-projects-section">
-            <div class="db-section-header">
-              <span class="db-section-title">${icon('projects', 14)} Проекти</span>
-              <button class="db-section-link" data-route="projects">Всі →</button>
-            </div>
-            <div class="db-section-body" id="db-projects-body">
-              <div class="db-loading-rows">${[0,1].map(() => `<div class="db-row-shimmer"></div>`).join('')}</div>
-            </div>
-          </div>` : ''}
-
-          <!-- ── Tax deadline ── -->
+          <!-- Tax -->
           ${config.modules.includes('tax-calendar') ? `
           <div class="db-section" id="db-tax-section">
             <div class="db-section-header">
-              <span class="db-section-title">${icon('tax-calendar', 14)} Найближчий податок</span>
+              <span class="db-section-title">Найближчий податок</span>
               <button class="db-section-link" data-route="tax-calendar">Всі →</button>
             </div>
             <div class="db-section-body" id="db-tax-body">
@@ -632,7 +639,7 @@ function renderKPI(container, kpi, profession) {
   const cards = buildKPICards(kpi, profession)
   row.innerHTML = cards.map(c => `
     <div class="db-kpi-card" style="--kc:${c.color}">
-      <div class="db-kpi-icon">${c.icon}</div>
+      <div class="db-kpi-icon-badge">${c.icon}</div>
       <div class="db-kpi-value">${c.value}</div>
       <div class="db-kpi-label">${c.label}</div>
       ${c.sub ? `<div class="db-kpi-sub">${c.sub}</div>` : ''}
@@ -918,222 +925,267 @@ function injectStyles() {
   style.textContent = `
 
   /* ── Page ── */
-  .db-page { padding: 28px 32px; max-width: 1600px; display: flex; flex-direction: column; gap: 24px; }
+  .db-page { padding: 22px 28px; max-width: 1600px; display: flex; flex-direction: column; gap: 18px; }
 
-  /* ── Header ── */
-  .db-header {
+  /* ── Hero header ── */
+  .db-hero {
+    position: relative; overflow: hidden;
+    background: linear-gradient(135deg,
+      color-mix(in srgb,#4F8EF7 8%,var(--bg-secondary)) 0%,
+      color-mix(in srgb,#7C3AED 5%,var(--bg-secondary)) 100%
+    );
+    border: 1px solid color-mix(in srgb,#4F8EF7 22%,var(--border));
+    border-radius: 18px; padding: 22px 28px;
+  }
+  .db-hero-orb { position: absolute; border-radius: 50%; pointer-events: none; }
+  .db-hero-orb-1 {
+    width: 320px; height: 320px; top: -130px; right: 80px;
+    background: radial-gradient(circle,rgba(79,142,247,.13) 0%,transparent 70%);
+  }
+  .db-hero-orb-2 {
+    width: 180px; height: 180px; bottom: -80px; right: -20px;
+    background: radial-gradient(circle,rgba(124,58,237,.1) 0%,transparent 70%);
+  }
+  .db-hero-content {
+    position: relative; z-index: 1;
     display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
   }
+  .db-hero-left { display: flex; flex-direction: column; gap: 8px; }
   .db-greeting {
-    font-family: var(--font-display); font-size: 26px; font-weight: 800;
-    letter-spacing: -0.02em; margin-bottom: 6px;
+    font-family: var(--font-display); font-size: 28px; font-weight: 900;
+    letter-spacing: -0.03em;
   }
-  .db-meta { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); }
+  .db-meta { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); }
   .db-sep  { color: var(--text-muted); }
-  .db-biz  { font-weight: 600; color: var(--text-primary); }
+  .db-biz  { font-weight: 700; color: var(--text-primary); }
   .db-date { text-transform: capitalize; }
 
-  .db-quick-actions { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 4px; }
+  .db-quick-actions { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 2px; }
   .db-qa-btn {
-    background: var(--bg-secondary); border: 1px solid var(--border);
-    border-radius: var(--radius-md); padding: 8px 14px; font-size: 13px; font-weight: 500;
+    background: rgba(255,255,255,.07); backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,.13);
+    border-radius: 10px; padding: 9px 16px; font-size: 13px; font-weight: 600;
     cursor: pointer; color: var(--text-primary); transition: all .15s;
   }
-  .db-qa-btn:hover { border-color: var(--accent-blue); color: var(--accent-blue); transform: translateY(-1px); }
+  .db-qa-btn:hover {
+    background: rgba(79,142,247,.18); border-color: rgba(79,142,247,.45);
+    color: #4F8EF7; transform: translateY(-1px);
+  }
 
   /* ── KPI row ── */
-  .db-kpi-row {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 14px;
-  }
+  .db-kpi-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; }
   .db-kpi-card {
-    background: var(--bg-secondary); border: 1px solid var(--border);
-    border-radius: var(--radius-lg); padding: 20px 22px;
-    border-left: 3px solid var(--kc, var(--accent-blue));
-    transition: transform .15s, box-shadow .15s;
+    background: color-mix(in srgb,var(--kc) 8%,var(--bg-secondary));
+    border: 1px solid color-mix(in srgb,var(--kc) 20%,var(--border));
+    border-radius: 16px; padding: 20px 22px;
+    position: relative; overflow: hidden;
+    transition: transform .2s, box-shadow .2s;
   }
-  .db-kpi-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.2); }
-  .db-kpi-loading { min-height: 90px; }
+  .db-kpi-card::after {
+    content:''; position:absolute; top:-40px; right:-20px;
+    width:110px; height:110px; border-radius:50%;
+    background: radial-gradient(circle,color-mix(in srgb,var(--kc) 20%,transparent) 0%,transparent 70%);
+    pointer-events:none;
+  }
+  .db-kpi-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 14px 40px color-mix(in srgb,var(--kc) 20%,transparent);
+  }
+  .db-kpi-loading { min-height: 110px; }
   .db-kpi-shimmer {
-    height: 100%; background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--bg-elevated) 50%, var(--bg-tertiary) 75%);
-    background-size: 200% 100%; animation: db-shimmer 1.4s infinite; border-radius: var(--radius-sm);
+    height:100%; border-radius:12px;
+    background: linear-gradient(90deg,var(--bg-tertiary) 25%,var(--bg-elevated) 50%,var(--bg-tertiary) 75%);
+    background-size:200% 100%; animation:db-shimmer 1.4s infinite;
   }
   @keyframes db-shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
-  .db-kpi-icon  { display: flex; align-items: center; margin-bottom: 10px; color: var(--kc, var(--accent-blue)); }
+
+  .db-kpi-icon-badge {
+    width:40px; height:40px; border-radius:11px;
+    background: color-mix(in srgb,var(--kc) 16%,transparent);
+    display:flex; align-items:center; justify-content:center;
+    color:var(--kc); margin-bottom:14px; position:relative; z-index:1;
+  }
   .db-kpi-value {
-    font-family: var(--font-display); font-size: 30px; font-weight: 800;
-    letter-spacing: -0.03em; color: var(--kc, var(--text-primary)); line-height: 1;
-    margin-bottom: 4px;
+    font-family:var(--font-display); font-size:36px; font-weight:900;
+    letter-spacing:-0.04em; color:var(--text-primary); line-height:1;
+    margin-bottom:6px; position:relative; z-index:1;
   }
-  .db-kpi-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
-  .db-kpi-sub   { font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
+  .db-kpi-label {
+    font-size:11px; font-weight:700; text-transform:uppercase;
+    letter-spacing:.07em; color:var(--text-muted); position:relative; z-index:1;
+  }
+  .db-kpi-sub {
+    font-size:11px; color:var(--kc); margin-top:6px;
+    font-weight:600; position:relative; z-index:1;
+  }
 
-  /* ── Body two-col — responsive ── */
-  .db-body {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 340px;
-    gap: 20px;
-    align-items: start;
+  /* ── Body ── */
+  .db-body { display:grid; grid-template-columns:minmax(0,1fr) 330px; gap:16px; align-items:start; }
+  @media (min-width:1400px) {
+    .db-body { grid-template-columns:minmax(0,1fr) 390px; }
+    .db-modgrid { grid-template-columns:repeat(4,1fr) !important; }
   }
-  @media (min-width: 1400px) {
-    .db-body { grid-template-columns: minmax(0, 1fr) 420px; }
-    .db-modgrid { grid-template-columns: repeat(4, 1fr) !important; }
-    .db-kpi-row { grid-template-columns: repeat(4, 1fr); }
+  @media (min-width:1700px) {
+    .db-body { grid-template-columns:minmax(0,1fr) 460px; }
+    .db-modgrid { grid-template-columns:repeat(5,1fr) !important; }
+    .db-today-tasks-num { font-size:44px !important; }
   }
-  @media (min-width: 1700px) {
-    .db-body { grid-template-columns: minmax(0, 1fr) 500px; }
-    .db-modgrid { grid-template-columns: repeat(5, 1fr) !important; }
-    .db-today-tasks-num { font-size: 42px; }
-  }
-  @media (max-width: 900px) { .db-body { grid-template-columns: 1fr; } }
+  @media (max-width:900px) { .db-body { grid-template-columns:1fr; } }
+  .db-col-main, .db-col-side { display:flex; flex-direction:column; gap:14px; }
 
-  .db-col-main, .db-col-side { display: flex; flex-direction: column; gap: 16px; }
-
-  /* ── Section card ── */
+  /* ── Section cards ── */
   .db-section {
-    background: var(--bg-secondary); border: 1px solid var(--border);
-    border-radius: var(--radius-lg); overflow: hidden;
+    background:var(--bg-secondary); border:1px solid var(--border);
+    border-radius:14px; overflow:hidden; transition:border-color .15s;
   }
+  .db-section:hover { border-color:rgba(79,142,247,.25); }
+  .db-chart-section { border-color:color-mix(in srgb,#4F8EF7 15%,var(--border)); }
   .db-section-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 14px 18px; border-bottom: 1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between;
+    padding:13px 18px; border-bottom:1px solid var(--border);
+    background:rgba(255,255,255,.018);
   }
-  .db-section-title { font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px; color: var(--text-primary); }
-  .db-section-link  {
-    font-size: 12px; color: var(--accent-blue); background: none; border: none;
-    cursor: pointer; padding: 0; font-weight: 500;
+  .db-section-title {
+    font-size:11px; font-weight:800; color:var(--text-secondary);
+    text-transform:uppercase; letter-spacing:.07em;
   }
-  .db-section-link:hover { text-decoration: underline; }
-  .db-section-body  { padding: 8px 0; }
+  .db-section-link {
+    font-size:12px; color:var(--accent-blue); background:none; border:none;
+    cursor:pointer; padding:0; font-weight:600; opacity:.75; transition:opacity .15s;
+  }
+  .db-section-link:hover { opacity:1; }
+  .db-section-body { padding:6px 0; }
 
-  /* ── Loading shimmers ── */
-  .db-loading-rows { padding: 8px 18px; display: flex; flex-direction: column; gap: 10px; }
+  /* ── Shimmers ── */
+  .db-loading-rows { padding:10px 18px; display:flex; flex-direction:column; gap:10px; }
   .db-row-shimmer {
-    height: 36px; background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--bg-elevated) 50%, var(--bg-tertiary) 75%);
-    background-size: 200% 100%; animation: db-shimmer 1.4s infinite; border-radius: var(--radius-sm);
+    height:40px; border-radius:10px;
+    background:linear-gradient(90deg,var(--bg-tertiary) 25%,var(--bg-elevated) 50%,var(--bg-tertiary) 75%);
+    background-size:200% 100%; animation:db-shimmer 1.4s infinite;
   }
 
   /* ── Item rows ── */
   .db-item-row {
-    display: flex; align-items: center; gap: 12px;
-    padding: 10px 18px; cursor: pointer; transition: background .15s;
+    display:flex; align-items:center; gap:12px;
+    padding:10px 18px; cursor:pointer; transition:background .12s;
+    border-bottom:1px solid rgba(255,255,255,.03);
   }
-  .db-item-row:hover { background: var(--bg-tertiary); }
+  .db-item-row:last-child { border-bottom:none; }
+  .db-item-row:hover { background:rgba(79,142,247,.05); }
   .db-item-avatar {
-    width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 14px; font-weight: 700; color: #fff;
+    width:36px; height:36px; border-radius:10px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    font-size:14px; font-weight:800; color:#fff;
   }
-  .db-item-info { flex: 1; min-width: 0; }
-  .db-item-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .db-item-meta { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
-
+  .db-item-info { flex:1; min-width:0; }
+  .db-item-name { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .db-item-meta { font-size:11px; color:var(--text-muted); margin-top:2px; }
   .db-item-badge {
-    font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: var(--radius-xs);
-    text-transform: uppercase; letter-spacing: .04em; white-space: nowrap;
+    font-size:10px; font-weight:700; padding:3px 9px; border-radius:20px;
+    text-transform:uppercase; letter-spacing:.04em; white-space:nowrap;
   }
-  .badge-green  { background: rgba(52,211,153,.15); color: #34D399; }
-  .badge-yellow { background: rgba(245,158,11,.15);  color: #F59E0B; }
-  .badge-grey   { background: rgba(107,114,128,.15); color: #9CA3AF; }
-
-  .db-item-amount { font-size: 14px; font-weight: 700; white-space: nowrap; }
-  .amount-green { color: #34D399; }
-  .amount-yellow { color: #F59E0B; }
+  .badge-green  { background:rgba(52,211,153,.12); color:#34D399; }
+  .badge-yellow { background:rgba(245,158,11,.12);  color:#F59E0B; }
+  .badge-grey   { background:rgba(107,114,128,.12); color:#9CA3AF; }
+  .db-item-amount { font-size:15px; font-weight:800; white-space:nowrap; }
+  .amount-green  { color:#34D399; }
+  .amount-yellow { color:#F59E0B; }
 
   /* ── Task rows ── */
   .db-task-row {
-    display: flex; align-items: center; gap: 10px;
-    padding: 9px 18px; transition: background .15s;
+    display:flex; align-items:center; gap:10px; padding:9px 18px; transition:background .12s;
+    border-bottom:1px solid rgba(255,255,255,.03);
   }
-  .db-task-row:hover { background: var(--bg-tertiary); }
-  .db-task-dot  { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-  .db-task-title { flex: 1; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .db-task-date { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+  .db-task-row:last-child { border-bottom:none; }
+  .db-task-row:hover { background:rgba(79,142,247,.05); }
+  .db-task-dot  { width:7px; height:7px; border-radius:50%; flex-shrink:0; box-shadow:0 0 5px currentColor; }
+  .db-task-title { flex:1; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .db-task-date { font-size:11px; color:var(--text-muted); white-space:nowrap; }
 
   /* ── Project rows ── */
   .db-proj-row {
-    display: flex; align-items: center; gap: 12px;
-    padding: 10px 18px; cursor: pointer; transition: background .15s;
+    display:flex; align-items:center; gap:12px; padding:10px 18px;
+    cursor:pointer; transition:background .12s;
   }
-  .db-proj-row:hover { background: var(--bg-tertiary); }
-  .db-proj-info { flex: 1; min-width: 0; }
-  .db-proj-bar-wrap {
-    height: 4px; background: var(--bg-tertiary); border-radius: 2px; margin-top: 5px; overflow: hidden;
-  }
-  .db-proj-bar { height: 100%; background: linear-gradient(90deg, #4F8EF7, #34D399); border-radius: 2px; transition: width .4s; }
-  .db-proj-pct { font-size: 12px; font-weight: 700; color: var(--text-secondary); white-space: nowrap; }
+  .db-proj-row:hover { background:rgba(79,142,247,.05); }
+  .db-proj-info { flex:1; min-width:0; }
+  .db-proj-bar-wrap { height:3px; background:rgba(255,255,255,.07); border-radius:2px; margin-top:6px; overflow:hidden; }
+  .db-proj-bar { height:100%; background:linear-gradient(90deg,#4F8EF7,#34D399); border-radius:2px; transition:width .6s cubic-bezier(.34,1.3,.64,1); }
+  .db-proj-pct { font-size:12px; font-weight:700; color:var(--text-secondary); white-space:nowrap; }
 
-  /* ── Empty row ── */
-  .db-empty-row {
-    padding: 16px 18px; font-size: 13px; color: var(--text-muted); text-align: center;
-  }
-  .db-inline-link { background: none; border: none; color: var(--accent-blue); cursor: pointer; font-size: 13px; padding: 0; }
+  /* ── Empty ── */
+  .db-empty-row { padding:22px 18px; font-size:13px; color:var(--text-muted); text-align:center; }
+  .db-inline-link { background:none; border:none; color:var(--accent-blue); cursor:pointer; font-size:13px; padding:0; }
 
-  /* ── Notes rows ── */
+  /* ── Notes ── */
   .db-note-row {
-    display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
-    padding: 10px 18px; cursor: pointer; transition: background .15s;
+    display:flex; align-items:flex-start; justify-content:space-between; gap:10px;
+    padding:10px 18px; cursor:pointer; transition:background .12s;
   }
-  .db-note-row:hover { background: var(--bg-tertiary); }
-  .db-note-text { font-size: 13px; color: var(--text-secondary); line-height: 1.4; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .db-note-date { font-size: 11px; color: var(--text-muted); white-space: nowrap; flex-shrink: 0; }
+  .db-note-row:hover { background:rgba(79,142,247,.05); }
+  .db-note-text { font-size:13px; color:var(--text-secondary); line-height:1.4; flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .db-note-date { font-size:11px; color:var(--text-muted); white-space:nowrap; flex-shrink:0; }
 
   /* ── Today card ── */
   .db-today-card {
-    background: linear-gradient(135deg, #4F8EF7 0%, #7C3AED 100%);
-    border-radius: var(--radius-lg); padding: 18px 20px;
-    display: flex; align-items: center; justify-content: space-between;
-    position: relative; overflow: hidden;
+    background:linear-gradient(135deg,#4361ee 0%,#7209b7 100%);
+    border-radius:14px; padding:20px 22px;
+    display:flex; align-items:center; justify-content:space-between;
+    position:relative; overflow:hidden;
+    border:1px solid rgba(255,255,255,.08);
+    box-shadow:0 8px 32px rgba(67,97,238,.25);
   }
   .db-today-card::before {
-    content: ''; position: absolute; right: -30px; top: -30px;
-    width: 120px; height: 120px; border-radius: 50%;
-    background: rgba(255,255,255,.07);
+    content:''; position:absolute; right:-20px; top:-30px;
+    width:140px; height:140px; border-radius:50%; background:rgba(255,255,255,.07);
   }
-  .db-today-inner { position: relative; }
-  .db-today-day  { font-size: 13px; color: rgba(255,255,255,.7); font-weight: 600; text-transform: capitalize; margin-bottom: 3px; }
-  .db-today-date { font-family: var(--font-display); font-size: 20px; font-weight: 800; color: #fff; }
-  .db-today-tasks-wrap { text-align: center; position: relative; }
-  .db-today-tasks-label { font-size: 10px; color: rgba(255,255,255,.65); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
-  .db-today-tasks-num { font-family: var(--font-display); font-size: 32px; font-weight: 800; color: #fff; line-height: 1; }
+  .db-today-card::after {
+    content:''; position:absolute; left:35%; bottom:-40px;
+    width:100px; height:100px; border-radius:50%; background:rgba(255,255,255,.04);
+  }
+  .db-today-inner { position:relative; z-index:1; }
+  .db-today-day  { font-size:12px; color:rgba(255,255,255,.65); font-weight:600; text-transform:capitalize; margin-bottom:4px; }
+  .db-today-date { font-family:var(--font-display); font-size:19px; font-weight:800; color:#fff; }
+  .db-today-tasks-wrap { text-align:center; position:relative; z-index:1; }
+  .db-today-tasks-label { font-size:10px; color:rgba(255,255,255,.6); text-transform:uppercase; letter-spacing:.06em; font-weight:600; margin-bottom:2px; }
+  .db-today-tasks-num { font-family:var(--font-display); font-size:40px; font-weight:900; color:#fff; line-height:1; }
 
-  /* ── Module grid card ── */
+  /* ── Module grid ── */
   .db-modgrid-card {
-    background: var(--bg-secondary); border: 1px solid var(--border);
-    border-radius: var(--radius-lg); padding: 14px 12px;
+    background:var(--bg-secondary); border:1px solid var(--border);
+    border-radius:14px; padding:16px 14px;
   }
-  .db-modgrid-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin-bottom: 12px; padding: 0 4px; }
-  .db-modgrid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 6px;
+  .db-modgrid-title {
+    font-size:10px; font-weight:800; text-transform:uppercase;
+    letter-spacing:.08em; color:var(--text-muted); margin-bottom:12px; padding:0 4px;
   }
+  .db-modgrid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
   .db-modtile {
-    display: flex; flex-direction: column; align-items: center; gap: 5px;
-    padding: 10px 6px; border-radius: 10px; cursor: pointer;
-    background: color-mix(in srgb, var(--mc) 12%, var(--bg-tertiary));
-    border: 1px solid color-mix(in srgb, var(--mc) 25%, transparent);
-    transition: all .18s; color: var(--mc);
+    display:flex; flex-direction:column; align-items:center; gap:5px;
+    padding:11px 6px; border-radius:10px; cursor:pointer;
+    background:color-mix(in srgb,var(--mc) 10%,rgba(255,255,255,.02));
+    border:1px solid color-mix(in srgb,var(--mc) 20%,transparent);
+    transition:all .18s; color:var(--mc);
   }
   .db-modtile:hover {
-    background: color-mix(in srgb, var(--mc) 22%, var(--bg-tertiary));
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px color-mix(in srgb, var(--mc) 20%, transparent);
+    background:color-mix(in srgb,var(--mc) 20%,rgba(255,255,255,.04));
+    transform:translateY(-2px);
+    box-shadow:0 6px 16px color-mix(in srgb,var(--mc) 20%,transparent);
+    border-color:color-mix(in srgb,var(--mc) 40%,transparent);
   }
-  .db-modtile-icon  { display: flex; align-items: center; justify-content: center; }
-  .db-modtile-label { font-size: 9px; font-weight: 700; text-align: center; color: var(--mc); line-height: 1.2; }
+  .db-modtile-icon  { display:flex; align-items:center; justify-content:center; }
+  .db-modtile-label { font-size:9px; font-weight:700; text-align:center; color:var(--mc); line-height:1.2; }
 
-  /* ── Tax teaser ── */
-  .db-tax-row { display: flex; align-items: center; gap: 12px; padding: 12px 18px; }
-  .db-tax-days { font-family: var(--font-display); font-size: 32px; font-weight: 800; line-height: 1; min-width: 44px; text-align: center; }
-  .db-tax-unit { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; align-self: flex-end; padding-bottom: 4px; }
-  .db-tax-info { flex: 1; }
-  .db-tax-name { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
-  .db-tax-date { font-size: 11px; color: var(--text-muted); }
-  .db-tax-critical .db-tax-days { color: #F87171; }
-  .db-tax-soon    .db-tax-days  { color: #F59E0B; }
-  .db-tax-ok      .db-tax-days  { color: #34D399; }
+  /* ── Tax ── */
+  .db-tax-row { display:flex; align-items:center; gap:14px; padding:14px 18px; }
+  .db-tax-days { font-family:var(--font-display); font-size:36px; font-weight:900; line-height:1; min-width:48px; text-align:center; }
+  .db-tax-unit { font-size:10px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.06em; align-self:flex-end; padding-bottom:4px; }
+  .db-tax-info { flex:1; }
+  .db-tax-name { font-size:13px; font-weight:700; margin-bottom:2px; }
+  .db-tax-date { font-size:11px; color:var(--text-muted); }
+  .db-tax-critical .db-tax-days { color:#F87171; }
+  .db-tax-soon    .db-tax-days  { color:#F59E0B; }
+  .db-tax-ok      .db-tax-days  { color:#34D399; }
 
   /* ── Worker dashboard ── */
   .worker-welcome {

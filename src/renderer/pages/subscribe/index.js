@@ -166,7 +166,7 @@ export async function render(container) {
         <h2 class="sub-section-title">Часті питання</h2>
         <div class="sub-faq-grid">
           ${[
-            { q: 'Які способи оплати?',        a: 'Картка Visa/Mastercard через LiqPay (миттєва активація), Monobank або криптовалюта.' },
+            { q: 'Які способи оплати?',        a: 'LiqPay (Visa/Mastercard — авто), Monobank або криптовалюта.' },
             { q: 'Можна скасувати підписку?',  a: 'Так, в будь-який момент. Доступ зберігається до кінця оплаченого терміну.' },
             { q: 'Що буде з моїми даними?',    a: 'Всі дані залишаються навіть після скасування підписки.' },
             { q: 'Коли активується план?',     a: 'LiqPay (картка) — автоматично одразу після оплати. Monobank / крипта — 1-2 год.' },
@@ -220,7 +220,28 @@ export async function render(container) {
           <button class="modal-close" id="close-payment">${icon('x', 16)}</button>
         </div>
         <div class="modal-body">
-          <div class="section-label">Оберіть спосіб оплати</div>
+          <!-- Months selector -->
+          <div class="sub-months-wrap">
+            <div class="section-label" style="margin-bottom:10px">Термін підписки</div>
+            <div class="sub-months-grid">
+              ${[
+                { m: 1, label: '1 місяць', discount: '' },
+                { m: 3, label: '3 місяці', discount: '-5%' },
+                { m: 6, label: '6 місяців', discount: '-10%' },
+                { m: 12, label: '1 рік', discount: '-20%' },
+              ].map(o => `
+                <button class="sub-month-btn ${o.m === 1 ? 'active' : ''}" data-months="${o.m}">
+                  <span class="sub-month-label">${o.label}</span>
+                  ${o.discount ? `<span class="sub-month-discount">${o.discount}</span>` : ''}
+                </button>
+              `).join('')}
+            </div>
+            <div class="sub-total-line">
+              Сума: <strong id="sub-total-amount">₴${plan.price}</strong>
+            </div>
+          </div>
+
+          <div class="section-label" style="margin-top:20px">Спосіб оплати</div>
           <div class="payment-methods-grid">
             ${hasLiqPay ? `
             <button class="payment-method-card payment-method-featured" data-method="liqpay">
@@ -249,7 +270,7 @@ export async function render(container) {
               </div>
               <div class="payment-method-arrow">${icon('chevron-right', 16)}</div>
             </button>` : ''}
-            ${!hasLiqPay && !mono && !hasCrypto ? `
+            ${!hasTelegram && !hasLiqPay && !mono && !hasCrypto ? `
             <div style="padding:20px;text-align:center;color:var(--text-muted);font-size:14px">
               Способи оплати ще не налаштовані.<br>Зверніться до адміністратора.
             </div>` : ''}
@@ -261,18 +282,33 @@ export async function render(container) {
     modal.querySelector('#close-payment').addEventListener('click', () => modal.remove())
     modal.addEventListener('click', e => { if (e.target === modal) modal.remove() })
 
+    // Months selector logic
+    let selectedMonths = 1
+    const DISCOUNTS = { 1: 1, 3: 0.95, 6: 0.90, 12: 0.80 }
+    modal.querySelectorAll('.sub-month-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        modal.querySelectorAll('.sub-month-btn').forEach(b => b.classList.remove('active'))
+        btn.classList.add('active')
+        selectedMonths = parseInt(btn.dataset.months)
+        const total = Math.round(plan.price * selectedMonths * DISCOUNTS[selectedMonths])
+        modal.querySelector('#sub-total-amount').textContent = `₴${total}`
+      })
+    })
+
     modal.querySelectorAll('.payment-method-card').forEach(btn => {
       btn.addEventListener('click', () => {
         const method = btn.dataset.method
         modal.remove()
-        if (method === 'liqpay')    showLiqPayPayment(plan)
+        if (method === 'liqpay')         showLiqPayPayment(plan, selectedMonths)
         else if (method === 'monobank') showMonobankPayment(plan, cfg)
         else if (method === 'crypto')   showCryptoPayment(plan, cfg)
       })
     })
   }
 
-  function showLiqPayPayment(plan) {
+  function showLiqPayPayment(plan, months = 1) {
+    const DISCOUNTS = { 1: 1, 3: 0.95, 6: 0.90, 12: 0.80 }
+    const amount = Math.round(plan.price * months * DISCOUNTS[months])
     const modal = document.createElement('div')
     modal.className = 'modal-overlay'
     modal.innerHTML = `
@@ -311,7 +347,7 @@ export async function render(container) {
       }
     })
 
-    createLiqPayUrl(user.uid, plan.id, 1)
+    createLiqPayUrl(user.uid, plan.id, months)
       .then(({ url }) => {
         // Open LiqPay checkout in system browser
         if (window.electron?.openExternal) {
@@ -333,7 +369,7 @@ export async function render(container) {
               Після успішної оплати адміністратор активує підписку.
             </div>
             <div class="liqpay-plan-pill">
-              ${plan.svgIcon} <strong>${plan.name}</strong> — ₴${plan.price} / міс
+              ${plan.svgIcon} <strong>${plan.name}</strong> × ${months} міс — ₴${amount}
             </div>
             <div class="liqpay-status" id="liqpay-status">
               <div class="btn-spinner" style="border-color:rgba(255,107,53,.3);border-top-color:#FF6B35"></div>
@@ -890,6 +926,22 @@ function injectStyles() {
   .success-note { display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(91,141,239,.08);border:1px solid rgba(91,141,239,.2);border-radius:10px;padding:14px;margin-bottom:24px;font-size:13px;line-height:1.6; }
   .btn-spinner { display:inline-block;width:15px;height:15px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:subSpin .7s linear infinite; }
   @keyframes subSpin { to{transform:rotate(360deg)} }
+
+  /* ── Months selector ── */
+  .sub-months-wrap { background:var(--bg-tertiary); border:1px solid var(--border); border-radius:12px; padding:16px; }
+  .sub-months-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:12px; }
+  .sub-month-btn {
+    padding:10px 6px; border-radius:10px; border:1.5px solid var(--border);
+    background:var(--bg-secondary); font-size:12px; font-weight:600; cursor:pointer;
+    transition:all .15s; display:flex; flex-direction:column; align-items:center; gap:3px;
+    color:var(--text-secondary);
+  }
+  .sub-month-btn:hover { border-color:rgba(34,158,217,.4); color:#229ED9; }
+  .sub-month-btn.active { border-color:#229ED9; background:rgba(34,158,217,.1); color:#229ED9; }
+  .sub-month-label { font-size:12px; font-weight:700; }
+  .sub-month-discount { font-size:10px; font-weight:700; color:#34D399; }
+  .sub-total-line { font-size:13px; color:var(--text-secondary); text-align:right; }
+  .sub-total-line strong { color:var(--text-primary); font-size:16px; }
 
   /* ── LiqPay ── */
   .pay-auto-badge {

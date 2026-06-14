@@ -1,6 +1,4 @@
 // src/renderer/services/subscription-guard.js
-import { db } from './firebase.js'
-import { doc, updateDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 import { updateProfileCache } from './auth.js'
 import { navigate } from '../../core/router.js'
 import { icon } from '../utils/icons.js'
@@ -33,19 +31,10 @@ export async function checkSubscriptionExpiry(uid, profile) {
   injectStyles()
 
   if (daysLeft <= 0) {
-    // Строк минув — знижуємо лише якщо ще не знижено
-    if (profile.subscriptionStatus !== 'expired') {
-      try {
-        await updateDoc(doc(db, 'users', uid), {
-          plan:               'free',
-          subscriptionStatus: 'expired',
-          updatedAt:          serverTimestamp(),
-        })
-        updateProfileCache(uid, { plan: 'free', subscriptionStatus: 'expired' })
-      } catch (err) {
-        console.error('[SubGuard] downgrade error:', err)
-      }
-    }
+    // Строк минув — оновлюємо тільки локальний кеш
+    // Запис у Firestore робить Cloud Function downgradeExpiredSubscriptions (scheduled)
+    // або адмін-панель sweep. З клієнта план більше не пишемо (правила блокують).
+    updateProfileCache(uid, { plan: 'free', subscriptionStatus: 'expired' })
     showExpiredModal(profile.plan)
     return { ...profile, plan: 'free', subscriptionStatus: 'expired' }
   }

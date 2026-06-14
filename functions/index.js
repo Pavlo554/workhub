@@ -166,3 +166,32 @@ exports.liqpayWebhook = functions
       res.status(500).send('Internal Server Error')
     }
   })
+
+// ── deleteUserAccount (Admin only, Callable) ──────────────────────────────
+exports.deleteUserAccount = functions
+  .region('europe-west1')
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Login required')
+    }
+
+    // Verify caller is admin
+    const callerDoc = await db.collection('users').doc(context.auth.uid).get()
+    if (!callerDoc.exists || !callerDoc.data().isAdmin) {
+      throw new functions.https.HttpsError('permission-denied', 'Admin only')
+    }
+
+    const { uid } = data
+    if (!uid) throw new functions.https.HttpsError('invalid-argument', 'uid required')
+    if (uid === context.auth.uid) {
+      throw new functions.https.HttpsError('invalid-argument', 'Cannot delete your own account')
+    }
+
+    // Delete Firestore user document (subcollections are orphaned — clean up separately if needed)
+    await db.collection('users').doc(uid).delete()
+
+    // Delete Firebase Auth account
+    await admin.auth().deleteUser(uid)
+
+    return { success: true }
+  })
