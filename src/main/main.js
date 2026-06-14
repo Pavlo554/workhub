@@ -310,7 +310,33 @@ function createWindow() {
 
   if (process.argv.includes('--dev')) {
     mainWindow.webContents.openDevTools()
+    startHotReload(mainWindow)
   }
+}
+
+// ── Hot-reload (dev only) ─────────────────────────────────
+function startHotReload(win) {
+  const chokidar = require('chokidar')
+  const srcDir   = path.join(__dirname, '../..')
+  let reloadTimer = null
+
+  chokidar.watch([
+    path.join(srcDir, 'src/renderer'),
+    path.join(srcDir, 'src/core'),
+  ], {
+    ignoreInitial: true,
+    ignored: /(^|[/\\])\..|(\.map$)/,
+    awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 50 },
+  }).on('all', (event, filePath) => {
+    clearTimeout(reloadTimer)
+    reloadTimer = setTimeout(() => {
+      if (!win.isDestroyed()) {
+        const rel = filePath.replace(srcDir, '').replace(/\\/g, '/')
+        console.log(`[hot-reload] ${event}: ${rel}`)
+        win.webContents.reload()
+      }
+    }, 800)
+  })
 }
 
 // ── Documents (local file storage) ────────────────────────

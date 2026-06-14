@@ -3,7 +3,7 @@ import { db } from '../../services/firebase.js'
 import { getCurrentUser, getUserProfile, updateProfileCache } from '../../services/auth.js'
 import { navigate } from '../../../core/router.js'
 import { renderNavigation } from '../../components/navigation.js'
-import { doc, updateDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
+import { doc, setDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
 export async function render(container) {
   const user    = getCurrentUser()
@@ -90,8 +90,8 @@ export async function render(container) {
     renderNavigation(sidebar, updatedProfile)
     navigate('dashboard')
 
-    // Фоновий запис у Firestore (не блокує UI)
-    updateDoc(doc(db, 'users', user.uid), { ...patch, updatedAt: serverTimestamp() })
+    // Фоновий запис у Firestore (setDoc+merge безпечно якщо doc ще не існує)
+    setDoc(doc(db, 'users', user.uid), { ...patch, updatedAt: serverTimestamp() }, { merge: true })
       .catch(err => console.error('[setup-business] save error:', err))
   })
 

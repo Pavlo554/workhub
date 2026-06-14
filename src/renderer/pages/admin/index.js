@@ -837,13 +837,14 @@ export async function render(container) {
                 <td>
                   <div class="adm-action-btns" onclick="event.stopPropagation()">
                     <button class="adm-action-btn" data-uid="${u.id}" data-plan="${u.plan||'free'}" data-action="plan">План</button>
-                    ${!u.isAdmin
-                      ? `<button class="adm-action-btn adm-btn-admin" data-uid="${u.id}" data-action="admin" title="Зробити адміном">${icon('settings', 13)}</button>`
-                      : ''
+                    ${u.isAdmin
+                      ? `<button class="adm-action-btn adm-btn-revoke" data-uid="${u.id}" data-action="revoke-admin" title="Зняти адміна">${icon('shield-off', 13)}</button>`
+                      : `<button class="adm-action-btn adm-btn-admin" data-uid="${u.id}" data-action="admin" title="Зробити адміном">${icon('settings', 13)}</button>`
                     }
                     <button class="adm-action-btn ${banned ? 'adm-btn-unban' : 'adm-btn-ban'}" data-uid="${u.id}" data-banned="${banned}" data-action="ban">
                       ${banned ? 'Розбан' : 'Бан'}
                     </button>
+                    <button class="adm-action-btn adm-btn-delete" data-uid="${u.id}" data-action="delete" title="Видалити акаунт">${icon('trash', 13)}</button>
                   </div>
                 </td>
               </tr>`
@@ -861,9 +862,11 @@ export async function render(container) {
       btn.addEventListener('click', async e => {
         e.stopPropagation()
         const action = btn.dataset.action
-        if (action === 'plan')  openChangePlanModal(btn.dataset.uid, btn.dataset.plan)
-        if (action === 'admin') await makeAdmin(btn.dataset.uid)
-        if (action === 'ban')   await toggleBan(btn.dataset.uid, btn.dataset.banned === 'true')
+        if (action === 'plan')         openChangePlanModal(btn.dataset.uid, btn.dataset.plan)
+        if (action === 'admin')        await makeAdmin(btn.dataset.uid)
+        if (action === 'revoke-admin') await revokeAdmin(btn.dataset.uid)
+        if (action === 'ban')          await toggleBan(btn.dataset.uid, btn.dataset.banned === 'true')
+        if (action === 'delete')       await deleteUser(btn.dataset.uid)
       })
     })
   }
@@ -918,8 +921,12 @@ export async function render(container) {
               <button class="adm-btn ${u.isBanned ? 'adm-btn-success' : 'adm-btn-danger'}" id="ud-ban-btn">
                 ${u.isBanned ? 'Розбанити' : 'Забанити'}
               </button>
-              ${!u.isAdmin ? `<button class="adm-btn adm-btn-ghost" id="ud-admin-btn">Зробити адміном</button>` : '<div class="adm-admin-badge" style="margin-top:8px">Адміністратор</div>'}
+              ${u.isAdmin
+                ? `<button class="adm-btn adm-btn-warning" id="ud-revoke-admin-btn">${icon('shield-off',13)} Зняти адміна</button>`
+                : `<button class="adm-btn adm-btn-ghost" id="ud-admin-btn">Зробити адміном</button>`
+              }
               <button class="adm-btn adm-btn-ghost" id="ud-reset-onb" title="Скинути онбординг">↺ Скинути онбординг</button>
+              <button class="adm-btn adm-btn-danger" id="ud-delete-btn" style="margin-top:4px">${icon('trash',13)} Видалити акаунт</button>
             </div>
 
             ${u.adminNote ? `<div class="adm-admin-note" id="ud-note-display">${icon('pencil',12)} ${u.adminNote}</div>` : ''}
@@ -998,6 +1005,8 @@ export async function render(container) {
     modal.querySelector('#ud-change-plan')?.addEventListener('click', () => { modal.remove(); openChangePlanModal(uid, u.plan || 'free') })
     modal.querySelector('#ud-ban-btn')?.addEventListener('click', async () => { modal.remove(); await toggleBan(uid, u.isBanned) })
     modal.querySelector('#ud-admin-btn')?.addEventListener('click', async () => { modal.remove(); await makeAdmin(uid) })
+    modal.querySelector('#ud-revoke-admin-btn')?.addEventListener('click', async () => { modal.remove(); await revokeAdmin(uid) })
+    modal.querySelector('#ud-delete-btn')?.addEventListener('click', async () => { modal.remove(); await deleteUser(uid) })
     modal.querySelector('#ud-edit-profile')?.addEventListener('click', () => openEditProfileModal(uid, u, modal))
     modal.querySelector('#ud-edit-modules')?.addEventListener('click', () => openEditModulesModal(uid, u, modal))
     modal.querySelector('#ud-copy-uid')?.addEventListener('click', () => {
@@ -1199,6 +1208,37 @@ export async function render(container) {
       const u = allUsers.find(u => u.id === uid); if (u) u.isAdmin = true
       renderUsersTable(); showToast('Права адміна надано')
     } catch (err) { console.error(err); showToast('Помилка', 'error') }
+  }
+
+  // ── Revoke admin ──────────────────────────────────────────
+  async function revokeAdmin(uid) {
+    const u = allUsers.find(u => u.id === uid)
+    if (!await wbConfirm(`Зняти права адміна у «${u?.name || uid}»?`, { okLabel: 'Зняти', danger: true })) return
+    try {
+      await updateDoc(doc(db, 'users', uid), { isAdmin: false })
+      if (u) u.isAdmin = false
+      renderUsersTable(); showToast('Права адміна знято')
+    } catch (err) { console.error(err); showToast('Помилка', 'error') }
+  }
+
+  // ── Delete user ───────────────────────────────────────────
+  async function deleteUser(uid) {
+    const u = allUsers.find(u => u.id === uid)
+    const name = u?.name || u?.email || uid
+    if (!await wbConfirm(
+      `Видалити акаунт «${name}»?\n\nПрофіль буде видалено. Користувач не зможе увійти в систему.`,
+      { okLabel: 'Видалити', danger: true }
+    )) return
+
+    try {
+      await deleteDoc(doc(db, 'users', uid))
+      allUsers = allUsers.filter(u => u.id !== uid)
+      renderUsersTable(); renderOverview()
+      showToast(`Акаунт «${name}» видалено`)
+    } catch (err) {
+      console.error('deleteUser error:', err)
+      showToast(err.message || 'Помилка видалення', 'error')
+    }
   }
 
   // ── Ban / unban ───────────────────────────────────────────
@@ -1730,6 +1770,8 @@ function injectStyles() {
     .adm-btn-ban:hover     { color:#F87171; border-color:rgba(239,68,68,.4); background:rgba(239,68,68,.06); }
     .adm-btn-unban:hover   { color:#34D399; border-color:rgba(52,211,153,.4); }
     .adm-btn-admin:hover   { color:#F59E0B; border-color:rgba(245,158,11,.4); }
+    .adm-btn-revoke:hover  { color:#F87171; border-color:rgba(239,68,68,.4); background:rgba(239,68,68,.06); }
+    .adm-btn-delete:hover  { color:#F87171; border-color:rgba(239,68,68,.4); background:rgba(239,68,68,.06); }
     .adm-status-chip { font-size:11px; font-weight:700; padding:3px 10px; border-radius:var(--radius-full); }
     .adm-status-approved { background:rgba(52,211,153,.12); color:#34D399; }
     .adm-status-rejected { background:rgba(239,68,68,.12); color:#F87171; }
@@ -1745,6 +1787,10 @@ function injectStyles() {
     .adm-btn-danger:hover { background:rgba(239,68,68,.25); }
     .adm-btn-success { background:rgba(52,211,153,.15); color:#34D399; border:1.5px solid rgba(52,211,153,.3); }
     .adm-btn-success:hover { background:rgba(52,211,153,.25); }
+    .adm-btn-warning { background:rgba(245,158,11,.15); color:#F59E0B; border:1.5px solid rgba(245,158,11,.3); }
+    .adm-btn-warning:hover { background:rgba(245,158,11,.25); }
+    .adm-btn-secondary { background:var(--bg-tertiary); border:1.5px solid var(--border); color:var(--text-primary); }
+    .adm-btn-secondary:hover { border-color:var(--accent-blue); }
 
     /* Modals */
     .adm-overlay { position:fixed; inset:0; background:rgba(0,0,0,.65); backdrop-filter:blur(6px); display:flex; align-items:center; justify-content:center; z-index:2000; padding:24px; }

@@ -6,12 +6,16 @@ let _tgCfg = null
 
 async function getTgConfig() {
   if (_tgCfg) return _tgCfg
-  const snap = await getDoc(doc(db, 'config', 'telegram'))
-  if (!snap.exists()) return null
-  const d = snap.data()
-  if (!d.botToken || !d.chatId) return null
-  _tgCfg = { botToken: d.botToken, chatId: d.chatId }
-  return _tgCfg
+  try {
+    const snap = await getDoc(doc(db, 'config', 'telegram'))
+    if (!snap.exists()) return null
+    const d = snap.data()
+    if (!d.botToken || !d.chatId) return null
+    _tgCfg = { botToken: d.botToken, chatId: d.chatId }
+    return _tgCfg
+  } catch {
+    return null // non-admin users can't read config/telegram — skip silently
+  }
 }
 
 export async function sendPaymentNotification(paymentData) {

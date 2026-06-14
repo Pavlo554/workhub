@@ -1,6 +1,6 @@
 // src/renderer/app.js
 import { addRoute, navigate, clearModuleCache, setPageTracker } from '../core/router.js'
-import { onAuthChange, getUserProfile }                         from './services/auth.js'
+import { onAuthChange, getUserProfile, logoutUser }             from './services/auth.js'
 import { checkSubscriptionExpiry }                              from './services/subscription-guard.js'
 import { initTheme }                                            from '../core/theme.js'
 import { renderNavigation }                                     from './components/navigation.js'
@@ -90,6 +90,15 @@ onAuthChange(async (user) => {
   }
 
   const profile = await getUserProfile(user.uid)
+
+  // Ban check (was in loginUser but caused double Firestore read)
+  if (profile?.isBanned) {
+    hideSidebar()
+    sessionStorage.setItem('auth-error', 'Ваш акаунт заблоковано. Зверніться до підтримки')
+    navigate('login')
+    logoutUser() // fire-and-forget — onAuthStateChanged will re-trigger but user sees login immediately
+    return
+  }
 
   // ── Онбординг ──────────────────────────────────────────
   // Старі юзери (без accountType але з onboardingDone) — перевіряємо чи є ніша

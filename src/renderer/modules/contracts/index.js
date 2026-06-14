@@ -7,6 +7,8 @@ import {
   query, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 import { generateContractPDF } from './contract-pdf.js'
+import { showUpgradePrompt } from '../../services/plan-guard.js'
+import { planHasFeature } from '../../../core/permissions.js'
 
 const ST_META = {
   active:    { label: 'Активний',   color: '#34D399', bg: 'rgba(52,211,153,0.12)'  },
@@ -329,6 +331,10 @@ export async function render(container) {
     // PDF
     container.querySelector('#ct-d-pdf').addEventListener('click', async () => {
       const profile = await getUserProfile(user.uid)
+      if (!planHasFeature(profile?.plan || 'free', 'pdf_export')) {
+        showUpgradePrompt('PDF експорт — PRO функція', 'Завантаження PDF доступне на планах PRO та BUSINESS.')
+        return
+      }
       try { await generateContractPDF(c, profile) }
       catch (err) { console.error('PDF error:', err); alert('Помилка генерації PDF') }
     })

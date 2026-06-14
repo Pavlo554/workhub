@@ -3,7 +3,7 @@ import { db } from '../../services/firebase.js'
 import { getCurrentUser, getUserProfile, updateProfileCache } from '../../services/auth.js'
 import { navigate } from '../../../core/router.js'
 import { icon } from '../../utils/icons.js'
-import { doc, updateDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
+import { doc, setDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
 export async function render(container) {
   const user    = getCurrentUser()
@@ -107,8 +107,8 @@ export async function render(container) {
         navigate('choose-profession')
       }
 
-      // Фоновий запис у Firestore
-      updateDoc(doc(db, 'users', user.uid), { accountType: 'owner' })
+      // Фоновий запис у Firestore (setDoc+merge — безпечно якщо doc ще не існує)
+      setDoc(doc(db, 'users', user.uid), { accountType: 'owner' }, { merge: true })
         .catch(err => console.error('[choose-role] save error:', err))
 
     } else {
@@ -116,7 +116,7 @@ export async function render(container) {
       updateProfileCache(user.uid, { accountType: 'worker', onboardingDone: true })
       navigate('join')
 
-      updateDoc(doc(db, 'users', user.uid), { accountType: 'worker', onboardingDone: true })
+      setDoc(doc(db, 'users', user.uid), { accountType: 'worker', onboardingDone: true }, { merge: true })
         .catch(err => console.error('[choose-role] save error:', err))
     }
   })

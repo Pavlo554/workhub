@@ -2,7 +2,7 @@
 import { getCurrentUser, getUserProfile, updateProfileCache } from '../../services/auth.js'
 import { icon } from '../../utils/icons.js'
 import { t } from '../../../core/i18n.js'
-import { wbPrompt, wbAlert } from '../../utils/dialogs.js'
+import { wbPrompt, wbAlert, wbConfirm } from '../../utils/dialogs.js'
 import {
   ensureWorkspace, getWorkspace, getMembers, getPendingInvites,
   createInvite, deleteInvite, removeMember, updateMember, updateWorkspaceName,

@@ -6,7 +6,8 @@ import { doc, getDoc, setDoc, serverTimestamp } from 'https://www.gstatic.com/fi
 // Завантажує адреси з Firestore (налаштовуються в адмін-панелі)
 export async function getPaymentConfig() {
   const snap = await getDoc(doc(db, 'config', 'payments'))
-  return snap.exists() ? snap.data() : {}
+  if (!snap.exists()) return {}
+  return Object.fromEntries(Object.entries(snap.data()).map(([k, v]) => [k.trim(), v]))
 }
 
 export function getCryptoAddress(config, currency) {
