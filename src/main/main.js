@@ -422,7 +422,11 @@ function setupUpdater() {
   autoUpdater.on('update-available',  (info) => mainWindow?.webContents.send('updater:available',  info))
   autoUpdater.on('download-progress', (p)    => mainWindow?.webContents.send('updater:progress',   p))
   autoUpdater.on('update-downloaded', (info) => mainWindow?.webContents.send('updater:downloaded', info))
-  autoUpdater.on('error', (err) => console.error('[updater]', err.message))
+  autoUpdater.on('update-not-available', ()  => console.log('[updater] no update available'))
+  autoUpdater.on('error', (err) => {
+    console.error('[updater] error:', err.message)
+    mainWindow?.webContents.send('updater:error', err.message)
+  })
 }
 
 ipcMain.handle('updater:install', () => {

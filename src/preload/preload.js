@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('electron', {
   },
 
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
+  appVersion: (() => { try { return require('../../package.json').version } catch { return '' } })(),
 
   shop: {
     request: (opts) => ipcRenderer.invoke('shop:request', opts),
@@ -37,6 +38,7 @@ contextBridge.exposeInMainWorld('electron', {
     onAvailable:  (cb) => ipcRenderer.on('updater:available',  (_, info) => cb(info)),
     onProgress:   (cb) => ipcRenderer.on('updater:progress',   (_, p)    => cb(p)),
     onDownloaded: (cb) => ipcRenderer.on('updater:downloaded', (_, info) => cb(info)),
+    onError:      (cb) => ipcRenderer.on('updater:error',      (_, msg)  => cb(msg)),
     installNow:   ()   => ipcRenderer.invoke('updater:install'),
   },
 })

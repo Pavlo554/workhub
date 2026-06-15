@@ -174,6 +174,7 @@ export function renderNavigation(sidebar, profile) {
           ${icon('logout', 15)}
           <span>${t('nav.logout')}</span>
         </button>
+        <div class="nav-version">v${window.electron?.appVersion || '—'}</div>
       </div>
 
     </div>

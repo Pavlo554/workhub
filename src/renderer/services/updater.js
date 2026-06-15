@@ -22,6 +22,10 @@ export function initAutoUpdater() {
       () => window.electron.updater.installNow()
     )
   })
+
+  window.electron.updater.onError?.((msg) => {
+    console.warn('[updater] error:', msg)
+  })
 }
 
 function showBanner(text, type, onAction) {
