@@ -407,6 +407,9 @@ ipcMain.handle('shop:request', async (_, { url, headers = {} }) => {
   })
 })
 
+// App version
+ipcMain.on('app:version', (event) => { event.returnValue = app.getVersion() })
+
 // Titlebar buttons
 ipcMain.on('window-minimize', () => mainWindow.minimize())
 ipcMain.on('window-maximize', () => {

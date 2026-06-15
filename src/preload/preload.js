@@ -28,7 +28,7 @@ contextBridge.exposeInMainWorld('electron', {
   },
 
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
-  appVersion: (() => { try { return require('../../package.json').version } catch { return '' } })(),
+  appVersion: ipcRenderer.sendSync('app:version'),
 
   shop: {
     request: (opts) => ipcRenderer.invoke('shop:request', opts),
