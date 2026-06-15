@@ -433,7 +433,14 @@ app.whenReady().then(() => {
   createWindow()
   if (app.isPackaged) {
     setupUpdater()
-    autoUpdater.checkForUpdates().catch(() => {})
+    // Wait for window to load before checking updates
+    mainWindow.webContents.once('did-finish-load', () => {
+      setTimeout(() => {
+        autoUpdater.checkForUpdates().catch((err) => {
+          console.error('[updater] check failed:', err.message)
+        })
+      }, 3000)
+    })
   }
 })
 
