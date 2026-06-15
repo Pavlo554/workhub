@@ -32,8 +32,8 @@
   },
   "publish": [{
     "provider": "github",
-    "owner": "ТВІЙ_GITHUB_USERNAME",
-    "repo": "workhub-releases",
+    "owner": "Pavlo554",
+    "repo": "workhub",
     "private": false
   }],
   "nsis": {
