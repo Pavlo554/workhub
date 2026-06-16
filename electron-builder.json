@@ -24,7 +24,7 @@
   "linux": {
     "target": [
       {
-        "target": "zip",
+        "target": "AppImage",
         "arch": ["x64"]
       }
     ],

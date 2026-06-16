@@ -24,7 +24,12 @@ export function initAutoUpdater() {
   })
 
   window.electron.updater.onError?.((msg) => {
-    console.warn('[updater] error:', msg)
+    showBanner(`Помилка оновлення: ${msg}`, 'error', null)
+  })
+
+  window.electron.updater.onNotAvailable?.(() => {
+    showBanner('Оновлень немає — встановлена остання версія', 'info', null)
+    setTimeout(() => document.getElementById('updater-banner')?.remove(), 4000)
   })
 }
 
