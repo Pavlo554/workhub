@@ -90,11 +90,12 @@ export async function joinWorkspace(uid, userProfile, invite) {
   // Додаємо до членів воркспейсу
   await setDoc(doc(db, 'workspaces', invite.workspaceId, 'members', uid), {
     uid,
-    name:     userProfile.name || '',
-    email:    userProfile.email || '',
-    role:     invite.role,
-    modules:  invite.modules,
-    joinedAt: serverTimestamp(),
+    name:        userProfile.name || '',
+    email:       userProfile.email || '',
+    role:        invite.role,
+    modules:     invite.modules,
+    inviteCode:  invite.code,
+    joinedAt:    serverTimestamp(),
   })
   // Оновлюємо профіль юзера
   await updateDoc(doc(db, 'users', uid), {
