@@ -17,15 +17,24 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        id: cache-modules-win
+        with:
+          path: node_modules
+          key: node-modules-win-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        if: steps.cache-modules-win.outputs.cache-hit != 'true'
+        run: npm ci
 
       - name: Cache Electron binaries
         uses: actions/cache@v4
         with:
           path: ~\AppData\Local\electron\Cache
-          key: electron-cache-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: electron-win-${{ hashFiles('package-lock.json') }}
 
-      - run: npm ci
       - run: npm run build:win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -38,15 +47,24 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        id: cache-modules-linux
+        with:
+          path: node_modules
+          key: node-modules-linux-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        if: steps.cache-modules-linux.outputs.cache-hit != 'true'
+        run: npm ci
 
       - name: Cache Electron binaries
         uses: actions/cache@v4
         with:
           path: ~/.cache/electron
-          key: electron-cache-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: electron-linux-${{ hashFiles('package-lock.json') }}
 
-      - run: npm ci
       - run: npm run build:linux
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
