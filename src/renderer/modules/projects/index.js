@@ -81,7 +81,10 @@ export async function render(container) {
             <div class="pr-row">
               <div class="field">
                 <label>Клієнт</label>
-                <input id="f-client" type="text" class="input" placeholder="Ім'я або компанія" />
+                <select id="f-client-select" class="input">
+                  <option value="">— Оберіть клієнта з бази —</option>
+                </select>
+                <input id="f-client" type="text" class="input" placeholder="або введіть назву вручну" style="margin-top:8px" />
               </div>
               <div class="field">
                 <label>Бюджет (₴)</label>
@@ -127,6 +130,7 @@ export async function render(container) {
   `
 
   let projects   = []
+  let clients    = []
   let editingId  = null
   let filter     = 'all'
   let selectedId = null
@@ -134,12 +138,24 @@ export async function render(container) {
   const base     = getActivePathSegments(user.uid)
   const profile  = await getUserProfile(user.uid)
 
+  // ── Client select ────────────────────────────────────────────
+  container.querySelector('#f-client-select').addEventListener('change', e => {
+    const c = clients.find(c => c.id === e.target.value)
+    if (c) container.querySelector('#f-client').value = c.name
+  })
+
   // ── Load ──────────────────────────────────────────────────
   async function loadProjects() {
     try {
-      const q    = query(collection(db, ...base, 'projects'), orderBy('createdAt', 'desc'))
-      const snap = await getDocs(q)
-      projects   = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      const [snap, cliSnap] = await Promise.all([
+        getDocs(query(collection(db, ...base, 'projects'), orderBy('createdAt', 'desc'))),
+        getDocs(collection(db, ...base, 'clients')).catch(() => null),
+      ])
+      projects = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      clients  = cliSnap ? cliSnap.docs.map(d => ({ id: d.id, ...d.data() })) : []
+      const sel = container.querySelector('#f-client-select')
+      sel.innerHTML = `<option value="">— Оберіть клієнта з бази —</option>` +
+        clients.map(c => `<option value="${c.id}">${c.name}</option>`).join('')
       renderStats()
       renderList()
     } catch (err) {
@@ -381,7 +397,8 @@ export async function render(container) {
     container.querySelector('#modal-title').textContent = project ? 'Редагувати проект' : 'Новий проект'
     container.querySelector('#f-name').value     = project?.name        || ''
     container.querySelector('#f-desc').value     = project?.description || ''
-    container.querySelector('#f-client').value   = project?.client      || ''
+    container.querySelector('#f-client').value        = project?.client   || ''
+    container.querySelector('#f-client-select').value = project?.clientId || ''
     container.querySelector('#f-budget').value   = project?.budget      || ''
     container.querySelector('#f-start').value    = project?.startDate   || ''
     container.querySelector('#f-deadline').value = project?.deadline    || ''
@@ -421,6 +438,7 @@ export async function render(container) {
       name,
       description: container.querySelector('#f-desc').value.trim()   || null,
       client:      container.querySelector('#f-client').value.trim() || null,
+      clientId:    container.querySelector('#f-client-select').value || null,
       budget:      parseFloat(container.querySelector('#f-budget').value) || null,
       startDate:   container.querySelector('#f-start').value         || null,
       deadline:    container.querySelector('#f-deadline').value       || null,

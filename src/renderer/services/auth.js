@@ -43,11 +43,33 @@ export async function logoutUser() {
   await signOut(auth)
 }
 
+// ── Режим перегляду користувача (admin/owner impersonation) ──
+// Коли активний, getUserProfile/getActiveBasePath повертають дані обраного
+// користувача замість реального адміна — всі модулі автоматично показують
+// CRM цього юзера без жодних змін у самих модулях.
+let _impersonate = null // { uid, name }
+
+export function startImpersonation(uid, name) {
+  _impersonate = { uid, name: name || uid }
+  clearProfileCache()
+}
+export function stopImpersonation() {
+  _impersonate = null
+  clearProfileCache()
+}
+export function getImpersonation() {
+  return _impersonate
+}
+
 // ── Профіль з Firestore (з кешем) ────────────────────────
 let _profileCache    = null
 let _profileCacheUid = null
 
 export async function getUserProfile(uid) {
+  if (_impersonate) {
+    const snap = await getDoc(doc(db, 'users', _impersonate.uid))
+    return snap.exists() ? { ...snap.data() } : null
+  }
   if (_profileCache && _profileCacheUid === uid) return _profileCache
   const snap   = await getDoc(doc(db, 'users', uid))
   _profileCache    = snap.exists() ? snap.data() : null
@@ -56,6 +78,19 @@ export async function getUserProfile(uid) {
   if (_profileCache?.activeBusiness) localStorage.setItem(`activeBiz_${uid}`, _profileCache.activeBusiness)
   else                                localStorage.removeItem(`activeBiz_${uid}`)
   return _profileCache
+}
+
+// Профіль для бізнес-даних (назва, реквізити, liqpay, план).
+// Воркер не має власного бізнес-профілю — підтягуємо профіль власника воркспейсу.
+export async function getActiveProfile(uid) {
+  const profile = await getUserProfile(uid)
+  if (profile?.accountType === 'worker' && profile?.workspaceId) {
+    const snap = await getDoc(doc(db, 'users', profile.workspaceId))
+    if (snap.exists()) {
+      return { ...snap.data(), accountType: profile.accountType, workspaceId: profile.workspaceId, role: profile.role }
+    }
+  }
+  return profile
 }
 
 export function updateProfileCache(uid, data) {
@@ -83,6 +118,7 @@ export function getCurrentUser() {
 // Головний бізнес:  "users/{uid}"
 // Другий бізнес:    "users/{uid}/businesses/{bizId}"
 export function getActiveBasePath(uid) {
+  if (_impersonate) return `users/${_impersonate.uid}`
   // Workers must read/write from the workspace owner's data path
   const cache = _profileCache
   if (cache?.accountType === 'worker' && cache?.workspaceId) {

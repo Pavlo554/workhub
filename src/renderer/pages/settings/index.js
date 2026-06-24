@@ -103,7 +103,7 @@ function renderTab(tab, profile, user) {
     case 'language':      return renderLanguage()
     case 'appearance':    return renderAppearance()
     case 'notifications': return renderNotifications()
-    case 'security':      return renderSecurity()
+    case 'security':      return renderSecurity(profile)
     case 'payments':      return renderPayments(profile)
     case 'subscription':  return renderSubscription(profile)
     case 'danger':        return renderDanger()
@@ -373,7 +373,8 @@ function renderAppearance() {
 }
 
 // ── Security tab ──────────────────────────────────────────────
-function renderSecurity() {
+function renderSecurity(profile) {
+  const totpOn = !!profile?.totpEnabled
   return `
     <div class="st-panel">
       <div class="st-panel-header">
@@ -382,6 +383,21 @@ function renderSecurity() {
           <p class="st-panel-subtitle">Зміна пароля та управління сесіями</p>
         </div>
       </div>
+
+      <h3 class="st-section-label">Двофакторна автентифікація (2FA)</h3>
+      <div class="st-session-row">
+        <div class="st-session-icon">${icon('lock', 22)}</div>
+        <div class="st-session-info">
+          <div class="st-session-name">Google Authenticator / Authy</div>
+          <div class="st-session-meta">${totpOn ? 'Увімкнено — при вході в Адмін панель потрібен код' : 'Вимкнено — рекомендовано для Owner-акаунту'}</div>
+        </div>
+        ${totpOn
+          ? `<button class="st-btn st-btn-secondary" id="totp-disable-btn">Вимкнути</button>`
+          : `<button class="st-btn st-btn-primary" id="totp-enable-btn">Увімкнути 2FA</button>`}
+      </div>
+      <div id="totp-setup-box"></div>
+
+      <div class="st-divider" style="margin: 28px 0 24px"></div>
 
       <div class="st-security-alert">
         <div class="st-security-alert-icon">${icon('passwords', 22)}</div>
@@ -895,6 +911,59 @@ function attachSecurity(content, user) {
     } finally {
       btn.disabled = false
     }
+  })
+
+  // ── 2FA (TOTP) ─────────────────────────────────────────────
+  content.querySelector('#totp-enable-btn')?.addEventListener('click', async () => {
+    const { generateSecret, buildOtpAuthUri, verifyTotpCode } = await import('../../services/totp.js')
+    const { db } = await import('../../services/firebase.js')
+    const { doc, setDoc, updateDoc, serverTimestamp } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js')
+
+    const secret = generateSecret()
+    const uri    = buildOtpAuthUri(secret, user.email)
+    const box = content.querySelector('#totp-setup-box')
+    box.innerHTML = `
+      <div class="st-info-card" style="margin-top:14px">
+        <div class="st-info-card-icon">${icon('lock', 22)}</div>
+        <div style="font-size:13px;color:var(--text-secondary);line-height:1.6">
+          1. Відкрий <b style="color:var(--text-primary)">Google Authenticator</b> (чи Authy) → "Додати акаунт" → "Ввести код вручну"<br>
+          2. Встав секретний код нижче (поле "Key"), тип — Time-based<br>
+          <div style="margin:10px 0;padding:10px 14px;background:var(--bg-tertiary);border-radius:8px;font-family:monospace;font-size:15px;letter-spacing:2px;word-break:break-all">${secret}</div>
+          3. Введи 6-значний код із застосунку щоб підтвердити:
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <input class="st-input" id="totp-confirm-code" placeholder="123456" maxlength="6" style="max-width:140px;font-family:monospace;font-size:16px;letter-spacing:3px">
+            <button class="st-btn st-btn-primary" id="totp-confirm-btn">Підтвердити</button>
+          </div>
+        </div>
+      </div>`
+    box.querySelector('#totp-confirm-btn').addEventListener('click', async () => {
+      const code = box.querySelector('#totp-confirm-code').value.trim()
+      if (!/^\d{6}$/.test(code)) { showToast('Введіть 6-значний код', 'error'); return }
+      const ok = await verifyTotpCode(secret, code)
+      if (!ok) { showToast('Код невірний, спробуйте ще раз', 'error'); return }
+      try {
+        await setDoc(doc(db, 'twoFactorSecrets', user.uid), { secret, createdAt: serverTimestamp() })
+        await updateDoc(doc(db, 'users', user.uid), { totpEnabled: true })
+        showToast('2FA увімкнено', 'success')
+        box.innerHTML = ''
+        content.querySelector('#totp-enable-btn').replaceWith(Object.assign(document.createElement('button'), {
+          className: 'st-btn st-btn-secondary', id: 'totp-disable-btn', textContent: 'Вимкнути',
+        }))
+        location.reload()
+      } catch (err) { showToast('Помилка: ' + err.message, 'error') }
+    })
+  })
+
+  content.querySelector('#totp-disable-btn')?.addEventListener('click', async () => {
+    if (!confirm('Вимкнути двофакторну автентифікацію?')) return
+    const { db } = await import('../../services/firebase.js')
+    const { doc, deleteDoc, updateDoc } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js')
+    try {
+      await deleteDoc(doc(db, 'twoFactorSecrets', user.uid))
+      await updateDoc(doc(db, 'users', user.uid), { totpEnabled: false })
+      showToast('2FA вимкнено', 'success')
+      location.reload()
+    } catch (err) { showToast('Помилка: ' + err.message, 'error') }
   })
 }
 

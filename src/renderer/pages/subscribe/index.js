@@ -7,6 +7,7 @@ import {
 import { sendPaymentNotification } from '../../services/telegram-notifications.js'
 import { db } from '../../services/firebase.js'
 import { createLiqPayUrl } from '../../services/liqpay-client.js'
+import { createAifoInvoice } from '../../services/aifo-client.js'
 import { doc, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 import { icon } from '../../utils/icons.js'
 
@@ -204,6 +205,7 @@ export async function render(container) {
     const hasEth    = !!getCryptoAddress(cfg, 'ETH')
     const hasCrypto = hasUsdt || hasBtc || hasEth
     const hasLiqPay = !!(cfg.liqpayPublicKey && cfg.liqpayPrivateKey)
+    const hasAifo   = !!cfg.aifoShopId
 
     const modal = document.createElement('div')
     modal.className = 'modal-overlay'
@@ -270,7 +272,16 @@ export async function render(container) {
               </div>
               <div class="payment-method-arrow">${icon('chevron-right', 16)}</div>
             </button>` : ''}
-            ${!hasTelegram && !hasLiqPay && !mono && !hasCrypto ? `
+            ${hasAifo ? `
+            <button class="payment-method-card payment-method-featured" data-method="aifo">
+              <div class="payment-method-icon" style="color:#5B8DEF">${icon('finances', 26)}</div>
+              <div class="payment-method-content">
+                <div class="payment-method-title">Картка (AIFO) <span class="pay-auto-badge">Авто</span></div>
+                <div class="payment-method-desc">Visa / Mastercard — миттєва активація</div>
+              </div>
+              <div class="payment-method-arrow">${icon('chevron-right', 16)}</div>
+            </button>` : ''}
+            ${!hasLiqPay && !mono && !hasCrypto && !hasAifo ? `
             <div style="padding:20px;text-align:center;color:var(--text-muted);font-size:14px">
               Способи оплати ще не налаштовані.<br>Зверніться до адміністратора.
             </div>` : ''}
@@ -300,8 +311,9 @@ export async function render(container) {
         const method = btn.dataset.method
         modal.remove()
         if (method === 'liqpay')         showLiqPayPayment(plan, selectedMonths)
-        else if (method === 'monobank') showMonobankPayment(plan, cfg)
-        else if (method === 'crypto')   showCryptoPayment(plan, cfg)
+        else if (method === 'monobank') showMonobankPayment(plan, cfg, selectedMonths)
+        else if (method === 'crypto')   showCryptoPayment(plan, cfg, selectedMonths)
+        else if (method === 'aifo')     showAifoPayment(plan, selectedMonths)
       })
     })
   }
@@ -408,7 +420,108 @@ export async function render(container) {
       })
   }
 
-  function showMonobankPayment(plan, cfg) {
+  function showAifoPayment(plan, months = 1) {
+    const DISCOUNTS = { 1: 1, 3: 0.95, 6: 0.90, 12: 0.80 }
+    const amount = Math.round(plan.price * months * DISCOUNTS[months])
+    const modal = document.createElement('div')
+    modal.className = 'modal-overlay'
+    modal.innerHTML = `
+      <div class="modal-container" style="max-width:460px">
+        <div class="modal-header">
+          <div class="modal-header-content">
+            <div class="modal-icon" style="background:linear-gradient(135deg,#5B8DEF,#7C6CF5)">${icon('finances', 24)}</div>
+            <div>
+              <h2 class="modal-title">Оплата карткою</h2>
+              <p class="modal-subtitle">AIFO — Visa / Mastercard</p>
+            </div>
+          </div>
+          <button class="modal-close" id="close-aifo">${icon('x', 16)}</button>
+        </div>
+        <div class="modal-body" id="aifo-body">
+          <div style="display:flex;align-items:center;justify-content:center;gap:12px;padding:40px 0;color:var(--text-muted)">
+            <div class="btn-spinner" style="border-color:rgba(91,141,239,.3);border-top-color:#5B8DEF;width:22px;height:22px"></div>
+            <span style="font-size:14px">Створюємо платіж...</span>
+          </div>
+        </div>
+      </div>
+    `
+    document.body.appendChild(modal)
+
+    let unsubscribePlan = null
+
+    const closeBtn = modal.querySelector('#close-aifo')
+    closeBtn.addEventListener('click', () => {
+      if (unsubscribePlan) unsubscribePlan()
+      modal.remove()
+    })
+    modal.addEventListener('click', e => {
+      if (e.target === modal) {
+        if (unsubscribePlan) unsubscribePlan()
+        modal.remove()
+      }
+    })
+
+    createAifoInvoice(user.uid, plan.id, months)
+      .then(({ url }) => {
+        if (window.electron?.openExternal) {
+          window.electron.openExternal(url)
+        } else {
+          window.open(url, '_blank')
+        }
+
+        modal.querySelector('#aifo-body').innerHTML = `
+          <div class="liqpay-waiting">
+            <div class="liqpay-waiting-icon">
+              <div class="liqpay-pulse" style="background:rgba(91,141,239,.18)"></div>
+              ${icon('finances', 36)}
+            </div>
+            <div class="liqpay-waiting-title">Очікуємо оплату</div>
+            <div class="liqpay-waiting-desc">
+              Сторінка оплати відкрита у браузері.<br>
+              Підписка активується автоматично після оплати.
+            </div>
+            <div class="liqpay-plan-pill">
+              ${plan.svgIcon} <strong>${plan.name}</strong> × ${months} міс — ₴${amount}
+            </div>
+            <div class="liqpay-status" id="aifo-status">
+              <div class="btn-spinner" style="border-color:rgba(91,141,239,.3);border-top-color:#5B8DEF"></div>
+              <span>Очікуємо підтвердження...</span>
+            </div>
+          </div>
+        `
+
+        unsubscribePlan = onSnapshot(doc(db, 'users', user.uid), snap => {
+          const data = snap.data()
+          if (data?.plan === plan.id) {
+            unsubscribePlan()
+            unsubscribePlan = null
+            modal.remove()
+            showSuccessModal(plan.name)
+          }
+        })
+      })
+      .catch(err => {
+        console.error('createAifoInvoice error:', err)
+        modal.querySelector('#aifo-body').innerHTML = `
+          <div style="padding:24px;text-align:center">
+            <div style="color:#F87171;font-size:14px;margin-bottom:16px">
+              ${icon('x', 18)} Помилка: ${err.message || 'Не вдалося створити платіж'}
+            </div>
+            <button class="btn-primary-large" id="aifo-retry" style="max-width:200px;margin:0 auto">
+              Спробувати ще
+            </button>
+          </div>
+        `
+        modal.querySelector('#aifo-retry')?.addEventListener('click', () => {
+          modal.remove()
+          showAifoPayment(plan, months)
+        })
+      })
+  }
+
+  function showMonobankPayment(plan, cfg, months = 1) {
+    const DISCOUNTS = { 1: 1, 3: 0.95, 6: 0.90, 12: 0.80 }
+    const amount = Math.round(plan.price * months * DISCOUNTS[months])
     const jarUrl = getMonobankJar(cfg)
     const modal = document.createElement('div')
     modal.className = 'modal-overlay'
@@ -426,7 +539,7 @@ export async function render(container) {
             </div>
             <ol class="instructions-list">
               <li>Натисніть кнопку "Відкрити банку" нижче</li>
-              <li>Переказуйте <strong>₴${plan.price}</strong> за план <strong>${plan.name}</strong></li>
+              <li>Переказуйте <strong>₴${amount}</strong> за план <strong>${plan.name}</strong> (${months} міс)</li>
               <li>У коментарі вкажіть ваш ID: <code style="font-family:monospace;font-size:12px">${user.uid.slice(0, 12)}</code></li>
               <li>Натисніть "Я оплатив" — ми активуємо протягом 1-2 год</li>
             </ol>
@@ -461,10 +574,10 @@ export async function render(container) {
       btn.disabled = true
       btn.innerHTML = '<div class="btn-spinner"></div> Відправляємо...'
       try {
-        const payId = await createPendingPayment(user.uid, plan.id, plan.price, 'monobank', { userId: user.uid })
+        const payId = await createPendingPayment(user.uid, plan.id, amount, 'monobank', { userId: user.uid, months })
         await sendPaymentNotification({
           userId: user.uid, userName: profile.name, userEmail: user.email,
-          planName: plan.name, amount: plan.price, currency: 'UAH',
+          planName: plan.name, amount, currency: 'UAH',
           cryptoAmount: null, address: jarUrl, paymentId: payId
         })
         modal.remove()
@@ -478,7 +591,9 @@ export async function render(container) {
     })
   }
 
-  function showCryptoPayment(plan, cfg) {
+  function showCryptoPayment(plan, cfg, months = 1) {
+    const DISCOUNTS = { 1: 1, 3: 0.95, 6: 0.90, 12: 0.80 }
+    const amount = Math.round(plan.price * months * DISCOUNTS[months])
     const modal = document.createElement('div')
     modal.className = 'modal-overlay'
     modal.innerHTML = `
@@ -509,7 +624,7 @@ export async function render(container) {
                 <div class="crypto-amount-card">
                   <div class="crypto-amount-label">Сума до оплати</div>
                   <div class="crypto-amount-value" id="crypto-amount">0.00000000</div>
-                  <div class="crypto-amount-fiat">≈ ₴${plan.price}</div>
+                  <div class="crypto-amount-fiat">≈ ₴${amount} (${months} міс)</div>
                 </div>
               </div>
             </div>
@@ -591,7 +706,7 @@ export async function render(container) {
         modal.querySelector('#crypto-address').textContent = address
 
         const rate = await fetchCryptoRate(currentCurrency)
-        currentCryptoAmt = calculateCryptoAmount(plan.price, rate)
+        currentCryptoAmt = calculateCryptoAmount(amount, rate)
         modal.querySelector('#crypto-amount').textContent = `${currentCryptoAmt} ${currentCurrency}`
 
         modal.querySelector('#copy-address').onclick = () => {
@@ -609,8 +724,8 @@ export async function render(container) {
         }
 
         try {
-          currentPaymentId = await createPendingPayment(user.uid, plan.id, plan.price, currentCurrency, {
-            cryptoAmount: currentCryptoAmt, address, userId: user.uid
+          currentPaymentId = await createPendingPayment(user.uid, plan.id, amount, currentCurrency, {
+            cryptoAmount: currentCryptoAmt, address, userId: user.uid, months
           })
         } catch (err) { console.error(err) }
       })
@@ -623,15 +738,16 @@ export async function render(container) {
       btn.innerHTML = '<div class="btn-spinner"></div> Відправляємо...'
       try {
         if (!currentPaymentId) {
-          currentPaymentId = await createPendingPayment(user.uid, plan.id, plan.price, currentCurrency, {
+          currentPaymentId = await createPendingPayment(user.uid, plan.id, amount, currentCurrency, {
             cryptoAmount: currentCryptoAmt,
             address: getCryptoAddress(cfg, currentCurrency),
             userId: user.uid,
+            months,
           })
         }
         await sendPaymentNotification({
           userId: user.uid, userName: profile.name, userEmail: user.email,
-          planName: plan.name, amount: plan.price, currency: currentCurrency,
+          planName: plan.name, amount, currency: currentCurrency,
           cryptoAmount: currentCryptoAmt, address: getCryptoAddress(cfg, currentCurrency),
           paymentId: currentPaymentId
         })

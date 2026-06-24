@@ -3,12 +3,43 @@ import { icon } from '../../utils/icons.js'
 import { t } from '../../core/i18n.js'
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getActivePathSegments } from '../../services/auth.js'
+import { invalidateRoute } from '../../../core/router.js'
 import { collection, addDoc, getDocs, deleteDoc, doc, updateDoc, query, orderBy, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
 const STATUS = {
   active:  { get label() { return t('hr.status_active')  || 'Active' },   color: '#34D399', bg: 'rgba(52,211,153,.12)' },
   trial:   { get label() { return t('hr.status_trial')   || 'Trial' },    color: '#F59E0B', bg: 'rgba(245,158,11,.12)' },
   fired:   { get label() { return t('hr.status_fired')   || 'Fired' },    color: '#EF4444', bg: 'rgba(239,68,68,.12)'  },
+}
+
+// Довідник статей звільнення (КЗпП України)
+const DISMISSAL_REASONS = [
+  'Ст. 36 п.1 КЗпП — За угодою сторін',
+  'Ст. 38 КЗпП — За власним бажанням',
+  'Ст. 39 КЗпП — За власним бажанням (поважні причини)',
+  'Ст. 40 п.1 КЗпП — Скорочення штату / ліквідація',
+  'Ст. 40 п.2 КЗпП — Невідповідність кваліфікації',
+  'Ст. 40 п.3 КЗпП — Систематичне невиконання обов\'язків',
+  'Ст. 40 п.4 КЗпП — Прогул без поважних причин',
+  'Ст. 40 п.7 КЗпП — Появлення на роботі у стані сп\'яніння',
+  'Ст. 40 п.8 КЗпП — Викрадення майна / розкрадання',
+  'Ст. 41 КЗпП — Втрата довіри (матеріально відповідальні)',
+  'Ст. 36 п.2 КЗпП — Закінчення строку трудового договору',
+  'Ст. 36 п.5 КЗпП — Перехід на іншу роботу',
+  'Ст. 36 п.6 КЗпП — Відмова від переведення в іншу місцевість',
+  'Інша підстава',
+]
+function nextOrderNum(existing, field) {
+  const max = existing
+    .map(e => parseInt((e[field] || '').replace(/\D/g, '')) || 0)
+    .reduce((a, b) => Math.max(a, b), 0)
+  return String(max + 1).padStart(3, '0')
+}
+function today() { return new Date().toISOString().slice(0, 10) }
+function fmtDateUk(s) {
+  if (!s) return '—'
+  const [y, m, d] = s.split('-')
+  return `${d}.${m}.${y}`
 }
 
 export async function render(container) {
@@ -88,8 +119,10 @@ export async function render(container) {
                     <div class="hr-card-role">${emp.role || '—'}</div>
                   </div>
                   <div class="hr-card-btns">
-                    <button class="hr-cb hr-edit" data-id="${emp.id}">${icon('pencil', 13)}</button>
-                    <button class="hr-cb hr-del"  data-id="${emp.id}">${icon('trash', 13)}</button>
+                    <button class="hr-cb hr-card-btn" data-id="${emp.id}" title="Особова картка">${icon('file', 13)}</button>
+                    <button class="hr-cb hr-edit" data-id="${emp.id}" title="Редагувати">${icon('pencil', 13)}</button>
+                    ${emp.status !== 'fired' ? `<button class="hr-cb hr-fire" data-id="${emp.id}" title="Звільнити">${icon('x-circle', 13)}</button>` : ''}
+                    <button class="hr-cb hr-del"  data-id="${emp.id}" title="Видалити">${icon('trash', 13)}</button>
                   </div>
                 </div>
                 <div class="hr-card-body">
@@ -101,6 +134,7 @@ export async function render(container) {
                   ${emp.email    ? `<div class="hr-meta-row">${icon('mail', 11)} ${emp.email}</div>` : ''}
                   ${emp.startDate? `<div class="hr-meta-row">${icon('calendar', 11)} Від ${emp.startDate}</div>` : ''}
                   ${emp.schedule ? `<div class="hr-meta-row">${icon('timer', 11)} ${emp.schedule}</div>` : ''}
+                  ${emp.status === 'fired' && emp.dismissalDate ? `<div class="hr-meta-row" style="color:#EF4444">${icon('x-circle', 11)} Звільнено ${fmtDateUk(emp.dismissalDate)}</div>` : ''}
                 </div>
                 ${emp.notes ? `<div class="hr-card-notes">${emp.notes}</div>` : ''}
               </div>
@@ -139,6 +173,13 @@ export async function render(container) {
               <div class="hr-field"><label>Дата початку</label><input id="hr-f-start" class="hr-input" type="date"></div>
               <div class="hr-field"><label>Графік</label><input id="hr-f-schedule" class="hr-input" type="text" placeholder="Пн-Пт 9:00-18:00"></div>
             </div>
+            <div class="hr-section-label">Особова картка</div>
+            <div class="hr-form-row">
+              <div class="hr-field"><label>Дата народження</label><input id="hr-f-birth" class="hr-input" type="date"></div>
+              <div class="hr-field"><label>ІПН</label><input id="hr-f-taxid" class="hr-input" type="text" placeholder="1234567890"></div>
+            </div>
+            <div class="hr-field"><label>Паспортні дані</label><input id="hr-f-passport" class="hr-input" type="text" placeholder="Серія, номер, ким і коли видано"></div>
+            <div class="hr-field"><label>Адреса проживання</label><input id="hr-f-address" class="hr-input" type="text" placeholder="м. Київ, вул. ..., буд. ..., кв. ..."></div>
             <div class="hr-field"><label>Нотатки</label><textarea id="hr-f-notes" class="hr-input hr-textarea" rows="2" placeholder="Додаткова інформація..."></textarea></div>
           </div>
           <div class="hr-modal-foot">
@@ -160,9 +201,13 @@ export async function render(container) {
     container.querySelector('#hr-modal-save')?.addEventListener('click', save)
     container.querySelectorAll('.hr-pill').forEach(b => b.addEventListener('click', () => { activeStatus = b.dataset.s; rerender() }))
     container.querySelectorAll('.hr-edit').forEach(b => b.addEventListener('click', () => openModal(employees.find(e => e.id === b.dataset.id))))
+    container.querySelectorAll('.hr-card-btn').forEach(b => b.addEventListener('click', () => openPersonalCard(employees.find(e => e.id === b.dataset.id))))
+    container.querySelectorAll('.hr-fire').forEach(b => b.addEventListener('click', () => openFireModal(employees.find(e => e.id === b.dataset.id))))
     container.querySelectorAll('.hr-del').forEach(b => b.addEventListener('click', async () => {
       if (!confirm('Видалити співробітника?')) return
-      await deleteDoc(doc(db, ...base, 'employees', b.dataset.id)); await load()
+      await deleteDoc(doc(db, ...base, 'employees', b.dataset.id))
+      invalidateRoute('payroll')
+      await load()
     }))
   }
 
@@ -177,6 +222,10 @@ export async function render(container) {
     container.querySelector('#hr-f-email').value    = emp?.email     || ''
     container.querySelector('#hr-f-start').value    = emp?.startDate || ''
     container.querySelector('#hr-f-schedule').value = emp?.schedule  || ''
+    container.querySelector('#hr-f-birth').value    = emp?.birthDate  || ''
+    container.querySelector('#hr-f-taxid').value    = emp?.taxId      || ''
+    container.querySelector('#hr-f-passport').value = emp?.passport   || ''
+    container.querySelector('#hr-f-address').value  = emp?.address    || ''
     container.querySelector('#hr-f-notes').value    = emp?.notes     || ''
     container.querySelector('#hr-modal').style.display = 'flex'
     setTimeout(() => container.querySelector('#hr-f-name').focus(), 50)
@@ -197,13 +246,184 @@ export async function render(container) {
       email: container.querySelector('#hr-f-email').value.trim() || null,
       startDate: container.querySelector('#hr-f-start').value || null,
       schedule: container.querySelector('#hr-f-schedule').value.trim() || null,
+      birthDate: container.querySelector('#hr-f-birth').value || null,
+      taxId:     container.querySelector('#hr-f-taxid').value.trim() || null,
+      passport:  container.querySelector('#hr-f-passport').value.trim() || null,
+      address:   container.querySelector('#hr-f-address').value.trim() || null,
       notes: container.querySelector('#hr-f-notes').value.trim() || null,
     }
     try {
-      if (editEmp) await updateDoc(doc(db, ...base, 'employees', editEmp.id), { ...data, updatedAt: serverTimestamp() })
-      else await addDoc(collection(db, ...base, 'employees'), { ...data, createdAt: serverTimestamp() })
+      if (editEmp) {
+        await updateDoc(doc(db, ...base, 'employees', editEmp.id), { ...data, updatedAt: serverTimestamp() })
+      } else {
+        // Автоматично формуємо наказ про прийняття на роботу
+        data.hireOrderNum  = nextOrderNum(employees, 'hireOrderNum')
+        data.hireOrderDate = data.startDate || today()
+        await addDoc(collection(db, ...base, 'employees'), { ...data, createdAt: serverTimestamp() })
+      }
+      invalidateRoute('payroll')
       closeModal(); await load()
     } finally { btn.disabled = false; btn.textContent = 'Зберегти' }
+  }
+
+  // ── Наказ про прийняття на роботу ──────────────────────────
+  function printHireOrder(emp) {
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+      <style>body{font-family:Arial,sans-serif;font-size:13px;line-height:1.6;padding:30px}
+      h2{text-align:center}.right{text-align:right}.center{text-align:center}
+      .sign-row{margin-top:50px;display:flex;justify-content:space-between}</style></head><body>
+      <p class="right">Наказ № ${emp.hireOrderNum || '—'}</p>
+      <h2>НАКАЗ<br>про прийняття на роботу</h2>
+      <p class="center">від ${fmtDateUk(emp.hireOrderDate || emp.startDate)}</p>
+      <p>ПРИЙНЯТИ на роботу <strong>${emp.name}</strong> на посаду <strong>${emp.role || '—'}</strong>
+      з ${fmtDateUk(emp.startDate || emp.hireOrderDate)} ${emp.schedule ? `з графіком роботи: ${emp.schedule}` : ''}
+      ${emp.salary ? `із посадовим окладом ${Number(emp.salary).toLocaleString('uk-UA')} грн/міс.` : ''}</p>
+      <p>Підстава: заява працівника, трудовий договір.</p>
+      <div class="sign-row">
+        <div>Директор / ФОП: _________________</div>
+        <div>З наказом ознайомлений: _________________</div>
+      </div>
+      </body></html>`
+    if (window.electron?.pdf?.generate) {
+      window.electron.pdf.generate(html, `hire_order_${emp.hireOrderNum || ''}.pdf`).catch(() => {})
+    } else {
+      const w = window.open('', '_blank')
+      if (w) { w.document.write(html); w.document.close(); w.print() }
+    }
+  }
+
+  // ── Звільнення ──────────────────────────────────────────────
+  function openFireModal(emp) {
+    const overlay = document.createElement('div')
+    overlay.className = 'hr-overlay'
+    overlay.style.display = 'flex'
+    const orderNum = nextOrderNum(employees, 'dismissalOrderNum')
+    overlay.innerHTML = `
+      <div class="hr-modal" style="width:440px">
+        <div class="hr-modal-head">
+          <h2>${icon('x-circle', 16)} Звільнення: ${emp.name}</h2>
+          <button id="fr-close">${icon('x', 14)}</button>
+        </div>
+        <div class="hr-modal-body">
+          <div class="hr-form-row">
+            <div class="hr-field"><label>Дата звільнення *</label><input id="fr-date" class="hr-input" type="date" value="${today()}"></div>
+            <div class="hr-field"><label>№ наказу</label><input id="fr-num" class="hr-input" type="text" value="${orderNum}" readonly style="opacity:.7"></div>
+          </div>
+          <div class="hr-field">
+            <label>Підстава звільнення (довідник КЗпП)</label>
+            <select id="fr-reason" class="hr-input">
+              ${DISMISSAL_REASONS.map(r => `<option>${r}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="hr-modal-foot">
+          <button class="hr-btn-sec" id="fr-cancel">Скасувати</button>
+          <button class="hr-btn-pri" id="fr-save" style="background:linear-gradient(135deg,#F87171,#EF4444)">Звільнити</button>
+        </div>
+      </div>`
+    document.body.appendChild(overlay)
+    const close = () => overlay.remove()
+    overlay.querySelector('#fr-close').addEventListener('click', close)
+    overlay.querySelector('#fr-cancel').addEventListener('click', close)
+    overlay.addEventListener('click', e => { if (e.target === overlay) close() })
+    overlay.querySelector('#fr-save').addEventListener('click', async () => {
+      const dismissalDate   = overlay.querySelector('#fr-date').value
+      const dismissalReason = overlay.querySelector('#fr-reason').value
+      const dismissalOrderNum = overlay.querySelector('#fr-num').value
+      if (!dismissalDate) { alert('Вкажіть дату звільнення'); return }
+      const btn = overlay.querySelector('#fr-save')
+      btn.disabled = true; btn.textContent = '...'
+      try {
+        const updated = { ...emp, status: 'fired', dismissalDate, dismissalReason, dismissalOrderNum }
+        await updateDoc(doc(db, ...base, 'employees', emp.id), {
+          status: 'fired', dismissalDate, dismissalReason, dismissalOrderNum, updatedAt: serverTimestamp(),
+        })
+        invalidateRoute('payroll')
+        close()
+        await load()
+        printDismissalOrder(updated)
+      } catch (err) { btn.disabled = false; btn.textContent = 'Звільнити'; alert('Помилка: ' + err.message) }
+    })
+  }
+
+  function printDismissalOrder(emp) {
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+      <style>body{font-family:Arial,sans-serif;font-size:13px;line-height:1.6;padding:30px}
+      h2{text-align:center}.right{text-align:right}.center{text-align:center}
+      .sign-row{margin-top:50px;display:flex;justify-content:space-between}</style></head><body>
+      <p class="right">Наказ № ${emp.dismissalOrderNum || '—'}</p>
+      <h2>НАКАЗ<br>про звільнення з роботи</h2>
+      <p class="center">від ${fmtDateUk(emp.dismissalDate)}</p>
+      <p>ЗВІЛЬНИТИ <strong>${emp.name}</strong> з посади <strong>${emp.role || '—'}</strong>
+      з ${fmtDateUk(emp.dismissalDate)}.</p>
+      <p>Підстава звільнення: <strong>${emp.dismissalReason || '—'}</strong></p>
+      <div class="sign-row">
+        <div>Директор / ФОП: _________________</div>
+        <div>З наказом ознайомлений: _________________</div>
+      </div>
+      </body></html>`
+    if (window.electron?.pdf?.generate) {
+      window.electron.pdf.generate(html, `dismissal_order_${emp.dismissalOrderNum || ''}.pdf`).catch(() => {})
+    } else {
+      const w = window.open('', '_blank')
+      if (w) { w.document.write(html); w.document.close(); w.print() }
+    }
+  }
+
+  // ── Особова картка ──────────────────────────────────────────
+  function openPersonalCard(emp) {
+    const overlay = document.createElement('div')
+    overlay.className = 'hr-overlay'
+    overlay.style.display = 'flex'
+    const st = STATUS[emp.status] || STATUS.active
+    overlay.innerHTML = `
+      <div class="hr-modal" style="width:520px">
+        <div class="hr-modal-head">
+          <h2>${icon('file', 16)} Особова картка: ${emp.name}</h2>
+          <button id="pc-close">${icon('x', 14)}</button>
+        </div>
+        <div class="hr-modal-body">
+          <div class="hr-form-row">
+            <div class="hr-field"><label>Посада</label><div class="hr-pc-val">${emp.role || '—'}</div></div>
+            <div class="hr-field"><label>Статус</label><div class="hr-pc-val" style="color:${st.color}">${st.label}</div></div>
+          </div>
+          <div class="hr-form-row">
+            <div class="hr-field"><label>Дата народження</label><div class="hr-pc-val">${fmtDateUk(emp.birthDate)}</div></div>
+            <div class="hr-field"><label>ІПН</label><div class="hr-pc-val">${emp.taxId || '—'}</div></div>
+          </div>
+          <div class="hr-field"><label>Паспортні дані</label><div class="hr-pc-val">${emp.passport || '—'}</div></div>
+          <div class="hr-field"><label>Адреса проживання</label><div class="hr-pc-val">${emp.address || '—'}</div></div>
+          <div class="hr-form-row">
+            <div class="hr-field"><label>Телефон</label><div class="hr-pc-val">${emp.phone || '—'}</div></div>
+            <div class="hr-field"><label>Email</label><div class="hr-pc-val">${emp.email || '—'}</div></div>
+          </div>
+          <div class="hr-section-label">Прийняття на роботу</div>
+          <div class="hr-form-row">
+            <div class="hr-field"><label>Наказ №</label><div class="hr-pc-val">${emp.hireOrderNum || '—'}</div></div>
+            <div class="hr-field"><label>Дата</label><div class="hr-pc-val">${fmtDateUk(emp.hireOrderDate)}</div></div>
+          </div>
+          ${emp.status === 'fired' ? `
+          <div class="hr-section-label">Звільнення</div>
+          <div class="hr-form-row">
+            <div class="hr-field"><label>Наказ №</label><div class="hr-pc-val">${emp.dismissalOrderNum || '—'}</div></div>
+            <div class="hr-field"><label>Дата</label><div class="hr-pc-val">${fmtDateUk(emp.dismissalDate)}</div></div>
+          </div>
+          <div class="hr-field"><label>Підстава</label><div class="hr-pc-val">${emp.dismissalReason || '—'}</div></div>
+          ` : ''}
+        </div>
+        <div class="hr-modal-foot">
+          <button class="hr-btn-sec" id="pc-print-hire">🖨️ Наказ про прийняття</button>
+          ${emp.status === 'fired' ? `<button class="hr-btn-sec" id="pc-print-fire">🖨️ Наказ про звільнення</button>` : ''}
+          <button class="hr-btn-pri" id="pc-close-btn">Закрити</button>
+        </div>
+      </div>`
+    document.body.appendChild(overlay)
+    const close = () => overlay.remove()
+    overlay.querySelector('#pc-close').addEventListener('click', close)
+    overlay.querySelector('#pc-close-btn').addEventListener('click', close)
+    overlay.addEventListener('click', e => { if (e.target === overlay) close() })
+    overlay.querySelector('#pc-print-hire')?.addEventListener('click', () => printHireOrder(emp))
+    overlay.querySelector('#pc-print-fire')?.addEventListener('click', () => printDismissalOrder(emp))
   }
 
   await load()
@@ -263,6 +483,8 @@ function injectStyles() {
     .hr-input:focus { border-color:var(--accent-blue); }
     .hr-textarea { resize:vertical; min-height:60px; }
     .hr-form-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .hr-section-label { font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.06em; margin-top:6px; padding-top:10px; border-top:1px solid var(--border); }
+    .hr-pc-val { font-size:13px; color:var(--text-primary); padding:8px 0; }
     .hr-btn-pri { padding:9px 20px; background:linear-gradient(135deg,#667eea,#4F8EF7); color:#fff; border:none; border-radius:var(--radius-md); font-size:13px; font-weight:700; cursor:pointer; }
     .hr-btn-sec { padding:9px 20px; background:var(--bg-tertiary); border:1.5px solid var(--border); color:var(--text-primary); border-radius:var(--radius-md); font-size:13px; font-weight:600; cursor:pointer; }
   `

@@ -299,6 +299,9 @@ function renderPage(container, ctx) {
                   const labels = { usd: '$ Долари (USD)', eur: '€ Євро (EUR)', uah: '₴ Гривня (UAH)', crypto: `₿ Крипта${profile?.cryptoType ? ' · ' + profile.cryptoType : ''}` }
                   return infoRow('finances', 'Валюта', labels[cur] || '₴ Гривня (UAH)')
                 })()}
+                ${infoRow('file', 'ІПН/ЄДРПОУ', profile?.taxCode || '—')}
+                ${infoRow('bank', 'Банк',       profile?.bankName || '—')}
+                ${infoRow('bank', 'IBAN',       profile?.iban || '—')}
               ` : `
                 <div class="biz-secondary-note">
                   Це окремий бізнес — контактні дані зберігаються в Редагувати
@@ -427,6 +430,37 @@ function renderPage(container, ctx) {
             <div>
               <label class="biz-label">Токен бота</label>
               <input type="text" class="input" id="edit-biz-tgtoken" value="${profile?.tgBotToken || ''}" placeholder="123456:ABC-DEF...">
+            </div>
+          </div>
+          <div class="biz-form-section">
+            <label class="biz-label">Реквізити ФОП (для рахунків/виплат)</label>
+            <div class="biz-form-row2">
+              <div>
+                <label class="biz-label">ІПН / ЄДРПОУ</label>
+                <input type="text" class="input" id="edit-biz-taxcode" value="${profile?.taxCode || ''}" placeholder="1234567890">
+              </div>
+              <div>
+                <label class="biz-label">Банк</label>
+                <input type="text" class="input" id="edit-biz-bank" value="${profile?.bankName || ''}" placeholder="АТ КБ «ПриватБанк»">
+              </div>
+            </div>
+            <div class="biz-form-row" style="margin-top:10px">
+              <label class="biz-label">IBAN / Розрахунковий рахунок</label>
+              <input type="text" class="input" id="edit-biz-iban" value="${profile?.iban || ''}" placeholder="UA00 0000 0000 0000 0000 0000 0">
+            </div>
+            <div class="biz-form-row2" style="margin-top:10px">
+              <div>
+                <label class="biz-label">Тип криптовалюти (для оплат)</label>
+                <select class="input" id="edit-biz-cryptotype">
+                  ${['USDT TRC20','USDT ERC20','BTC','ETH','BNB','SOL','TON'].map(ct => `
+                    <option value="${ct}" ${(profile?.cryptoAddrType || profile?.cryptoType || 'USDT TRC20') === ct ? 'selected' : ''}>${ct}</option>
+                  `).join('')}
+                </select>
+              </div>
+              <div>
+                <label class="biz-label">Адреса криптокошелька</label>
+                <input type="text" class="input" id="edit-biz-cryptoaddr" value="${profile?.cryptoAddress || ''}" placeholder="0x... або TXxxxxx...">
+              </div>
             </div>
           </div>
           ` : ''}
@@ -825,6 +859,11 @@ function bindEvents(container, ctxIn) {
         instagram:  container.querySelector('#edit-biz-instagram')?.value.trim() || null,
         tgChannel:       container.querySelector('#edit-biz-tgchannel')?.value.trim() || null,
         tgBotToken:      container.querySelector('#edit-biz-tgtoken')?.value.trim()   || null,
+        taxCode:         container.querySelector('#edit-biz-taxcode')?.value.trim()   || null,
+        bankName:        container.querySelector('#edit-biz-bank')?.value.trim()      || null,
+        iban:            container.querySelector('#edit-biz-iban')?.value.trim()      || null,
+        cryptoAddrType:  container.querySelector('#edit-biz-cryptotype')?.value        || null,
+        cryptoAddress:   container.querySelector('#edit-biz-cryptoaddr')?.value.trim() || null,
         workingCurrency: container.querySelector('#edit-currency-grid .biz-currency-btn.selected')?.dataset.currency || 'uah',
         cryptoType:      container.querySelector('#edit-crypto-grid .biz-crypto-btn.selected')?.dataset.crypto       || null,
         accountType: 'owner', onboardingDone: true, updatedAt: serverTimestamp(),

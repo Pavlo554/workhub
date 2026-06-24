@@ -1,6 +1,6 @@
 // src/renderer/modules/contracts/index.js
 import { db } from '../../services/firebase.js'
-import { getCurrentUser, getUserProfile, getActivePathSegments } from '../../services/auth.js'
+import { getCurrentUser, getActiveProfile, getActivePathSegments } from '../../services/auth.js'
 import { icon } from '../../utils/icons.js'
 import {
   collection, addDoc, getDocs, deleteDoc, doc, updateDoc,
@@ -330,7 +330,7 @@ export async function render(container) {
 
     // PDF
     container.querySelector('#ct-d-pdf').addEventListener('click', async () => {
-      const profile = await getUserProfile(user.uid)
+      const profile = await getActiveProfile(user.uid)
       if (!planHasFeature(profile?.plan || 'free', 'pdf_export')) {
         showUpgradePrompt('PDF експорт — PRO функція', 'Завантаження PDF доступне на планах PRO та BUSINESS.')
         return

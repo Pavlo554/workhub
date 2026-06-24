@@ -46,6 +46,11 @@ function modLabel(m) {
   return m.labelKey ? t(m.labelKey) : m.label
 }
 
+// Завжди видимі пункти — найчастіше використовувані. Решта згортається під "Ще",
+// щоб довгий список (14+ пунктів) не "топив" головне.
+const PRIMARY_IDS = new Set(['dashboard', 'clients', 'projects', 'invoices', 'tasks', 'finances'])
+const NAV_MORE_KEY = 'wh-nav-more-expanded'
+
 const PLAN_COLORS = { free: '#8B97B0', pro: '#5B8DEF', business: '#A78BFA' }
 
 const NICHES = [
@@ -114,17 +119,37 @@ export function renderNavigation(sidebar, profile) {
 
       <nav class="nav-menu" id="nav-menu">
         <div class="nav-section-label">${t('nav.main')}</div>
-        ${[...modules].sort((a, b) => {
-          const keys = Object.keys(MODULE_META)
-          return keys.indexOf(a) - keys.indexOf(b)
-        }).map(id => {
-          const m = MODULE_META[id]
-          if (!m) return ''
-          return `<button class="nav-item" data-route="${id}">
-            <span class="nav-item-icon">${icon(id)}</span>
-            <span class="nav-item-label">${modLabel(m)}</span>
-          </button>`
-        }).join('')}
+        ${(() => {
+          const sortedModules = [...modules].sort((a, b) => {
+            const keys = Object.keys(MODULE_META)
+            return keys.indexOf(a) - keys.indexOf(b)
+          }).filter(id => MODULE_META[id])
+
+          const navItem = id => {
+            const m = MODULE_META[id]
+            return `<button class="nav-item" data-route="${id}">
+              <span class="nav-item-icon">${icon(id)}</span>
+              <span class="nav-item-label">${modLabel(m)}</span>
+            </button>`
+          }
+
+          const primary   = sortedModules.filter(id => PRIMARY_IDS.has(id))
+          const secondary = sortedModules.filter(id => !PRIMARY_IDS.has(id))
+          const expanded   = localStorage.getItem(NAV_MORE_KEY) === '1'
+
+          return `
+            ${primary.map(navItem).join('')}
+            ${secondary.length ? `
+              <button class="nav-more-toggle" id="nav-more-toggle">
+                <span class="nav-item-icon">${icon(expanded ? 'chevron-up' : 'chevron-down', 14)}</span>
+                <span class="nav-item-label">Ще (${secondary.length})</span>
+              </button>
+              <div class="nav-more-list" id="nav-more-list" style="display:${expanded ? '' : 'none'}">
+                ${secondary.map(navItem).join('')}
+              </div>
+            ` : ''}
+          `
+        })()}
 
         ${isOwner ? `
         <button class="nav-modules-edit-btn" id="nav-modules-edit-btn">
@@ -165,7 +190,7 @@ export function renderNavigation(sidebar, profile) {
           <span class="nav-item-icon">${icon('team')}</span>
           <span class="nav-item-label">${t('nav.team')}</span>
         </button>` : ''}
-        ${profile?.isAdmin ? `
+        ${(profile?.isAdmin || profile?.isOwner) ? `
         <button class="nav-item nav-item-admin" data-route="admin">
           <span class="nav-item-icon">${icon('admin')}</span>
           <span class="nav-item-label">${t('nav.admin')}</span>
@@ -182,6 +207,16 @@ export function renderNavigation(sidebar, profile) {
 
   sidebar.querySelectorAll('.nav-item').forEach(btn => {
     btn.addEventListener('click', () => navigate(btn.dataset.route))
+  })
+
+  // ── "Ще" — згорнуті рідковживані пункти ──────────────────
+  const moreToggle = sidebar.querySelector('#nav-more-toggle')
+  const moreList   = sidebar.querySelector('#nav-more-list')
+  moreToggle?.addEventListener('click', () => {
+    const willExpand = moreList.style.display === 'none'
+    moreList.style.display = willExpand ? '' : 'none'
+    moreToggle.querySelector('.nav-item-icon').innerHTML = icon(willExpand ? 'chevron-up' : 'chevron-down', 14)
+    localStorage.setItem(NAV_MORE_KEY, willExpand ? '1' : '0')
   })
 
   // ── Search ──────────────────────────────────────────────
@@ -201,6 +236,13 @@ export function renderNavigation(sidebar, profile) {
     const editBtn = sidebar.querySelector('.nav-modules-edit-btn')
     if (editBtn) editBtn.style.display = hasSections ? '' : 'none'
 
+    // Під час пошуку розгортаємо "Ще" примусово (щоб збіги там не ховались),
+    // а після очищення поля — повертаємо збережений стан користувача.
+    if (moreToggle && moreList) {
+      moreToggle.style.display = q ? 'none' : ''
+      moreList.style.display = q ? '' : (localStorage.getItem(NAV_MORE_KEY) === '1' ? '' : 'none')
+    }
+
     menu?.querySelector('.nav-search-empty')?.remove()
     if (q) {
       const visible = [...sidebar.querySelectorAll('.nav-item')].some(b => b.style.display !== 'none')
@@ -213,8 +255,8 @@ export function renderNavigation(sidebar, profile) {
     }
   })
 
-  sidebar.querySelector('#nav-user-btn').addEventListener('click', () => navigate('profile'))
-  sidebar.querySelector('#nav-logout-btn').addEventListener('click', async () => { await logoutUser() })
+  sidebar.querySelector('#nav-user-btn')?.addEventListener('click', () => navigate('profile'))
+  sidebar.querySelector('#nav-logout-btn')?.addEventListener('click', async () => { await logoutUser() })
 
   sidebar._profile = profile
 
@@ -287,8 +329,8 @@ function openModulesPanel(sidebar, profile, currentModules) {
       const user = getCurrentUser()
       if (!user) return
 
-      if (profile?.activeBusiness && profile?._bizId) {
-        await updateDoc(doc(db, 'users', user.uid, 'businesses', profile._bizId), {
+      if (profile?.activeBusiness) {
+        await updateDoc(doc(db, 'users', user.uid, 'businesses', profile.activeBusiness), {
           modules: selected, updatedAt: serverTimestamp()
         })
         updateProfileCache(user.uid, { activeBusinessModules: selected })
@@ -402,7 +444,7 @@ function renderSwitcher(switcher, businesses, profile, user, sidebar) {
         </div>
         <div class="nav-biz-form-actions">
           <button class="nav-biz-form-cancel" id="nav-biz-form-cancel">Скасувати</button>
-          <button class="nav-biz-form-next" id="nav-biz-step1-next">Далі</button>
+          <button class="nav-biz-form-next" id="nav-biz-step1-next">Створити</button>
         </div>
       </div>
 
@@ -527,22 +569,50 @@ function renderSwitcher(switcher, businesses, profile, user, sidebar) {
     open = true
   })
 
+  async function saveBusiness(name, niche, mods, btn) {
+    const modules = ['dashboard', ...Array.from(mods)]
+    const origLabel = btn.textContent
+    btn.disabled = true
+    btn.textContent = '…'
+    try {
+      const profession = niche === 'custom' ? null : niche
+      const ref = await addDoc(collection(db, 'users', user.uid, 'businesses'), {
+        name, profession, modules, createdAt: serverTimestamp(),
+      })
+      businesses = [...businesses, { id: ref.id, name, profession, modules }]
+      form.style.display = 'none'
+      renderSwitcher(switcher, businesses, profile, user, sidebar)
+      showNavToast(`Бізнес "${name}" створено`)
+    } catch (err) {
+      console.error(err)
+      showNavToast('Помилка створення')
+      btn.disabled = false
+      btn.textContent = origLabel
+    }
+  }
+
   switcher.querySelector('#nav-biz-step1-next')?.addEventListener('click', () => {
     const name = switcher.querySelector('#nav-biz-name-inp').value.trim()
     if (!name)          { showNavToast('Введіть назву бізнесу'); return }
     if (!selectedNiche) { showNavToast('Оберіть нішу'); return }
 
     const isCustom = selectedNiche === 'custom'
-    selectedMods = isCustom ? new Set() : new Set(BIZ_DEFAULTS[selectedNiche] || [])
-    const niche  = NICHES.find(n => n.id === selectedNiche)
-    const mc     = isCustom ? '#A78BFA' : (niche?.color || '#5B8DEF')
+
+    // Готова ніша — створюємо бізнес одразу з типовими модулями, без зайвого кроку
+    if (!isCustom) {
+      selectedMods = new Set(BIZ_DEFAULTS[selectedNiche] || [])
+      saveBusiness(name, selectedNiche, selectedMods, switcher.querySelector('#nav-biz-step1-next'))
+      return
+    }
+
+    // Custom ніша — потрібно вручну обрати модулі
+    selectedMods = new Set()
+    const mc = '#A78BFA'
 
     const titleEl = switcher.querySelector('#nav-biz-step2-title')
     const hintEl  = switcher.querySelector('#nav-biz-step2-hint')
-    if (titleEl) titleEl.textContent = isCustom ? 'Вибери модулі' : 'Модулі бізнесу'
-    if (hintEl)  hintEl.textContent  = isCustom
-      ? 'Відмічай тільки те, що потрібно'
-      : 'Типові модулі вже обрані — можеш змінити'
+    if (titleEl) titleEl.textContent = 'Вибери модулі'
+    if (hintEl)  hintEl.textContent  = 'Відмічай тільки те, що потрібно'
 
     modGrid.innerHTML = BIZ_MODULES.map(m => `
       <div class="nav-biz-mod-item ${selectedMods.has(m.id) ? 'checked' : ''}"
@@ -570,29 +640,9 @@ function renderSwitcher(switcher, businesses, profile, user, sidebar) {
     step1.style.display = 'block'
   })
 
-  switcher.querySelector('#nav-biz-form-save')?.addEventListener('click', async () => {
-    const name    = switcher.querySelector('#nav-biz-name-inp').value.trim()
-    const modules = ['dashboard', ...Array.from(selectedMods)]
-
-    const saveBtn = switcher.querySelector('#nav-biz-form-save')
-    saveBtn.disabled = true
-    saveBtn.textContent = '…'
-    try {
-      const profession = selectedNiche === 'custom' ? null : selectedNiche
-      const ref  = await addDoc(collection(db, 'users', user.uid, 'businesses'), {
-        name, profession, modules, createdAt: serverTimestamp(),
-      })
-      businesses = [...businesses, { id: ref.id, name, profession, modules }]
-      form.style.display = 'none'
-      renderSwitcher(switcher, businesses, profile, user, sidebar)
-      showNavToast(`Бізнес "${name}" створено`)
-    } catch (err) {
-      console.error(err)
-      showNavToast('Помилка створення')
-    } finally {
-      saveBtn.disabled = false
-      saveBtn.textContent = 'Створити'
-    }
+  switcher.querySelector('#nav-biz-form-save')?.addEventListener('click', () => {
+    const name = switcher.querySelector('#nav-biz-name-inp').value.trim()
+    saveBusiness(name, selectedNiche, selectedMods, switcher.querySelector('#nav-biz-form-save'))
   })
 }
 

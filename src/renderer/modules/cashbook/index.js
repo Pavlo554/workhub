@@ -70,6 +70,10 @@ function injectStyles() {
     .cb-badge { display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:5px; font-size:11px; font-weight:600; text-transform:uppercase; }
     .cb-badge.pko { background:rgba(52,211,153,.12); color:#34D399; }
     .cb-badge.rko { background:rgba(239,68,68,.1); color:#EF4444; }
+    .cb-pay-badge { display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:5px; font-size:11px; font-weight:600; background:rgba(255,255,255,.06); color:var(--text-muted,#8B97B0); }
+    .cb-pay-cash     { background:rgba(52,211,153,.1); color:#34D399; }
+    .cb-pay-terminal { background:rgba(79,142,247,.1); color:#4F8EF7; }
+    .cb-pay-transfer { background:rgba(167,139,250,.1); color:#A78BFA; }
     .cb-income  { color:#34D399; font-weight:600; }
     .cb-expense { color:#EF4444; font-weight:600; }
     .cb-balance { color:var(--text-primary,#F1F5F9); font-weight:600; }
@@ -107,6 +111,13 @@ function injectStyles() {
 // ── Categories ────────────────────────────────────────────────────────────
 const PKO_CATS = ['Виручка від продажу', 'Оплата від клієнта', 'Аванс', 'Повернення коштів', 'Інше']
 const RKO_CATS = ['Зарплата', 'Аванс', 'Господарські витрати', 'Матеріали', 'Послуги', 'Канцтовари', 'Витрати на відрядження', 'Інше']
+
+// ── Payment methods ─────────────────────────────────────────────────────────
+const PAY_METHODS = {
+  cash:     { label: 'Готівка',    iconName: 'cashbook' },
+  terminal: { label: 'Термінал',   iconName: 'bank' },
+  transfer: { label: 'Контрагент', iconName: 'building' },
+}
 
 // ── Main render ────────────────────────────────────────────────────────────
 export async function render(container) {
@@ -172,15 +183,22 @@ export async function render(container) {
       const dayEntries = grouped[date]
       const dayIncome  = dayEntries.filter(e => e.type === 'pko').reduce((s, e) => s + (e.amount || 0), 0)
       const dayExpense = dayEntries.filter(e => e.type === 'rko').reduce((s, e) => s + (e.amount || 0), 0)
-      rows += `<tr class="cb-day-row"><td colspan="7">📅 ${fmtDate(date)} · Надходження: ${fmt(dayIncome)} · Видатки: ${fmt(dayExpense)}</td></tr>`
+      rows += `<tr class="cb-day-row"><td colspan="8">📅 ${fmtDate(date)} · Надходження: ${fmt(dayIncome)} · Видатки: ${fmt(dayExpense)}</td></tr>`
       for (const e of dayEntries) {
         runBalance += e.type === 'pko' ? (e.amount || 0) : -(e.amount || 0)
+        const pm = PAY_METHODS[e.paymentMethod || 'cash'] || PAY_METHODS.cash
+        const pmKey = e.paymentMethod || 'cash'
         rows += `
           <tr>
             <td><span class="cb-doc-num">${e.docNum || '—'}</span></td>
             <td><span class="cb-badge ${e.type}">${e.type === 'pko' ? 'ПКО' : 'РКО'}</span></td>
             <td>${e.counterparty || '—'}</td>
-            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.description || '—'}</td>
+            <td><span class="cb-pay-badge cb-pay-${pmKey}">${icon(pm.iconName, 11)} ${pm.label}</span></td>
+            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+              ${e.description || '—'}
+              ${e.vatIncluded ? `<span class="cb-pay-badge" style="background:rgba(79,142,247,.1);color:#4F8EF7;margin-left:4px">ПДВ ${fmt(e.vatAmount)}</span>` : ''}
+              ${e.exciseIncluded ? `<span class="cb-pay-badge" style="background:rgba(245,158,11,.1);color:#F59E0B;margin-left:4px">Акциз ${fmt(e.exciseAmount)}</span>` : ''}
+            </td>
             <td class="cb-income">${e.type === 'pko' ? fmt(e.amount) : '—'}</td>
             <td class="cb-expense">${e.type === 'rko' ? fmt(e.amount) : '—'}</td>
             <td><span class="cb-balance" style="color:${runBalance >= 0 ? '#34D399' : '#EF4444'}">${fmt(runBalance)}</span>
@@ -237,7 +255,7 @@ export async function render(container) {
           ` : `
             <table class="cb-table">
               <thead><tr>
-                <th>№ Документа</th><th>Тип</th><th>Контрагент</th>
+                <th>№ Документа</th><th>Тип</th><th>Контрагент</th><th>Спосіб оплати</th>
                 <th>Призначення</th><th>Прихід</th><th>Видаток</th><th>Залишок</th>
               </tr></thead>
               <tbody>${rows}</tbody>
@@ -289,10 +307,29 @@ export async function render(container) {
           <label>Контрагент (від кого / кому)</label>
           <input id="cb-counterparty" placeholder="${isIncome ? 'Від кого отримано' : 'Кому видано'}">
         </div>
-        <div class="cb-field">
-          <label>Сума *</label>
-          <input id="cb-amount" type="number" min="0.01" step="0.01" placeholder="0.00">
+        <div class="cb-modal-row">
+          <div class="cb-field">
+            <label>Сума *</label>
+            <input id="cb-amount" type="number" min="0.01" step="0.01" placeholder="0.00">
+          </div>
+          <div class="cb-field">
+            <label>Спосіб оплати</label>
+            <select id="cb-paymethod">
+              ${Object.entries(PAY_METHODS).map(([k, m]) => `<option value="${k}">${m.label}</option>`).join('')}
+            </select>
+          </div>
         </div>
+        <div class="cb-modal-row">
+          <div class="cb-field" style="display:flex;align-items:center;gap:8px;margin-top:18px">
+            <input type="checkbox" id="cb-vat" style="width:auto">
+            <label for="cb-vat" style="margin:0;cursor:pointer">Сума включає ПДВ 20%</label>
+          </div>
+          <div class="cb-field" style="display:flex;align-items:center;gap:8px;margin-top:18px">
+            <input type="checkbox" id="cb-excise" style="width:auto">
+            <label for="cb-excise" style="margin:0;cursor:pointer">Сума включає Акциз 5%</label>
+          </div>
+        </div>
+        <div class="cb-field" id="cb-tax-preview" style="display:none;background:var(--bg-primary,#0F1117);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--text-muted,#8B97B0)"></div>
         <div class="cb-field">
           <label>Підстава / Категорія</label>
           <select id="cb-cat">
@@ -313,12 +350,36 @@ export async function render(container) {
     `
     document.body.appendChild(overlay)
 
+    function updateTaxPreview() {
+      const amount   = parseFloat(overlay.querySelector('#cb-amount').value) || 0
+      const vatOn    = overlay.querySelector('#cb-vat').checked
+      const exciseOn = overlay.querySelector('#cb-excise').checked
+      const prev = overlay.querySelector('#cb-tax-preview')
+      if (!vatOn && !exciseOn) { prev.style.display = 'none'; return }
+      const vatAmount    = vatOn    ? Math.round(amount * 20 / 120 * 100) / 100 : 0
+      const exciseAmount = exciseOn ? Math.round(amount * 5  / 105 * 100) / 100 : 0
+      prev.style.display = 'block'
+      prev.innerHTML = `
+        Сума без податків: <strong>${fmt(amount - vatAmount - exciseAmount)}</strong>
+        ${vatOn    ? `· ПДВ 20%: <strong style="color:#4F8EF7">${fmt(vatAmount)}</strong>` : ''}
+        ${exciseOn ? `· Акциз 5%: <strong style="color:#F59E0B">${fmt(exciseAmount)}</strong>` : ''}
+      `
+    }
+    overlay.querySelector('#cb-amount').addEventListener('input', updateTaxPreview)
+    overlay.querySelector('#cb-vat').addEventListener('change', updateTaxPreview)
+    overlay.querySelector('#cb-excise').addEventListener('change', updateTaxPreview)
+
     overlay.querySelector('#cb-cancel').addEventListener('click', () => overlay.remove())
     overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove() })
     overlay.querySelector('#cb-save').addEventListener('click', async () => {
       const amount = parseFloat(overlay.querySelector('#cb-amount').value)
       const date   = overlay.querySelector('#cb-date').value
       if (!date || !amount || amount <= 0) { alert('Введіть дату та суму'); return }
+
+      const vatOn    = overlay.querySelector('#cb-vat').checked
+      const exciseOn = overlay.querySelector('#cb-excise').checked
+      const vatAmount    = vatOn    ? Math.round(amount * 20 / 120 * 100) / 100 : 0
+      const exciseAmount = exciseOn ? Math.round(amount * 5  / 105 * 100) / 100 : 0
 
       const btn = overlay.querySelector('#cb-save')
       btn.textContent = 'Збереження...'
@@ -327,12 +388,17 @@ export async function render(container) {
       try {
         await addDoc(colRef(), {
           type,
-          docNum:       overlay.querySelector('#cb-docnum').value,
+          docNum:        overlay.querySelector('#cb-docnum').value,
           date,
-          counterparty: overlay.querySelector('#cb-counterparty').value.trim(),
-          category:     overlay.querySelector('#cb-cat').value,
-          description:  overlay.querySelector('#cb-desc').value.trim(),
+          counterparty:  overlay.querySelector('#cb-counterparty').value.trim(),
+          paymentMethod: overlay.querySelector('#cb-paymethod').value,
+          category:      overlay.querySelector('#cb-cat').value,
+          description:   overlay.querySelector('#cb-desc').value.trim(),
           amount,
+          vatIncluded:    vatOn,
+          vatAmount,
+          exciseIncluded: exciseOn,
+          exciseAmount,
           createdAt: serverTimestamp(),
         })
         overlay.remove()

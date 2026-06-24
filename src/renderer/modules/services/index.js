@@ -29,6 +29,7 @@ export async function render(container) {
 
   let services   = []
   let categories = []
+  let catsSeedChecked = false
   let editId     = null
   let editCatId  = null
   let selectedId = null
@@ -161,13 +162,15 @@ export async function render(container) {
     try {
       const snap = await getDocs(collection(db, ...base, 'services_cats'))
       categories = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-      // Auto-seed defaults on first run
-      if (categories.length === 0) {
+      // Auto-seed defaults only on the very first load — not after the user
+      // intentionally deletes their last category (that should stay empty)
+      if (categories.length === 0 && !catsSeedChecked) {
         const refs = await Promise.all(
           DEFAULT_CATS.map(c => addDoc(collection(db, ...base, 'services_cats'), { ...c, createdAt: serverTimestamp() }))
         )
         categories = DEFAULT_CATS.map((c, i) => ({ id: refs[i].id, ...c }))
       }
+      catsSeedChecked = true
     } catch { categories = [] }
   }
 

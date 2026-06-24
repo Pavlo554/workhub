@@ -5,6 +5,7 @@ import { getProfessionConfig } from '../../../core/profession-config.js'
 import { navigate } from '../../../core/router.js'
 import { icon } from '../../utils/icons.js'
 import { collection, getDocs } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
+import { getSubscriptionHistory, SOURCE_LABEL } from '../../services/subscription-history.js'
 
 export async function render(container) {
   injectStyles()
@@ -181,6 +182,7 @@ export async function render(container) {
             <button class="pf-upgrade-btn" id="pf-btn-upgrade2">
               ${profile?.plan === 'free' ? `${icon('upgrade', 14)} Оновити до PRO` : `${icon('settings', 14)} Керувати підпискою`}
             </button>
+            <button class="pf-link" id="pf-btn-sub-history" style="margin-top:10px">${icon('timer', 13)} Історія підписки</button>
           </div>
 
         </div>
@@ -201,6 +203,42 @@ export async function render(container) {
   container.querySelector('#pf-btn-upgrade')?.addEventListener('click', () => navigate('subscribe'))
   container.querySelector('#pf-btn-upgrade2')?.addEventListener('click', () => navigate('subscribe'))
   container.querySelector('#pf-btn-edit')?.addEventListener('click', () => navigate('settings'))
+
+  container.querySelector('#pf-btn-sub-history')?.addEventListener('click', async () => {
+    const history = await getSubscriptionHistory(user.uid)
+    const modal = document.createElement('div')
+    modal.className = 'pf-overlay'
+    const PLAN_LABEL = { free: 'FREE', pro: 'PRO', business: 'BUSINESS' }
+    modal.innerHTML = `
+      <div class="pf-modal" style="max-width:440px">
+        <div class="pf-modal-head">
+          <h2>${icon('timer', 16)} Історія підписки</h2>
+          <button class="pf-modal-close" id="sh-close">${icon('x', 14)}</button>
+        </div>
+        <div class="pf-modal-body" style="gap:8px">
+          ${history.length ? history.map(h => {
+            const date = h.createdAt?.toDate?.()?.toLocaleString('uk-UA') || '—'
+            return `
+              <div class="pf-sub-hist-row">
+                <div style="display:flex;align-items:center;gap:6px">
+                  <strong>${PLAN_LABEL[h.plan] || h.plan}</strong>
+                  ${h.previousPlan && h.previousPlan !== h.plan ? `<span style="font-size:11px;color:var(--text-muted)">з ${PLAN_LABEL[h.previousPlan] || h.previousPlan}</span>` : ''}
+                </div>
+                <div style="font-size:12px;color:var(--text-muted)">${SOURCE_LABEL[h.source] || h.source}${h.months ? ` · ${h.months} міс` : ''}</div>
+                <div style="font-size:11px;color:var(--text-muted)">${date}</div>
+              </div>`
+          }).join('') : `<div style="text-align:center;color:var(--text-muted);padding:20px 0">Історія ще порожня</div>`}
+        </div>
+        <div class="pf-modal-foot">
+          <button class="pf-upgrade-btn" id="sh-done" style="width:100%">Закрити</button>
+        </div>
+      </div>`
+    document.body.appendChild(modal)
+    const close = () => modal.remove()
+    modal.querySelector('#sh-close').addEventListener('click', close)
+    modal.querySelector('#sh-done').addEventListener('click', close)
+    modal.addEventListener('click', e => { if (e.target === modal) close() })
+  })
 }
 
 // ── Bar chart (CSS-based, no canvas) ─────────────────────
@@ -368,6 +406,16 @@ function injectStyles() {
   style.id = 'pf-styles'
   style.textContent = `
   .pf-page { padding:28px 32px; max-width:1300px; display:flex; flex-direction:column; gap:20px; }
+
+  /* ── Subscription history modal ── */
+  .pf-overlay { position:fixed; inset:0; background:rgba(0,0,0,.6); backdrop-filter:blur(4px); display:flex; align-items:center; justify-content:center; z-index:1000; padding:24px; }
+  .pf-modal { background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-xl); width:100%; box-shadow:var(--shadow-xl); max-height:80vh; display:flex; flex-direction:column; overflow:hidden; }
+  .pf-modal-head { display:flex; align-items:center; justify-content:space-between; padding:20px 22px 0; flex-shrink:0; }
+  .pf-modal-close { width:30px; height:30px; border-radius:8px; color:var(--text-muted); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .pf-modal-close:hover { background:var(--accent-red-dim); color:var(--accent-red); }
+  .pf-modal-body { padding:16px 22px; display:flex; flex-direction:column; overflow-y:auto; }
+  .pf-modal-foot { padding:14px 22px 22px; flex-shrink:0; }
+  .pf-sub-hist-row { display:flex; flex-direction:column; gap:3px; padding:10px 12px; background:var(--bg-tertiary); border-radius:var(--radius-md); }
   .pf-skel { background:var(--bg-tertiary); border-radius:var(--radius-md); animation:pf-pulse 1.4s infinite; }
   .pf-avatar-skel { width:64px; height:64px; border-radius:50%; }
   @keyframes pf-pulse { 0%,100%{opacity:1} 50%{opacity:.4} }

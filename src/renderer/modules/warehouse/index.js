@@ -10,6 +10,7 @@ const CATS = [
   { id: 'tools',     label: 'Інструменти',iconName: 'tool',      color: '#F59E0B' },
   { id: 'products',  label: 'Товари',     iconName: 'warehouse', color: '#34D399' },
   { id: 'equipment', label: 'Обладнання', iconName: 'cpu',       color: '#A78BFA' },
+  { id: 'digital',   label: 'Цифрові продукти', iconName: 'monitor', color: '#38BDF8' },
   { id: 'other',     label: 'Інше',       iconName: 'briefcase', color: '#94A3B8' },
 ]
 
@@ -84,7 +85,7 @@ export async function render(container) {
           </div>
           <div class="wh-kpi">
             <div class="wh-kpi-icon" style="color:#F87171">${icon('x-circle', 18)}</div>
-            <div class="wh-kpi-val" style="color:${items.filter(i=>(i.qty||0)===0).length>0?'#F87171':'var(--text-primary)'}">${items.filter(i=>(i.qty||0)===0).length}</div>
+            <div class="wh-kpi-val" style="color:${items.filter(i=>!(i.category==='digital'&&i.saleType==='copy')&&(i.qty||0)===0).length>0?'#F87171':'var(--text-primary)'}">${items.filter(i=>!(i.category==='digital'&&i.saleType==='copy')&&(i.qty||0)===0).length}</div>
             <div class="wh-kpi-label">${t('warehouse.out_of_stock')}</div>
           </div>
         </div>
@@ -107,8 +108,9 @@ export async function render(container) {
             <tbody>
               ${filtered.map(item => {
                 const cat = CATS.find(c => c.id === item.category) || CATS.at(-1)
-                const isLow = item.minQty > 0 && (item.qty || 0) <= item.minQty
-                const isEmpty = (item.qty || 0) === 0
+                const isUnlimited = item.category === 'digital' && item.saleType === 'copy'
+                const isLow = !isUnlimited && item.minQty > 0 && (item.qty || 0) <= item.minQty
+                const isEmpty = !isUnlimited && (item.qty || 0) === 0
                 return `
                   <tr class="${isEmpty ? 'wh-row-empty' : isLow ? 'wh-row-low' : ''}">
                     <td>
@@ -118,18 +120,25 @@ export async function render(container) {
                       </div>
                       ${item.description ? `<div class="wh-item-desc">${item.description}</div>` : ''}
                       ${item.sku ? `<div class="wh-item-desc">SKU: ${item.sku}</div>` : ''}
+                      ${item.category === 'digital' ? `<div class="wh-item-desc">${item.saleType === 'license' ? '🔑 Підключення (одноразово)' : '♾️ Копія (необмежено)'}</div>` : ''}
                     </td>
                     <td><span class="wh-cat-badge" style="color:${cat.color};background:${cat.color}15">${icon(cat.iconName, 11)} ${cat.label}</span></td>
                     <td>
                       <div class="wh-qty-cell">
-                        <span class="wh-qty ${isEmpty?'wh-qty-empty':isLow?'wh-qty-low':''}">${item.qty || 0} ${item.unit || 'шт'}</span>
+                        ${isUnlimited
+                          ? `<span class="wh-qty">∞</span>`
+                          : `<span class="wh-qty ${isEmpty?'wh-qty-empty':isLow?'wh-qty-low':''}">${item.qty || 0}${item.unit ? ' ' + item.unit : ''}</span>`}
                         ${isLow && !isEmpty ? '<span class="wh-low-badge">↓ Мало</span>' : ''}
                         ${isEmpty ? `<span class="wh-empty-badge">${icon('x', 10)} Нема</span>` : ''}
                       </div>
                     </td>
-                    <td>${item.price ? `₴${Number(item.price).toLocaleString('uk-UA')}` : '—'}</td>
-                    <td><strong>${item.price ? '₴' + ((item.qty||0) * item.price).toLocaleString('uk-UA') : '—'}</strong></td>
-                    <td style="font-size:12px;color:var(--text-muted)">${item.supplier || '—'}</td>
+                    <td>
+                      ${item.price ? `₴${Number(item.price).toLocaleString('uk-UA')}` : '—'}
+                      ${item.vatIncluded    ? `<span class="wh-tax-badge" style="background:rgba(79,142,247,.1);color:#4F8EF7">ПДВ</span>` : ''}
+                      ${item.exciseIncluded ? `<span class="wh-tax-badge" style="background:rgba(245,158,11,.1);color:#F59E0B">Акциз</span>` : ''}
+                    </td>
+                    <td><strong>${item.price ? '₴' + (isUnlimited ? item.price : (item.qty||0) * item.price).toLocaleString('uk-UA') : '—'}</strong></td>
+                    <td style="font-size:12px;color:var(--text-muted)">${item.category === 'digital' ? (item.link ? `<a href="${item.link}" target="_blank" style="color:#4F8EF7;text-decoration:none">🔗 Посилання</a>` : '—') : (item.supplier || '—')}</td>
                     <td>
                       <div class="wh-row-btns">
                         <button class="wh-rb wh-edit" data-id="${item.id}">${icon('pencil', 13)}</button>
@@ -214,17 +223,36 @@ export async function render(container) {
           <div class="wh-modal-body">
             <div class="wh-field"><label>Назва *</label><input id="wh-f-name" class="wh-input" type="text" placeholder="Назва товару..."></div>
             <div class="wh-form-row">
-              <div class="wh-field"><label>Категорія</label><select id="wh-f-cat" class="wh-input">${CATS.map(c=>`<option value="${c.id}">${c.icon} ${c.label}</option>`).join('')}</select></div>
-              <div class="wh-field"><label>Одиниця</label><input id="wh-f-unit" class="wh-input" type="text" placeholder="шт, кг, л..."></div>
+              <div class="wh-field"><label>Категорія</label><select id="wh-f-cat" class="wh-input">${CATS.map(c=>`<option value="${c.id}">${c.label}</option>`).join('')}</select></div>
+              <div class="wh-field" id="wh-unit-row"><label>Одиниця</label><input id="wh-f-unit" class="wh-input" type="text" placeholder="шт, кг, л..."></div>
             </div>
-            <div class="wh-form-row">
+            <div class="wh-form-row" id="wh-qty-row">
               <div class="wh-field"><label>Кількість</label><input id="wh-f-qty" class="wh-input" type="number" min="0" placeholder="0"></div>
               <div class="wh-field"><label>Мін. залишок</label><input id="wh-f-min" class="wh-input" type="number" min="0" placeholder="0"></div>
             </div>
-            <div class="wh-form-row">
-              <div class="wh-field"><label>Ціна за одиницю</label><input id="wh-f-price" class="wh-input" type="number" min="0" placeholder="0.00"></div>
-              <div class="wh-field"><label>Постачальник</label><input id="wh-f-supplier" class="wh-input" type="text" placeholder="Назва постачальника..."></div>
+            <div class="wh-field" id="wh-saletype-row" style="display:none">
+              <label>Тип продажу</label>
+              <select id="wh-f-saletype" class="wh-input">
+                <option value="copy">Копія — продаю необмежену кількість раз</option>
+                <option value="license">Підключення — одноразовий продаж, без повторного</option>
+              </select>
             </div>
+            <div class="wh-form-row">
+              <div class="wh-field"><label id="wh-price-label">Ціна за одиницю</label><input id="wh-f-price" class="wh-input" type="number" min="0" placeholder="0.00"></div>
+              <div class="wh-field" id="wh-supplier-row"><label>Постачальник</label><input id="wh-f-supplier" class="wh-input" type="text" placeholder="Назва постачальника..."></div>
+            </div>
+            <div class="wh-field" id="wh-link-row" style="display:none"><label>Посилання на товар</label><input id="wh-f-link" class="wh-input" type="text" placeholder="https://..."></div>
+            <div class="wh-form-row" id="wh-tax-row">
+              <div class="wh-field" style="display:flex;align-items:center;gap:8px;margin-top:18px">
+                <input type="checkbox" id="wh-f-vat" style="width:auto">
+                <label for="wh-f-vat" style="margin:0;cursor:pointer">Ціна включає ПДВ 20%</label>
+              </div>
+              <div class="wh-field" style="display:flex;align-items:center;gap:8px;margin-top:18px">
+                <input type="checkbox" id="wh-f-excise" style="width:auto">
+                <label for="wh-f-excise" style="margin:0;cursor:pointer">Підакцизний товар (Акциз 5%)</label>
+              </div>
+            </div>
+            <div class="wh-field" id="wh-tax-preview" style="display:none;background:var(--bg-primary,#0F1117);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--text-muted,#8B97B0)"></div>
             <div class="wh-field"><label>Опис</label><input id="wh-f-desc" class="wh-input" type="text" placeholder="Короткий опис..."></div>
           </div>
           <div class="wh-modal-foot">
@@ -237,12 +265,32 @@ export async function render(container) {
     attachEvents()
   }
 
+  function toggleQtyFields() {
+    const isDigital = container.querySelector('#wh-f-cat').value === 'digital'
+    container.querySelector('#wh-qty-row').style.display       = isDigital ? 'none' : 'grid'
+    container.querySelector('#wh-saletype-row').style.display  = isDigital ? 'block' : 'none'
+    container.querySelector('#wh-unit-row').style.display      = isDigital ? 'none' : 'block'
+    container.querySelector('#wh-supplier-row').style.display  = isDigital ? 'none' : 'block'
+    container.querySelector('#wh-tax-row').style.display       = isDigital ? 'none' : 'grid'
+    container.querySelector('#wh-link-row').style.display      = isDigital ? 'block' : 'none'
+    container.querySelector('#wh-price-label').textContent     = isDigital ? 'Ціна' : 'Ціна за одиницю'
+    if (isDigital) {
+      container.querySelector('#wh-f-vat').checked = false
+      container.querySelector('#wh-f-excise').checked = false
+      updateTaxPreview()
+    }
+  }
+
   function attachEvents() {
     container.querySelector('#wh-add').addEventListener('click', () => openModal())
+    container.querySelector('#wh-f-cat').addEventListener('change', toggleQtyFields)
     container.querySelector('#wh-modal-close').addEventListener('click', closeModal)
     container.querySelector('#wh-modal-cancel').addEventListener('click', closeModal)
     container.querySelector('#wh-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal() })
     container.querySelector('#wh-modal-save').addEventListener('click', save)
+    container.querySelector('#wh-f-price').addEventListener('input', updateTaxPreview)
+    container.querySelector('#wh-f-vat').addEventListener('change', updateTaxPreview)
+    container.querySelector('#wh-f-excise').addEventListener('change', updateTaxPreview)
     container.querySelector('#wh-search').addEventListener('input', e => { search = e.target.value; rerender() })
     container.querySelectorAll('.wh-pill').forEach(b => b.addEventListener('click', () => { activeCat = b.dataset.cat; rerender() }))
     container.querySelectorAll('.wh-edit').forEach(b => b.addEventListener('click', () => openModal(items.find(i => i.id === b.dataset.id))))
@@ -532,8 +580,30 @@ export async function render(container) {
     container.querySelector('#wh-f-price').value    = item?.price    ?? ''
     container.querySelector('#wh-f-supplier').value = item?.supplier || ''
     container.querySelector('#wh-f-desc').value     = item?.description || ''
+    container.querySelector('#wh-f-vat').checked    = !!item?.vatIncluded
+    container.querySelector('#wh-f-excise').checked = !!item?.exciseIncluded
+    container.querySelector('#wh-f-saletype').value = item?.saleType || 'copy'
+    container.querySelector('#wh-f-link').value     = item?.link     || ''
+    toggleQtyFields()
+    updateTaxPreview()
     container.querySelector('#wh-modal').style.display = 'flex'
     setTimeout(() => container.querySelector('#wh-f-name').focus(), 50)
+  }
+
+  function updateTaxPreview() {
+    const price    = parseFloat(container.querySelector('#wh-f-price').value) || 0
+    const vatOn    = container.querySelector('#wh-f-vat').checked
+    const exciseOn = container.querySelector('#wh-f-excise').checked
+    const prev = container.querySelector('#wh-tax-preview')
+    if (!vatOn && !exciseOn) { prev.style.display = 'none'; return }
+    const vatAmount    = vatOn    ? Math.round(price * 20 / 120 * 100) / 100 : 0
+    const exciseAmount = exciseOn ? Math.round(price * 5  / 105 * 100) / 100 : 0
+    prev.style.display = 'block'
+    prev.innerHTML = `
+      Ціна без податків: <strong>₴${(price - vatAmount - exciseAmount).toLocaleString('uk-UA',{minimumFractionDigits:2})}</strong>
+      ${vatOn    ? `· ПДВ 20%: <strong style="color:#4F8EF7">₴${vatAmount.toLocaleString('uk-UA',{minimumFractionDigits:2})}</strong>` : ''}
+      ${exciseOn ? `· Акциз 5%: <strong style="color:#F59E0B">₴${exciseAmount.toLocaleString('uk-UA',{minimumFractionDigits:2})}</strong>` : ''}
+    `
   }
 
   function closeModal() {
@@ -546,16 +616,26 @@ export async function render(container) {
     if (!name) return
     const btn = container.querySelector('#wh-modal-save')
     btn.disabled = true; btn.textContent = '...'
+    const category = container.querySelector('#wh-f-cat').value
+    const isDigital = category === 'digital'
+    const saleType  = container.querySelector('#wh-f-saletype').value
+
     const data = {
       name,
-      category:    container.querySelector('#wh-f-cat').value,
-      unit:        container.querySelector('#wh-f-unit').value.trim() || 'шт',
-      qty:         Number(container.querySelector('#wh-f-qty').value) || 0,
-      minQty:      Number(container.querySelector('#wh-f-min').value) || 0,
+      category,
+      unit:        isDigital ? null : (container.querySelector('#wh-f-unit').value.trim() || 'шт'),
+      qty:         isDigital ? (saleType === 'license' ? 1 : null) : (Number(container.querySelector('#wh-f-qty').value) || 0),
+      minQty:      isDigital ? 0 : (Number(container.querySelector('#wh-f-min').value) || 0),
+      saleType:    isDigital ? saleType : null,
+      link:        isDigital ? (container.querySelector('#wh-f-link').value.trim() || null) : null,
       price:       Number(container.querySelector('#wh-f-price').value) || 0,
-      supplier:    container.querySelector('#wh-f-supplier').value.trim() || null,
+      supplier:    isDigital ? null : (container.querySelector('#wh-f-supplier').value.trim() || null),
       description: container.querySelector('#wh-f-desc').value.trim() || null,
+      vatIncluded:    isDigital ? false : container.querySelector('#wh-f-vat').checked,
+      exciseIncluded: isDigital ? false : container.querySelector('#wh-f-excise').checked,
     }
+    data.vatAmount    = data.vatIncluded    ? Math.round(data.price * 20 / 120 * 100) / 100 : 0
+    data.exciseAmount = data.exciseIncluded ? Math.round(data.price * 5  / 105 * 100) / 100 : 0
     try {
       if (editItem) await updateDoc(doc(db, ...base, 'warehouse', editItem.id), { ...data, updatedAt: serverTimestamp() })
       else await addDoc(collection(db, ...base, 'warehouse'), { ...data, createdAt: serverTimestamp() })
@@ -605,6 +685,7 @@ function injectStyles() {
     .wh-item-name { font-weight:600; }
     .wh-item-desc { font-size:11px; color:var(--text-muted); }
     .wh-cat-badge { font-size:11px; font-weight:700; padding:3px 9px; border-radius:var(--radius-full); }
+    .wh-tax-badge { display:inline-block; font-size:10px; font-weight:700; padding:1px 6px; border-radius:5px; margin-left:5px; }
     .wh-qty-cell { display:flex; align-items:center; gap:6px; }
     .wh-qty { font-weight:700; }
     .wh-qty-low { color:#F59E0B; }
