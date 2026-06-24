@@ -1,13 +1,17 @@
 // src/renderer/pages/admin/index.js
 import { db } from '../../services/firebase.js'
-import { getCurrentUser, getUserProfile, updateProfileCache } from '../../services/auth.js'
-import { navigate } from '../../../core/router.js'
+import { getCurrentUser, getUserProfile, updateProfileCache, startImpersonation } from '../../services/auth.js'
+import { navigate, invalidateRoute } from '../../../core/router.js'
 import {
   collection, collectionGroup, getDocs, getDoc, doc, setDoc,
   updateDoc, deleteDoc, serverTimestamp, query, orderBy, where, limit, addDoc, arrayUnion, writeBatch
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 import { icon } from '../../utils/icons.js'
 import { wbConfirm, wbAlert } from '../../utils/dialogs.js'
+import { uploadToCloudinary } from '../../services/cloudinary.js'
+import { ONLINE_THRESHOLD_MS } from '../../services/presence.js'
+import { logSubscriptionChange, getSubscriptionHistory, SOURCE_LABEL } from '../../services/subscription-history.js'
+import { getLoginEvents } from '../../services/device-tracking.js'
 
 const PLAN_META = {
   free:     { label: 'FREE',     color: '#94A3B8', price: 0 },
@@ -23,6 +27,7 @@ const TABS = [
   { id: 'notifications',  iconName: 'bell',         label: 'Новини' },
   { id: 'errors',         iconName: 'alert-triangle', label: 'Помилки' },
 ]
+const ADMIN_TAB = { id: 'admins', iconName: 'shield', label: 'Адміни' }
 
 const TICKET_TYPE_META = {
   bug:     { label: 'Bug Report', color: '#F87171', bg: 'rgba(248,113,113,.12)', iconName: 'x-circle' },
@@ -43,11 +48,50 @@ const TICKET_PRIORITY_META = {
   critical: { label: 'Критич.',  color: '#F87171' },
 }
 
+// Показує екран запиту 6-значного TOTP-коду. Повертає true якщо код вірний.
+async function show2faGate(container, user) {
+  return new Promise(resolve => {
+    container.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:70vh;gap:16px">
+        <div style="color:var(--text-muted)">${icon('lock', 48)}</div>
+        <div style="font-size:18px;font-weight:700">Двофакторна автентифікація</div>
+        <div style="font-size:13px;color:var(--text-muted)">Введіть код із Google Authenticator / Authy</div>
+        <input id="g2fa-code" type="text" maxlength="6" placeholder="123456"
+          style="font-family:monospace;font-size:22px;letter-spacing:6px;text-align:center;width:180px;padding:10px;background:var(--bg-secondary);border:1.5px solid var(--border);border-radius:10px;color:var(--text-primary)">
+        <div id="g2fa-err" style="color:#F87171;font-size:12px;min-height:16px"></div>
+        <button class="btn btn-primary" id="g2fa-submit">Підтвердити</button>
+        <button class="btn btn-secondary" id="g2fa-back">← Назад</button>
+      </div>`
+    const input = container.querySelector('#g2fa-code')
+    const errEl = container.querySelector('#g2fa-err')
+    setTimeout(() => input.focus(), 50)
+
+    async function trySubmit() {
+      const code = input.value.trim()
+      if (!/^\d{6}$/.test(code)) { errEl.textContent = 'Введіть 6 цифр'; return }
+      try {
+        const { db } = await import('../../services/firebase.js')
+        const { doc, getDoc } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js')
+        const { verifyTotpCode } = await import('../../services/totp.js')
+        const snap = await getDoc(doc(db, 'twoFactorSecrets', user.uid))
+        if (!snap.exists()) { errEl.textContent = '2FA не налаштовано коректно'; resolve(true); return }
+        const ok = await verifyTotpCode(snap.data().secret, code)
+        if (!ok) { errEl.textContent = 'Невірний код'; return }
+        sessionStorage.setItem('wh-2fa-verified-' + user.uid, '1')
+        resolve(true)
+      } catch (err) { errEl.textContent = 'Помилка: ' + err.message }
+    }
+    container.querySelector('#g2fa-submit').addEventListener('click', trySubmit)
+    container.querySelector('#g2fa-back').addEventListener('click', () => { resolve(false); navigate('dashboard') })
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') trySubmit() })
+  })
+}
+
 export async function render(container) {
   const user    = getCurrentUser()
   const profile = await getUserProfile(user.uid)
 
-  if (!profile?.isAdmin) {
+  if (!profile?.isAdmin && !profile?.isOwner) {
     container.innerHTML = `
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60vh;gap:16px">
         <div style="color:var(--text-muted)">${icon('alert-triangle', 48)}</div>
@@ -59,16 +103,44 @@ export async function render(container) {
     return
   }
 
+  // ── 2FA gate (раз на сесію) ────────────────────────────────
+  if (profile?.totpEnabled && !sessionStorage.getItem('wh-2fa-verified-' + user.uid)) {
+    const passed = await show2faGate(container, user)
+    if (!passed) return
+  }
+
   injectStyles()
 
-  let activeTab  = 'overview'
+  const isOwner = profile?.isOwner === true
+  let myRole = null
+  if (!isOwner && profile?.adminRoleId) {
+    try {
+      const roleSnap = await getDoc(doc(db, 'adminRoles', profile.adminRoleId))
+      if (roleSnap.exists()) myRole = { id: roleSnap.id, ...roleSnap.data() }
+    } catch {}
+  }
+  // Owner бачить усе. Звичайний admin без ролі — лише Огляд (безпечний дефолт),
+  // доки Owner не видасть конкретні права через вкладку "Адміни".
+  const myAllowedTabs = isOwner
+    ? TABS.map(t => t.id)
+    : (myRole?.allowedTabs?.length ? myRole.allowedTabs : ['overview'])
+
+  const visibleTabs = [
+    ...TABS.filter(t => myAllowedTabs.includes(t.id)),
+    ...(isOwner ? [ADMIN_TAB] : []),
+  ]
+
+  let activeTab  = visibleTabs[0]?.id || 'overview'
   let allUsers   = []
   let allPayments = []
   let allAnnouncements = []
   let allTickets  = []
+  let allRoles    = []
+  let allTemplates = []
   let payFilter   = 'pending'
   let ticketTypeFilter   = 'all'
   let ticketStatusFilter = 'all'
+  let selectedUids = new Set()
 
   container.innerHTML = `
     <div class="adm-page">
@@ -79,14 +151,21 @@ export async function render(container) {
           <p class="adm-subtitle">WorkHub · Управління системою</p>
         </div>
         <div class="adm-header-right">
+          <div class="adm-global-search">
+            ${icon('search', 13)}
+            <input type="text" id="adm-global-search-inp" placeholder="Пошук за UID або email…" autocomplete="off">
+          </div>
           <button class="adm-refresh-btn" id="adm-refresh">↻ Оновити</button>
-          <span class="adm-badge">${icon('clients', 13)} ${profile.name || user.email}</span>
+          ${isOwner ? `<button class="adm-refresh-btn" id="adm-backup-btn">${icon('download', 13)} Бекап бази</button>` : ''}
+          <span class="adm-badge">${icon('clients', 13)} ${profile.name || user.email} ${isOwner ? '· OWNER' : ''}</span>
         </div>
       </div>
 
+      <div id="owner-bootstrap-banner"></div>
+
       <div class="adm-tabs" id="adm-tabs">
-        ${TABS.map(t => `
-          <button class="adm-tab ${t.id === 'overview' ? 'active' : ''}" data-tab="${t.id}">
+        ${visibleTabs.map(t => `
+          <button class="adm-tab ${t.id === activeTab ? 'active' : ''}" data-tab="${t.id}">
             <span class="adm-tab-icon">${icon(t.iconName, 14)}</span> ${t.label}
           </button>
         `).join('')}
@@ -132,6 +211,14 @@ export async function render(container) {
             <div class="adm-card-title">${icon('globe', 15)} Ніші користувачів</div>
             <div id="niche-breakdown"></div>
           </div>
+          <div class="adm-card adm-card-wide">
+            <div class="adm-card-title">${icon('bar-chart', 15)} Використання модулів</div>
+            <div id="module-usage-breakdown"></div>
+          </div>
+          <div class="adm-card adm-card-wide">
+            <div class="adm-card-title">${icon('refresh', 15)} Retention — % користувачів що повертаються</div>
+            <div id="retention-breakdown"></div>
+          </div>
         </div>
       </div>
 
@@ -155,6 +242,13 @@ export async function render(container) {
           </select>
           <button class="adm-btn adm-btn-ghost" id="export-csv-btn">⬇ CSV</button>
           <span class="adm-count-label" id="users-count-label"></span>
+        </div>
+        <div class="adm-bulk-bar" id="adm-bulk-bar" style="display:none">
+          <span id="adm-bulk-count">0 вибрано</span>
+          <button class="adm-action-btn adm-btn-ban" id="bulk-ban-btn">Бан</button>
+          <button class="adm-action-btn adm-btn-revoke" id="bulk-plan-btn">Забрати план</button>
+          <button class="adm-action-btn adm-btn-delete" id="bulk-delete-btn">Видалити</button>
+          <button class="adm-btn adm-btn-ghost adm-btn-sm" id="bulk-clear-btn">Скасувати</button>
         </div>
         <div id="users-table-wrap"><div class="adm-loading-big"></div></div>
       </div>
@@ -183,6 +277,26 @@ export async function render(container) {
             </div>
             <div style="font-size:11px;color:var(--text-muted);margin-top:8px">
               Ключі з кабінету liqpay.ua → Бізнес → Склад. Приватний ключ зберігається в захищеному документі.
+            </div>
+          </div>
+
+          <!-- AIFO -->
+          <div class="adm-pay-config" style="margin-bottom:18px;padding:16px;background:rgba(91,141,239,.06);border:1px solid rgba(91,141,239,.25);border-radius:12px">
+            <div style="font-size:12px;font-weight:700;color:#5B8DEF;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">
+              AIFO — Автоматична оплата карткою
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div>
+                <label style="font-size:12px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">Shop ID</label>
+                <input class="adm-input" id="cfg-aifo-shop" placeholder="123" type="text">
+              </div>
+              <div>
+                <label style="font-size:12px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">Secret Key</label>
+                <input class="adm-input" id="cfg-aifo-secret" placeholder="••••••••" type="password">
+              </div>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:8px">
+              Ключі з кабінету aifo.pro → Інформація про касу. Webhook (для майбутньої авто-активації): https://europe-west1-desktop-crm.cloudfunctions.net/aifoWebhook
             </div>
           </div>
 
@@ -260,6 +374,7 @@ export async function render(container) {
             <button class="adm-pill" data-status="resolved">Вирішені</button>
           </div>
           <span class="adm-count-label" id="ticket-count-label"></span>
+          <button class="adm-btn adm-btn-ghost adm-btn-sm" id="manage-templates-btn" style="margin-left:auto">${icon('pencil', 12)} Шаблони відповідей</button>
         </div>
         <div id="tickets-list"><div class="adm-loading-big"></div></div>
       </div>
@@ -319,8 +434,72 @@ export async function render(container) {
         </div>
       </div>
 
+      <!-- ── ADMINS (Owner only) ── -->
+      ${isOwner ? `
+      <div id="tab-admins" class="adm-panel" style="display:none">
+        <div class="adm-an-grid">
+          <div class="adm-card">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+              <div class="adm-card-title">${icon('shield', 15)} Ролі адмінів</div>
+              <button class="adm-btn adm-btn-primary adm-btn-sm" id="role-new-btn">+ Нова роль</button>
+            </div>
+            <div id="roles-list"><div class="adm-loading"></div></div>
+          </div>
+          <div class="adm-card adm-card-wide">
+            <div class="adm-card-title">${icon('clients', 15)} Адміністратори</div>
+            <div id="admins-list"><div class="adm-loading"></div></div>
+          </div>
+          <div class="adm-card adm-card-wide">
+            <div class="adm-card-title">${icon('timer', 15)} Журнал дій адмінів</div>
+            <div id="admin-logs-list"><div class="adm-loading"></div></div>
+          </div>
+        </div>
+      </div>` : ''}
+
     </div>
   `
+
+  // Початкова видимість панелі відповідно до прав поточного адміна
+  container.querySelectorAll('.adm-panel').forEach(p => {
+    p.style.display = p.id === `tab-${activeTab}` ? '' : 'none'
+  })
+
+  // ── Owner bootstrap (якщо власника системи ще не призначено) ──
+  function renderOwnerBootstrap() {
+    const banner = container.querySelector('#owner-bootstrap-banner')
+    if (!banner) return
+    const hasOwner = allUsers.some(u => u.isOwner === true)
+    if (isOwner || hasOwner) { banner.innerHTML = ''; return }
+    banner.innerHTML = `
+      <div class="adm-pay-config" style="border-color:rgba(167,139,250,.35);background:rgba(167,139,250,.06);margin-bottom:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div>
+            <div style="font-weight:700;margin-bottom:4px">Власник системи ще не призначений</div>
+            <div style="font-size:13px;color:var(--text-muted)">Owner отримує повний доступ до адмінки і може створювати ролі для інших адмінів.</div>
+          </div>
+          <button class="adm-btn adm-btn-primary" id="claim-owner-btn">Стати Owner</button>
+        </div>
+      </div>`
+    banner.querySelector('#claim-owner-btn').addEventListener('click', async () => {
+      if (!await wbConfirm('Призначити себе власником системи? Ця дія дає повний доступ до адмінки.', { okLabel: 'Стати Owner' })) return
+      try {
+        const batch = writeBatch(db)
+        batch.set(doc(db, 'config', 'ownerClaim'), { uid: user.uid, claimedAt: serverTimestamp() })
+        batch.update(doc(db, 'users', user.uid), { isOwner: true })
+        await batch.commit()
+        updateProfileCache(user.uid, { isOwner: true })
+        await addDoc(collection(db, 'adminLogs'), {
+          actorUid: user.uid, actorName: profile.name || user.email,
+          action: 'Призначив себе Owner', targetUid: null, targetName: null, details: null,
+          createdAt: serverTimestamp(),
+        })
+        invalidateRoute('admin')
+        navigate('admin')
+      } catch (err) {
+        showToast('Помилка: ' + (err.message || 'хтось вже став Owner раніше'), 'error')
+      }
+    })
+  }
 
   // ── Tab switching ─────────────────────────────────────────
   container.querySelector('#adm-tabs').addEventListener('click', e => {
@@ -350,6 +529,7 @@ export async function render(container) {
     ticketStatusFilter = btn.dataset.status
     renderTickets()
   })
+  container.querySelector('#manage-templates-btn')?.addEventListener('click', () => openTemplatesModal())
 
   // ── Payment filter pills ───────────────────────────────────
   container.querySelector('#pay-filter-tabs').addEventListener('click', e => {
@@ -367,6 +547,77 @@ export async function render(container) {
   container.querySelector('#status-filter').addEventListener('change', renderUsersTable)
   container.querySelector('#export-csv-btn').addEventListener('click', exportCSV)
   container.querySelector('#adm-refresh').addEventListener('click', loadAndRender)
+  container.querySelector('#adm-backup-btn')?.addEventListener('click', exportBackup)
+
+  // ── Бекап бази одним кліком (Owner) ────────────────────────
+  async function exportBackup() {
+    const btn = container.querySelector('#adm-backup-btn')
+    const origLabel = btn.innerHTML
+    btn.disabled = true; btn.innerHTML = '⏳ Експортую…'
+    try {
+      const collNames = ['users', 'tickets', 'announcements', 'adminLogs', 'adminRoles', 'supportTemplates']
+      const data = { exportedAt: new Date().toISOString(), exportedBy: user.email }
+      for (const name of collNames) {
+        const snap = await getDocs(collection(db, name))
+        data[name] = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      }
+      const json = JSON.stringify(data, (_, v) => v?.toDate ? v.toDate().toISOString() : v, 2)
+      const blob = new Blob([json], { type: 'application/json' })
+      const url  = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `workhub_backup_${new Date().toISOString().slice(0, 10)}.json`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      logAdminAction('Експортував бекап бази', null, null)
+      showToast('Бекап завантажено')
+    } catch (err) {
+      console.error('exportBackup:', err)
+      showToast('Помилка експорту: ' + err.message, 'error')
+    } finally {
+      btn.disabled = false; btn.innerHTML = origLabel
+    }
+  }
+
+  // ── Global search (UID / email) ───────────────────────────
+  const gsBox = container.querySelector('.adm-global-search')
+  const gsInp = container.querySelector('#adm-global-search-inp')
+  gsInp.addEventListener('input', () => {
+    document.getElementById('adm-gsr-dropdown')?.remove()
+    const q = gsInp.value.trim().toLowerCase()
+    if (!q) return
+    const matches = allUsers.filter(u =>
+      u.id.toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q) || (u.name || '').toLowerCase().includes(q)
+    ).slice(0, 8)
+
+    const dd = document.createElement('div')
+    dd.id = 'adm-gsr-dropdown'
+    dd.className = 'adm-global-search-dropdown'
+    dd.innerHTML = matches.length
+      ? matches.map(u => `
+          <div class="adm-gsr-item" data-uid="${u.id}">
+            <div class="adm-avatar" style="width:28px;height:28px;font-size:12px">${(u.name||'?')[0].toUpperCase()}</div>
+            <div style="min-width:0">
+              <div style="font-size:13px;font-weight:600">${u.name || '—'}</div>
+              <div style="font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.email || u.id}</div>
+            </div>
+          </div>`).join('')
+      : `<div class="adm-gsr-empty">Нічого не знайдено</div>`
+    gsBox.appendChild(dd)
+
+    dd.querySelectorAll('.adm-gsr-item').forEach(item => {
+      item.addEventListener('click', () => {
+        gsInp.value = ''
+        dd.remove()
+        openUserDetail(item.dataset.uid)
+      })
+    })
+  })
+  document.addEventListener('click', e => {
+    if (!gsBox.contains(e.target)) document.getElementById('adm-gsr-dropdown')?.remove()
+  })
 
   // ── Notifications ─────────────────────────────────────────
   let notifType = 'info'
@@ -408,10 +659,11 @@ export async function render(container) {
 
   // ── Payment config ────────────────────────────────────────
   async function loadPayCfg() {
-    const [paySnap, keysSnap, tgSnap] = await Promise.all([
+    const [paySnap, keysSnap, tgSnap, aifoSnap] = await Promise.all([
       getDoc(doc(db, 'config', 'payments')),
       getDoc(doc(db, 'config', 'liqpay_keys')),
       getDoc(doc(db, 'config', 'telegram')),
+      getDoc(doc(db, 'config', 'aifo_keys')),
     ])
     if (paySnap.exists()) {
       const d = paySnap.data()
@@ -429,6 +681,11 @@ export async function render(container) {
       container.querySelector('#cfg-tg-token').value  = t.botToken || ''
       container.querySelector('#cfg-tg-chatid').value = t.chatId   || ''
     }
+    if (aifoSnap.exists()) {
+      const a = aifoSnap.data()
+      container.querySelector('#cfg-aifo-shop').value   = a.shopId    || ''
+      container.querySelector('#cfg-aifo-secret').value = a.secretKey || ''
+    }
   }
 
   container.querySelector('#save-pay-cfg').addEventListener('click', async () => {
@@ -437,8 +694,10 @@ export async function render(container) {
     btn.disabled = true
     try {
       const privateKey = container.querySelector('#cfg-liqpay-priv').value.trim()
-      const tgToken    = container.querySelector('#cfg-tg-token').value.trim()
-      const tgChatId   = container.querySelector('#cfg-tg-chatid').value.trim()
+      const tgToken     = container.querySelector('#cfg-tg-token').value.trim()
+      const tgChatId    = container.querySelector('#cfg-tg-chatid').value.trim()
+      const aifoShopId  = container.querySelector('#cfg-aifo-shop').value.trim()
+      const aifoSecret  = container.querySelector('#cfg-aifo-secret').value.trim()
 
       await Promise.all([
         // Public payment config
@@ -448,6 +707,7 @@ export async function render(container) {
           address_btc:     container.querySelector('#cfg-btc').value.trim()  || null,
           address_eth:     container.querySelector('#cfg-eth').value.trim()  || null,
           monobankJar:     container.querySelector('#cfg-mono').value.trim() || null,
+          aifoShopId:      aifoShopId || null,
           updatedAt:       serverTimestamp(),
         }),
         // LiqPay private key — admin-only doc
@@ -457,6 +717,10 @@ export async function render(container) {
         // Telegram config — admin-only doc
         (tgToken || tgChatId)
           ? setDoc(doc(db, 'config', 'telegram'), { botToken: tgToken || null, chatId: tgChatId || null, updatedAt: serverTimestamp() })
+          : Promise.resolve(),
+        // AIFO keys — read by any authenticated user (client-side HMAC signing)
+        (aifoShopId || aifoSecret)
+          ? setDoc(doc(db, 'config', 'aifo_keys'), { shopId: aifoShopId || null, secretKey: aifoSecret || null, updatedAt: serverTimestamp() })
           : Promise.resolve(),
       ])
       st.textContent = 'Збережено'
@@ -468,13 +732,15 @@ export async function render(container) {
 
   // ── Load ──────────────────────────────────────────────────
   async function loadAndRender() {
-    const [users, payments, announcements, tickets] = await Promise.all([
-      loadAllUsers(), loadAllPayments(), loadAnnouncements(), loadAllTickets()
+    const [users, payments, announcements, tickets, roles, templates] = await Promise.all([
+      loadAllUsers(), loadAllPayments(), loadAnnouncements(), loadAllTickets(), loadAdminRoles(), loadTemplates()
     ])
     allUsers         = users
     allPayments      = payments
     allAnnouncements = announcements
     allTickets       = tickets
+    allRoles         = roles
+    allTemplates     = templates
     renderOverview()
     renderAnalytics()
     renderUsersTable()
@@ -482,6 +748,8 @@ export async function render(container) {
     renderTickets()
     renderAnnouncements()
     loadAndRenderErrors()
+    renderOwnerBootstrap()
+    if (isOwner) { renderRolesList(); renderAdminsList(); loadAndRenderAdminLogs() }
 
     sweepExpiredSubscriptions(allUsers).then(count => {
       if (count > 0) {
@@ -491,34 +759,347 @@ export async function render(container) {
     })
   }
 
+  async function loadAdminRoles() {
+    try {
+      const snap = await getDocs(collection(db, 'adminRoles'))
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    } catch (err) { console.error(err); return [] }
+  }
+
+  async function loadTemplates() {
+    try {
+      const snap = await getDocs(collection(db, 'supportTemplates'))
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    } catch (err) { console.error(err); return [] }
+  }
+
+  // ── Шаблони швидких відповідей ──────────────────────────────
+  function openTemplatesModal() {
+    const modal = document.createElement('div')
+    modal.className = 'adm-overlay'
+    const render = () => {
+      modal.innerHTML = `
+        <div class="adm-modal" style="max-width:520px">
+          <div class="adm-modal-head">
+            <h2>${icon('pencil', 18)} Шаблони відповідей</h2>
+            <button class="adm-modal-close" id="tpl-close">${icon('x', 14)}</button>
+          </div>
+          <div class="adm-modal-body" style="gap:10px">
+            <button class="adm-btn adm-btn-primary adm-btn-sm" id="tpl-new-btn">+ Новий шаблон</button>
+            <div id="tpl-list" style="display:flex;flex-direction:column;gap:8px">
+              ${allTemplates.length ? allTemplates.map(t => `
+                <div class="adm-user-row" style="align-items:flex-start">
+                  <div style="flex:1;min-width:0">
+                    <div class="adm-user-name">${esc(t.name)}</div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-top:2px;white-space:pre-wrap">${esc(t.text).slice(0, 120)}${t.text.length > 120 ? '…' : ''}</div>
+                  </div>
+                  <div class="adm-action-btns">
+                    <button class="adm-action-btn" data-action="edit-tpl" data-id="${t.id}">${icon('pencil', 12)}</button>
+                    <button class="adm-action-btn adm-btn-delete" data-action="del-tpl" data-id="${t.id}">${icon('trash', 12)}</button>
+                  </div>
+                </div>`).join('') : '<div class="adm-empty">Шаблонів ще немає</div>'}
+            </div>
+          </div>
+          <div class="adm-modal-foot">
+            <button class="adm-btn adm-btn-ghost" id="tpl-done">Готово</button>
+          </div>
+        </div>`
+      modal.querySelector('#tpl-close').addEventListener('click', () => modal.remove())
+      modal.querySelector('#tpl-done').addEventListener('click', () => modal.remove())
+      modal.querySelector('#tpl-new-btn').addEventListener('click', () => openTemplateEditModal(null, render))
+      modal.querySelectorAll('[data-action="edit-tpl"]').forEach(btn => {
+        btn.addEventListener('click', () => openTemplateEditModal(allTemplates.find(t => t.id === btn.dataset.id), render))
+      })
+      modal.querySelectorAll('[data-action="del-tpl"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!await wbConfirm('Видалити цей шаблон?', { okLabel: 'Видалити', danger: true })) return
+          await deleteDoc(doc(db, 'supportTemplates', btn.dataset.id))
+          allTemplates = allTemplates.filter(t => t.id !== btn.dataset.id)
+          render()
+        })
+      })
+    }
+    render()
+    document.body.appendChild(modal)
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove() })
+  }
+
+  function openTemplateEditModal(existing, onSaved) {
+    const modal = document.createElement('div')
+    modal.className = 'adm-overlay'
+    modal.style.zIndex = '1100'
+    modal.innerHTML = `
+      <div class="adm-modal" style="max-width:460px">
+        <div class="adm-modal-head">
+          <h2>${existing ? 'Редагувати шаблон' : 'Новий шаблон'}</h2>
+          <button class="adm-modal-close" id="tplm-close">${icon('x', 14)}</button>
+        </div>
+        <div class="adm-modal-body" style="gap:12px">
+          <div class="adm-field">
+            <label>Назва</label>
+            <input class="adm-input" id="tplm-name" value="${esc(existing?.name || '')}" placeholder="Напр. Привітання">
+          </div>
+          <div class="adm-field">
+            <label>Текст відповіді</label>
+            <textarea class="adm-input adm-textarea" id="tplm-text" rows="5">${esc(existing?.text || '')}</textarea>
+          </div>
+        </div>
+        <div class="adm-modal-foot">
+          <button class="adm-btn adm-btn-ghost" id="tplm-cancel">Скасувати</button>
+          <button class="adm-btn adm-btn-primary" id="tplm-save">Зберегти</button>
+        </div>
+      </div>`
+    document.body.appendChild(modal)
+    const close = () => modal.remove()
+    modal.querySelector('#tplm-close').addEventListener('click', close)
+    modal.querySelector('#tplm-cancel').addEventListener('click', close)
+    modal.addEventListener('click', e => { if (e.target === modal) close() })
+    modal.querySelector('#tplm-save').addEventListener('click', async () => {
+      const name = modal.querySelector('#tplm-name').value.trim()
+      const text = modal.querySelector('#tplm-text').value.trim()
+      if (!name || !text) { showToast('Заповніть назву і текст', 'error'); return }
+      const btn = modal.querySelector('#tplm-save')
+      btn.disabled = true; btn.textContent = '...'
+      try {
+        if (existing) {
+          await updateDoc(doc(db, 'supportTemplates', existing.id), { name, text })
+          Object.assign(existing, { name, text })
+        } else {
+          const ref = await addDoc(collection(db, 'supportTemplates'), { name, text, createdAt: serverTimestamp() })
+          allTemplates.push({ id: ref.id, name, text })
+        }
+        close(); onSaved()
+      } catch (err) { showToast('Помилка: ' + err.message, 'error'); btn.disabled = false; btn.textContent = 'Зберегти' }
+    })
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // ADMINS TAB (Owner only) — ролі та призначення адмінів
+  // ═══════════════════════════════════════════════════════════
+  function renderRolesList() {
+    const el = container.querySelector('#roles-list')
+    if (!el) return
+    if (!allRoles.length) { el.innerHTML = '<div class="adm-empty">Ролей ще немає</div>'; return }
+    el.innerHTML = allRoles.map(r => `
+      <div class="adm-user-row" data-rid="${r.id}" style="align-items:flex-start">
+        <div style="flex:1;min-width:0">
+          <div class="adm-user-name">${esc(r.name || '—')}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px">
+            ${(r.allowedTabs || []).map(id => TABS.find(t => t.id === id)?.label || id).join(', ') || 'Без доступу'}
+          </div>
+        </div>
+        <div class="adm-action-btns">
+          <button class="adm-action-btn" data-action="edit-role" data-rid="${r.id}">${icon('pencil', 12)}</button>
+          <button class="adm-action-btn adm-btn-delete" data-action="del-role" data-rid="${r.id}">${icon('trash', 12)}</button>
+        </div>
+      </div>`).join('')
+
+    el.querySelectorAll('[data-action="edit-role"]').forEach(btn => {
+      btn.addEventListener('click', () => openRoleModal(allRoles.find(r => r.id === btn.dataset.rid)))
+    })
+    el.querySelectorAll('[data-action="del-role"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const r = allRoles.find(r => r.id === btn.dataset.rid)
+        if (!await wbConfirm('Видалити цю роль? Адміни з цією роллю втратять доступ до вкладок.', { okLabel: 'Видалити', danger: true })) return
+        await deleteDoc(doc(db, 'adminRoles', btn.dataset.rid))
+        allRoles = allRoles.filter(r => r.id !== btn.dataset.rid)
+        renderRolesList(); renderAdminsList()
+        showToast('Роль видалено')
+        logAdminAction('Видалено роль', null, r?.name)
+      })
+    })
+  }
+
+  function openRoleModal(role = null) {
+    const modal = document.createElement('div')
+    modal.className = 'adm-overlay'
+    modal.innerHTML = `
+      <div class="adm-modal" style="max-width:480px">
+        <div class="adm-modal-head">
+          <h2>${icon('shield', 18)} ${role ? 'Редагувати роль' : 'Нова роль'}</h2>
+          <button class="adm-modal-close" id="rm-close">${icon('x', 14)}</button>
+        </div>
+        <div class="adm-modal-body" style="gap:12px">
+          <div class="adm-field">
+            <label>Назва ролі</label>
+            <input class="adm-input" id="rm-name" value="${esc(role?.name || '')}" placeholder="Напр. Support Admin">
+          </div>
+          <div class="adm-field">
+            <label>Доступні вкладки</label>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              ${TABS.map(t => `
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+                  <input type="checkbox" value="${t.id}" ${role?.allowedTabs?.includes(t.id) ? 'checked' : ''}>
+                  ${icon(t.iconName, 13)} ${t.label}
+                </label>`).join('')}
+            </div>
+          </div>
+        </div>
+        <div class="adm-modal-foot">
+          <button class="adm-btn adm-btn-ghost" id="rm-cancel">Скасувати</button>
+          <button class="adm-btn adm-btn-primary" id="rm-save">Зберегти</button>
+        </div>
+      </div>`
+    document.body.appendChild(modal)
+    const close = () => modal.remove()
+    modal.querySelector('#rm-close').addEventListener('click', close)
+    modal.querySelector('#rm-cancel').addEventListener('click', close)
+    modal.addEventListener('click', e => { if (e.target === modal) close() })
+
+    modal.querySelector('#rm-save').addEventListener('click', async () => {
+      const name = modal.querySelector('#rm-name').value.trim()
+      if (!name) { showToast('Введіть назву ролі', 'error'); return }
+      const allowedTabs = [...modal.querySelectorAll('input[type="checkbox"]:checked')].map(c => c.value)
+      const btn = modal.querySelector('#rm-save')
+      btn.disabled = true; btn.textContent = '...'
+      try {
+        if (role) {
+          await updateDoc(doc(db, 'adminRoles', role.id), { name, allowedTabs, updatedAt: serverTimestamp() })
+          Object.assign(role, { name, allowedTabs })
+        } else {
+          const ref = await addDoc(collection(db, 'adminRoles'), { name, allowedTabs, createdAt: serverTimestamp() })
+          allRoles.push({ id: ref.id, name, allowedTabs })
+        }
+        close(); renderRolesList(); renderAdminsList()
+        showToast('Роль збережено')
+        logAdminAction(role ? 'Редаговано роль' : 'Створено роль', null, name)
+      } catch (err) { showToast('Помилка: ' + err.message, 'error'); btn.disabled = false; btn.textContent = 'Зберегти' }
+    })
+  }
+
+  container.querySelector('#role-new-btn')?.addEventListener('click', () => openRoleModal())
+
+  function renderAdminsList() {
+    const el = container.querySelector('#admins-list')
+    if (!el) return
+    const admins = allUsers.filter(u => u.isAdmin || u.isOwner)
+    if (!admins.length) { el.innerHTML = '<div class="adm-empty">Адмінів немає</div>'; return }
+
+    el.innerHTML = `
+      <table class="adm-table">
+        <thead><tr><th>Користувач</th><th>Роль</th><th>Дії</th></tr></thead>
+        <tbody>
+          ${admins.map(u => `
+            <tr>
+              <td>
+                <div class="adm-user-cell">
+                  <div class="adm-avatar">${(u.name || '?')[0].toUpperCase()}</div>
+                  <div>
+                    <div class="adm-user-name">${esc(u.name || '—')} ${u.isOwner ? '<span class="adm-admin-badge" style="background:rgba(167,139,250,.18);color:#A78BFA">OWNER</span>' : ''}</div>
+                    <div class="adm-user-email">${esc(u.email || u.id)}</div>
+                  </div>
+                </div>
+              </td>
+              <td>
+                ${u.isOwner
+                  ? `<span style="color:var(--text-muted);font-size:12px">Повний доступ</span>`
+                  : `<select class="adm-input adm-select adm-role-select" data-uid="${u.id}" style="font-size:12px;padding:6px 10px">
+                      <option value="">— без ролі (тільки Огляд) —</option>
+                      ${allRoles.map(r => `<option value="${r.id}" ${u.adminRoleId === r.id ? 'selected' : ''}>${esc(r.name)}</option>`).join('')}
+                    </select>`
+                }
+              </td>
+              <td>
+                ${!u.isOwner ? `<button class="adm-action-btn adm-btn-revoke" data-uid="${u.id}" data-action="revoke-admin-tab">${icon('shield-off', 13)} Зняти адміна</button>` : ''}
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`
+
+    el.querySelectorAll('.adm-role-select').forEach(sel => {
+      sel.addEventListener('change', async () => {
+        const uid = sel.dataset.uid
+        const roleId = sel.value || null
+        try {
+          await updateDoc(doc(db, 'users', uid), { adminRoleId: roleId })
+          const u = allUsers.find(u => u.id === uid); if (u) u.adminRoleId = roleId
+          showToast('Роль призначено')
+          const roleName = allRoles.find(r => r.id === roleId)?.name || '—'
+          logAdminAction(`Призначено роль "${roleName}"`, uid, u?.name || u?.email)
+        } catch (err) { showToast('Помилка: ' + err.message, 'error') }
+      })
+    })
+
+    el.querySelectorAll('[data-action="revoke-admin-tab"]').forEach(btn => {
+      btn.addEventListener('click', async () => { await revokeAdmin(btn.dataset.uid); renderAdminsList() })
+    })
+  }
+
+  async function loadAndRenderAdminLogs() {
+    const el = container.querySelector('#admin-logs-list')
+    if (!el) return
+    try {
+      const snap = await getDocs(query(collection(db, 'adminLogs'), orderBy('createdAt', 'desc'), limit(200)))
+      const logs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      if (!logs.length) { el.innerHTML = '<div class="adm-empty">Дій ще немає</div>'; return }
+      el.innerHTML = `
+        <table class="adm-table">
+          <thead><tr><th>Адмін</th><th>Дія</th><th>Кого стосується</th><th>Дата</th></tr></thead>
+          <tbody>
+            ${logs.map(l => `
+              <tr>
+                <td style="font-size:13px">${esc(l.actorName || l.actorUid || '—')}</td>
+                <td style="font-size:13px">${esc(l.action || '—')}</td>
+                <td style="font-size:13px;color:var(--text-muted)">${esc(l.targetName || '—')}</td>
+                <td style="font-size:12px;color:var(--text-muted)">${l.createdAt?.toDate?.()?.toLocaleString('uk-UA') || '—'}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>`
+    } catch (err) {
+      el.innerHTML = `<div class="adm-empty" style="color:#F87171">Помилка завантаження: ${err.message}</div>`
+    }
+  }
+
   async function loadAndRenderErrors() {
     const el = container.querySelector('#errors-list')
     if (!el) return
     try {
-      const snap = await getDocs(query(collection(db, 'errors'), orderBy('createdAt', 'desc'), limit(100)))
+      const snap = await getDocs(query(collection(db, 'errors'), orderBy('createdAt', 'desc'), limit(300)))
       const errors = snap.docs.map(d => ({ id: d.id, ...d.data() }))
       if (!errors.length) { el.innerHTML = `<div class="adm-empty">Помилок немає</div>`; return }
-      el.innerHTML = errors.map(e => {
-        const ts = e.createdAt?.toDate?.()?.toLocaleString('uk-UA') || '—'
+
+      // Групуємо однакові помилки (той самий тип+маршрут+повідомлення) — інакше
+      // журнал швидко перетворюється на список ідентичних дублікатів
+      const groups = new Map()
+      for (const e of errors) {
+        const key = `${e.type || 'error'}|${e.route || ''}|${(e.message || '').slice(0, 200)}`
+        if (!groups.has(key)) groups.set(key, { ...e, ids: [e.id], count: 0, lastSeen: e.createdAt, firstSeen: e.createdAt, users: new Set() })
+        const g = groups.get(key)
+        g.count++
+        g.ids.push(e.id)
+        if (e.userEmail) g.users.add(e.userEmail)
+        const ts = e.createdAt?.toMillis?.() ?? 0
+        if (ts > (g.lastSeen?.toMillis?.() ?? 0))  g.lastSeen  = e.createdAt
+        if (ts < (g.firstSeen?.toMillis?.() ?? Infinity)) g.firstSeen = e.createdAt
+      }
+      const grouped = [...groups.values()].sort((a, b) => (b.lastSeen?.toMillis?.() ?? 0) - (a.lastSeen?.toMillis?.() ?? 0))
+
+      el.innerHTML = grouped.map(e => {
+        const ts = e.lastSeen?.toDate?.()?.toLocaleString('uk-UA') || '—'
         const typeColor = e.type === 'uncaught' ? '#F87171' : e.type === 'promise' ? '#FBBF24' : '#94A3B8'
+        const usersList = [...e.users]
         return `
-          <div class="err-row" data-id="${e.id}">
+          <div class="err-row" data-ids="${e.ids.join(',')}">
             <div class="err-top">
               <span class="err-type" style="color:${typeColor}">${e.type || 'error'}</span>
+              ${e.count > 1 ? `<span class="err-count">×${e.count}</span>` : ''}
               <span class="err-route">${e.route || '—'}</span>
               <span class="err-ver">v${e.appVersion || '?'}</span>
               <span class="err-ts">${ts}</span>
-              <button class="err-del" data-id="${e.id}">✕</button>
+              <button class="err-del" data-ids="${e.ids.join(',')}">✕</button>
             </div>
             <div class="err-msg">${e.message || ''}</div>
             ${e.stack ? `<pre class="err-stack">${e.stack.slice(0, 500)}</pre>` : ''}
-            ${e.userEmail ? `<div class="err-user">${icon('user', 12)} ${e.userEmail}</div>` : ''}
+            ${usersList.length ? `<div class="err-user">${icon('user', 12)} ${usersList.slice(0, 3).join(', ')}${usersList.length > 3 ? ` +${usersList.length - 3}` : ''}</div>` : ''}
           </div>`
       }).join('')
 
       el.querySelectorAll('.err-del').forEach(btn => {
         btn.addEventListener('click', async () => {
-          await deleteDoc(doc(db, 'errors', btn.dataset.id))
+          const ids = btn.dataset.ids.split(',')
+          const batch = writeBatch(db)
+          ids.forEach(id => batch.delete(doc(db, 'errors', id)))
+          await batch.commit()
           btn.closest('.err-row').remove()
         })
       })
@@ -568,6 +1149,11 @@ export async function render(container) {
         plan:               'free',
         subscriptionStatus: 'expired',
         updatedAt:          serverTimestamp(),
+      })
+      batch.set(doc(collection(db, 'users', u.id, 'subscriptionHistory')), {
+        plan: 'free', previousPlan: u.plan, source: 'system_expire',
+        amount: null, months: null, changedBy: null, changedByName: null, note: null,
+        createdAt: serverTimestamp(),
       })
       // Оновлюємо локальний масив
       Object.assign(u, { plan: 'free', subscriptionStatus: 'expired' })
@@ -625,8 +1211,22 @@ export async function render(container) {
       return d && d >= todayStart
     }).length
 
+    // Онлайн / активні зараз (heartbeat lastSeenAt)
+    const now = Date.now()
+    const dayAgo = now - 24 * 60 * 60 * 1000
+    const onlineNow = allUsers.filter(u => {
+      const ts = u.lastSeenAt?.toMillis?.()
+      return ts && (now - ts) <= ONLINE_THRESHOLD_MS
+    }).length
+    const activeToday = allUsers.filter(u => {
+      const ts = u.lastSeenAt?.toMillis?.()
+      return ts && ts >= dayAgo
+    }).length
+
     const stats = [
       { svgIcon: icon('clients', 20),     value: total,      label: 'Всього юзерів',         color: '' },
+      { svgIcon: `<span class="adm-online-dot"></span>`, value: onlineNow, label: 'Онлайн зараз', color: 'green' },
+      { svgIcon: icon('bar-chart', 20),   value: activeToday, label: 'Активні за 24г',        color: 'blue' },
       { svgIcon: icon('plus', 20),        value: newToday,   label: 'Нових сьогодні',        color: 'blue' },
       { svgIcon: icon('upgrade', 20),     value: paid,       label: 'Платних підписок',      color: 'purple' },
       { svgIcon: icon('finances', 20),    value: `₴${revenue.toLocaleString()}`, label: 'Місячний дохід', color: 'green' },
@@ -779,6 +1379,68 @@ export async function render(container) {
             <span class="adm-break-count">${count}</span>
           </div>`
       }).join('')
+
+    // Module usage — рахуємо по selectedModules / activeBusinessModules
+    const modLabels = { dashboard:'Дашборд',clients:'Клієнти',projects:'Проекти',invoices:'Рахунки',contracts:'Договори',tasks:'Задачі',timer:'Таймер',kanban:'Kanban',finances:'Фінанси','tax-calendar':'Податки',appointments:'Розклад',services:'Послуги','content-plan':'Контент',accounts:'Акаунти',passwords:'Паролі',notes:'Нотатки',documents:'Документи','api-keys':'API',hr:'Персонал',warehouse:'Склад',reports:'Звіти',support:'Підтримка',portfolio:'Портфоліо',templates:'Шаблони',currency:'Валюти',cashbook:'Каса',bank:'Банк',payroll:'Зарплата',prro:'ПРРО' }
+    const modUsage = {}
+    let usersWithModules = 0
+    allUsers.forEach(u => {
+      const mods = u.selectedModules || u.activeBusinessModules
+      if (!mods?.length) return
+      usersWithModules++
+      mods.forEach(m => { if (m !== 'dashboard') modUsage[m] = (modUsage[m] || 0) + 1 })
+    })
+    const modTotal = usersWithModules || 1
+    container.querySelector('#module-usage-breakdown').innerHTML = Object.entries(modUsage)
+      .sort((a, b) => b[1] - a[1])
+      .map(([m, count]) => {
+        const pct = Math.round((count / modTotal) * 100)
+        return `
+          <div class="adm-break-row">
+            <span class="adm-break-label" style="font-size:12px">${modLabels[m] || m}</span>
+            <div class="adm-break-bar-wrap">
+              <div class="adm-break-bar" style="width:${pct}%;background:#34D399"></div>
+            </div>
+            <span class="adm-break-count">${count} <span style="color:var(--text-muted)">(${pct}%)</span></span>
+          </div>`
+      }).join('') || '<div class="adm-empty">Немає даних</div>'
+
+    // Retention — % юзерів кожного "віку" (тижні з реєстрації) що досі активні
+    // (lastSeenAt дотягнувся до цього тижня). Heartbeat пише lastSeenAt раз/хв
+    // доки застосунок відкритий, тож це проксі "повернувся в застосунок".
+    const WEEK_MS = 7 * 24 * 60 * 60 * 1000
+    const nowMs = Date.now()
+    const usersWithDates = allUsers
+      .map(u => ({ created: u.createdAt?.toMillis?.(), lastSeen: u.lastSeenAt?.toMillis?.() }))
+      .filter(u => u.created)
+
+    const retentionWeeks = [1, 2, 3, 4, 6, 8].map(week => {
+      const eligible = usersWithDates.filter(u => nowMs - u.created >= week * WEEK_MS)
+      const retained = eligible.filter(u => u.lastSeen && u.lastSeen - u.created >= week * WEEK_MS)
+      return { week, pct: eligible.length ? Math.round((retained.length / eligible.length) * 100) : null, total: eligible.length }
+    })
+
+    const retEl = container.querySelector('#retention-breakdown')
+    if (!usersWithDates.some(u => u.lastSeen)) {
+      retEl.innerHTML = `<div class="adm-empty">Дані ще накопичуються (потрібен час роботи heartbeat-трекера)</div>`
+    } else {
+      retEl.innerHTML = `
+        <div class="adm-ret-chart">
+          ${retentionWeeks.map(r => `
+            <div class="adm-ret-col" title="${r.total} користувачів старші за ${r.week} тиж.">
+              <div class="adm-ret-bar-wrap">
+                <div class="adm-ret-bar" style="height:${r.pct === null ? 0 : Math.max(r.pct, 2)}%">
+                  ${r.pct !== null ? `<div class="adm-ret-tip">${r.pct}%</div>` : ''}
+                </div>
+              </div>
+              <div class="adm-ret-label">${r.pct === null ? '—' : `тиж. ${r.week}`}</div>
+            </div>
+          `).join('')}
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:10px">
+          % користувачів, які відкривали застосунок через N тижнів після реєстрації (з тих, хто вже стільки існує)
+        </div>`
+    }
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -805,6 +1467,7 @@ export async function render(container) {
     container.querySelector('#users-table-wrap').innerHTML = `
       <table class="adm-table">
         <thead><tr>
+          <th><input type="checkbox" class="adm-row-checkbox" id="bulk-select-all"></th>
           <th>Користувач</th><th>Бізнес / ніша</th><th>План</th>
           <th>Підписка до</th><th>Реєстрація</th><th>Дії</th>
         </tr></thead>
@@ -816,11 +1479,16 @@ export async function render(container) {
             const _expiryDate = _rawExpiry ? (_rawExpiry?.toDate ? _rawExpiry.toDate() : new Date(_rawExpiry)) : null
             const subEnd = _expiryDate && !isNaN(_expiryDate) ? _expiryDate.toLocaleDateString('uk-UA') : '—'
             const banned = u.isBanned
+            const isOnline = u.lastSeenAt?.toMillis?.() && (Date.now() - u.lastSeenAt.toMillis()) <= ONLINE_THRESHOLD_MS
             return `
               <tr class="${banned ? 'adm-row-banned' : ''}" data-uid="${u.id}" style="cursor:pointer">
+                <td><input type="checkbox" class="adm-row-checkbox bulk-row-cb" data-uid="${u.id}" ${selectedUids.has(u.id) ? 'checked' : ''}></td>
                 <td>
                   <div class="adm-user-cell">
-                    <div class="adm-avatar ${banned ? 'adm-avatar-banned' : ''}">${(u.name || '?')[0].toUpperCase()}</div>
+                    <div style="position:relative">
+                      <div class="adm-avatar ${banned ? 'adm-avatar-banned' : ''}">${(u.name || '?')[0].toUpperCase()}</div>
+                      ${isOnline ? `<span class="adm-online-dot" style="position:absolute;bottom:-2px;right:-2px;border:2px solid var(--bg-secondary)"></span>` : ''}
+                    </div>
                     <div>
                       <div class="adm-user-name">${u.name || '—'} ${u.isAdmin ? '<span class="adm-admin-badge">Admin</span>' : ''} ${banned ? '<span class="adm-banned-badge">Banned</span>' : ''}</div>
                       <div class="adm-user-email">${u.email || u.id}</div>
@@ -835,12 +1503,13 @@ export async function render(container) {
                 <td style="font-size:13px">${subEnd}</td>
                 <td style="font-size:13px">${regD}</td>
                 <td>
-                  <div class="adm-action-btns" onclick="event.stopPropagation()">
+                  <div class="adm-action-btns">
                     <button class="adm-action-btn" data-uid="${u.id}" data-plan="${u.plan||'free'}" data-action="plan">План</button>
-                    ${u.isAdmin
+                    ${(u.plan && u.plan !== 'free') ? `<button class="adm-action-btn adm-btn-revoke" data-uid="${u.id}" data-action="revoke-plan" title="Забрати план">${icon('x-circle', 13)} Забрати план</button>` : ''}
+                    ${isOwner ? (u.isAdmin
                       ? `<button class="adm-action-btn adm-btn-revoke" data-uid="${u.id}" data-action="revoke-admin" title="Зняти адміна">${icon('shield-off', 13)}</button>`
                       : `<button class="adm-action-btn adm-btn-admin" data-uid="${u.id}" data-action="admin" title="Зробити адміном">${icon('settings', 13)}</button>`
-                    }
+                    ) : ''}
                     <button class="adm-action-btn ${banned ? 'adm-btn-unban' : 'adm-btn-ban'}" data-uid="${u.id}" data-banned="${banned}" data-action="ban">
                       ${banned ? 'Розбан' : 'Бан'}
                     </button>
@@ -854,7 +1523,10 @@ export async function render(container) {
 
     // Row click → detail
     container.querySelectorAll('#users-table-wrap tbody tr').forEach(row => {
-      row.addEventListener('click', () => openUserDetail(row.dataset.uid))
+      row.addEventListener('click', e => {
+        if (e.target.closest('.adm-action-btns') || e.target.closest('.adm-row-checkbox')) return
+        openUserDetail(row.dataset.uid)
+      })
     })
 
     // Action buttons
@@ -863,13 +1535,90 @@ export async function render(container) {
         e.stopPropagation()
         const action = btn.dataset.action
         if (action === 'plan')         openChangePlanModal(btn.dataset.uid, btn.dataset.plan)
+        if (action === 'revoke-plan')  await revokePlan(btn.dataset.uid)
         if (action === 'admin')        await makeAdmin(btn.dataset.uid)
         if (action === 'revoke-admin') await revokeAdmin(btn.dataset.uid)
         if (action === 'ban')          await toggleBan(btn.dataset.uid, btn.dataset.banned === 'true')
         if (action === 'delete')       await deleteUser(btn.dataset.uid)
       })
     })
+
+    // ── Bulk selection ───────────────────────────────────────
+    container.querySelectorAll('.bulk-row-cb').forEach(cb => {
+      cb.addEventListener('change', () => {
+        if (cb.checked) selectedUids.add(cb.dataset.uid)
+        else             selectedUids.delete(cb.dataset.uid)
+        updateBulkBar()
+      })
+    })
+    container.querySelector('#bulk-select-all')?.addEventListener('change', e => {
+      list.forEach(u => { if (e.target.checked) selectedUids.add(u.id); else selectedUids.delete(u.id) })
+      renderUsersTable()
+    })
+    updateBulkBar()
   }
+
+  function updateBulkBar() {
+    const bar = container.querySelector('#adm-bulk-bar')
+    if (!bar) return
+    if (selectedUids.size === 0) { bar.style.display = 'none'; return }
+    bar.style.display = 'flex'
+    container.querySelector('#adm-bulk-count').textContent = `${selectedUids.size} вибрано`
+  }
+
+  container.querySelector('#bulk-clear-btn')?.addEventListener('click', () => {
+    selectedUids.clear(); renderUsersTable()
+  })
+
+  container.querySelector('#bulk-ban-btn')?.addEventListener('click', async () => {
+    const ids = [...selectedUids]
+    if (!await wbConfirm(`Забанити ${ids.length} користувача(ів)?`, { okLabel: 'Забанити', danger: true })) return
+    const batch = writeBatch(db)
+    ids.forEach(uid => batch.update(doc(db, 'users', uid), { isBanned: true, updatedAt: serverTimestamp() }))
+    await batch.commit()
+    ids.forEach(uid => { const u = allUsers.find(u => u.id === uid); if (u) u.isBanned = true })
+    selectedUids.clear()
+    renderUsersTable(); renderOverview()
+    showToast(`Забановано ${ids.length} користувача(ів)`)
+    logAdminAction(`Масовий бан (${ids.length})`, null, ids.join(', '))
+  })
+
+  container.querySelector('#bulk-plan-btn')?.addEventListener('click', async () => {
+    const ids = [...selectedUids]
+    if (!await wbConfirm(`Забрати тарифний план у ${ids.length} користувача(ів)? Усі перейдуть на FREE.`, { okLabel: 'Забрати план', danger: true })) return
+    const batch = writeBatch(db)
+    const prevPlans = {}
+    ids.forEach(uid => {
+      prevPlans[uid] = allUsers.find(u => u.id === uid)?.plan || 'free'
+      batch.update(doc(db, 'users', uid), {
+        plan: 'free', subscriptionEnd: null, subscriptionStatus: 'inactive', updatedAt: serverTimestamp(),
+      })
+      batch.set(doc(collection(db, 'users', uid, 'subscriptionHistory')), {
+        plan: 'free', previousPlan: prevPlans[uid], source: 'revoke',
+        amount: null, months: null, changedBy: user.uid, changedByName: profile.name || user.email, note: null,
+        createdAt: serverTimestamp(),
+      })
+    })
+    await batch.commit()
+    ids.forEach(uid => { const u = allUsers.find(u => u.id === uid); if (u) Object.assign(u, { plan: 'free', subscriptionStatus: 'inactive' }) })
+    selectedUids.clear()
+    renderUsersTable(); renderOverview(); renderAnalytics()
+    showToast(`Плани знято у ${ids.length} користувача(ів)`)
+    logAdminAction(`Масове скидання плану (${ids.length})`, null, ids.join(', '))
+  })
+
+  container.querySelector('#bulk-delete-btn')?.addEventListener('click', async () => {
+    const ids = [...selectedUids]
+    if (!await wbConfirm(`Видалити ${ids.length} акаунт(ів)? Цю дію не можна скасувати.`, { okLabel: 'Видалити', danger: true })) return
+    const batch = writeBatch(db)
+    ids.forEach(uid => batch.delete(doc(db, 'users', uid)))
+    await batch.commit()
+    allUsers = allUsers.filter(u => !ids.includes(u.id))
+    selectedUids.clear()
+    renderUsersTable(); renderOverview()
+    showToast(`Видалено ${ids.length} акаунт(ів)`)
+    logAdminAction(`Масове видалення (${ids.length})`, null, ids.join(', '))
+  })
 
   // ── User detail modal ─────────────────────────────────────
   async function openUserDetail(uid) {
@@ -882,6 +1631,8 @@ export async function render(container) {
       const snap = await getDocs(collection(db, 'users', uid, 'businesses'))
       businesses = snap.docs.map(d => ({ id: d.id, ...d.data() }))
     } catch {}
+    const subHistory = await getSubscriptionHistory(uid)
+    const loginEvents = await getLoginEvents(uid)
 
     const pm = PLAN_META[u.plan || 'free'] || PLAN_META.free
     const regD = u.createdAt?.toDate?.()?.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' }) || '—'
@@ -915,16 +1666,18 @@ export async function render(container) {
             </div>
 
             <div class="adm-detail-actions">
+              ${(isOwner || myAllowedTabs.includes('users')) ? `<button class="adm-btn adm-btn-primary" id="ud-impersonate" style="background:linear-gradient(135deg,#A78BFA,#8B5CF6)">${icon('eye',13)} Відкрити CRM користувача</button>` : ''}
               <button class="adm-btn adm-btn-primary" id="ud-change-plan">${icon('credit-card',13)} Змінити план</button>
+              ${(u.plan && u.plan !== 'free') ? `<button class="adm-btn adm-btn-warning" id="ud-revoke-plan">${icon('x-circle',13)} Забрати план</button>` : ''}
               <button class="adm-btn adm-btn-secondary" id="ud-edit-profile">${icon('edit',13)} Редагувати профіль</button>
               <button class="adm-btn adm-btn-secondary" id="ud-edit-modules">${icon('grid',13)} Редагувати модулі</button>
               <button class="adm-btn ${u.isBanned ? 'adm-btn-success' : 'adm-btn-danger'}" id="ud-ban-btn">
                 ${u.isBanned ? 'Розбанити' : 'Забанити'}
               </button>
-              ${u.isAdmin
+              ${isOwner ? (u.isAdmin
                 ? `<button class="adm-btn adm-btn-warning" id="ud-revoke-admin-btn">${icon('shield-off',13)} Зняти адміна</button>`
                 : `<button class="adm-btn adm-btn-ghost" id="ud-admin-btn">Зробити адміном</button>`
-              }
+              ) : ''}
               <button class="adm-btn adm-btn-ghost" id="ud-reset-onb" title="Скинути онбординг">↺ Скинути онбординг</button>
               <button class="adm-btn adm-btn-danger" id="ud-delete-btn" style="margin-top:4px">${icon('trash',13)} Видалити акаунт</button>
             </div>
@@ -994,6 +1747,41 @@ export async function render(container) {
                   ${metaRow('', 'Статус', `<span style="color:${statusColor}">${statusLabel}</span>`)}
                 </div>`
             })()}
+
+            ${subHistory.length ? `
+            <h3 class="adm-detail-section" style="margin-top:20px">Історія підписки (${subHistory.length})</h3>
+            <div class="adm-sub-history">
+              ${subHistory.map(h => {
+                const hPm = PLAN_META[h.plan] || PLAN_META.free
+                const hDate = h.createdAt?.toDate?.()?.toLocaleString('uk-UA') || '—'
+                return `
+                  <div class="adm-sub-hist-row">
+                    <div style="display:flex;align-items:center;gap:6px">
+                      <span class="adm-plan-pill" style="color:${hPm.color};background:${hPm.color}18;font-size:10px">${hPm.label}</span>
+                      ${h.previousPlan && h.previousPlan !== h.plan ? `<span style="font-size:11px;color:var(--text-muted)">з ${h.previousPlan.toUpperCase()}</span>` : ''}
+                    </div>
+                    <div style="font-size:12px;color:var(--text-muted)">${SOURCE_LABEL[h.source] || h.source}${h.changedByName ? ` · ${esc(h.changedByName)}` : ''}${h.months ? ` · ${h.months} міс` : ''}${h.amount ? ` · ₴${h.amount}` : ''}</div>
+                    <div style="font-size:11px;color:var(--text-muted)">${hDate}</div>
+                  </div>`
+              }).join('')}
+            </div>` : ''}
+
+            ${loginEvents.length ? `
+            <h3 class="adm-detail-section" style="margin-top:20px">Останні входи (${loginEvents.length})</h3>
+            <div class="adm-sub-history">
+              ${loginEvents.map(le => {
+                const leDate = le.createdAt?.toDate?.()?.toLocaleString('uk-UA') || '—'
+                return `
+                  <div class="adm-sub-hist-row" style="${le.isNewDevice ? 'border:1px solid rgba(245,158,11,.3);background:rgba(245,158,11,.06)' : ''}">
+                    <div style="display:flex;align-items:center;gap:6px">
+                      ${le.isNewDevice ? `<span style="font-size:10px;font-weight:700;color:#F59E0B;background:rgba(245,158,11,.15);padding:1px 6px;border-radius:99px">НОВИЙ ПРИСТРІЙ</span>` : ''}
+                      <span style="font-size:12px">${esc(le.platform || '—')}</span>
+                    </div>
+                    <div style="font-size:12px;color:var(--text-muted);font-family:monospace">${esc(le.ip || 'IP невідомий')}</div>
+                    <div style="font-size:11px;color:var(--text-muted)">${leDate}</div>
+                  </div>`
+              }).join('')}
+            </div>` : ''}
           </div>
 
         </div>
@@ -1003,6 +1791,17 @@ export async function render(container) {
     modal.querySelector('#ud-close').addEventListener('click', () => modal.remove())
     modal.addEventListener('click', e => { if (e.target === modal) modal.remove() })
     modal.querySelector('#ud-change-plan')?.addEventListener('click', () => { modal.remove(); openChangePlanModal(uid, u.plan || 'free') })
+    modal.querySelector('#ud-impersonate')?.addEventListener('click', async () => {
+      if (!await wbConfirm(
+        `Відкрити CRM користувача «${u.name || u.email}» у режимі перегляду?\n\nВи побачите і зможете редагувати його дані (клієнти, задачі, рахунки тощо), як він сам.`,
+        { okLabel: 'Відкрити' }
+      )) return
+      modal.remove()
+      startImpersonation(uid, u.name || u.email)
+      await logAdminAction('Відкрив CRM користувача (режим перегляду)', uid, u.name || u.email)
+      window.dispatchEvent(new CustomEvent('impersonate-start'))
+    })
+    modal.querySelector('#ud-revoke-plan')?.addEventListener('click', async () => { modal.remove(); await revokePlan(uid) })
     modal.querySelector('#ud-ban-btn')?.addEventListener('click', async () => { modal.remove(); await toggleBan(uid, u.isBanned) })
     modal.querySelector('#ud-admin-btn')?.addEventListener('click', async () => { modal.remove(); await makeAdmin(uid) })
     modal.querySelector('#ud-revoke-admin-btn')?.addEventListener('click', async () => { modal.remove(); await revokeAdmin(uid) })
@@ -1200,6 +1999,18 @@ export async function render(container) {
     return `<div class="adm-meta-row"><span>${icon}</span><span class="adm-meta-label">${label}</span><span class="adm-meta-val">${val}</span></div>`
   }
 
+  // ── Audit log ────────────────────────────────────────────
+  async function logAdminAction(action, targetUid = null, targetName = null, details = null) {
+    try {
+      await addDoc(collection(db, 'adminLogs'), {
+        actorUid:  user.uid,
+        actorName: profile.name || user.email,
+        action, targetUid, targetName, details,
+        createdAt: serverTimestamp(),
+      })
+    } catch (err) { console.error('logAdminAction:', err) }
+  }
+
   // ── Make admin ────────────────────────────────────────────
   async function makeAdmin(uid) {
     if (!await wbConfirm('Зробити цього користувача адміністратором?', { okLabel: 'Так, зробити адміном' })) return
@@ -1207,6 +2018,7 @@ export async function render(container) {
       await updateDoc(doc(db, 'users', uid), { isAdmin: true })
       const u = allUsers.find(u => u.id === uid); if (u) u.isAdmin = true
       renderUsersTable(); showToast('Права адміна надано')
+      logAdminAction('Призначено адміном', uid, u?.name || u?.email)
     } catch (err) { console.error(err); showToast('Помилка', 'error') }
   }
 
@@ -1218,7 +2030,30 @@ export async function render(container) {
       await updateDoc(doc(db, 'users', uid), { isAdmin: false })
       if (u) u.isAdmin = false
       renderUsersTable(); showToast('Права адміна знято')
+      logAdminAction('Знято права адміна', uid, u?.name || u?.email)
     } catch (err) { console.error(err); showToast('Помилка', 'error') }
+  }
+
+  // ── Revoke plan (downgrade to FREE) ─────────────────────────
+  async function revokePlan(uid) {
+    const u = allUsers.find(u => u.id === uid)
+    if (!await wbConfirm(`Забрати тарифний план у «${u?.name || uid}»? Користувача буде переведено на FREE.`, { okLabel: 'Забрати план', danger: true })) return
+    try {
+      const prevPlan = u?.plan || 'free'
+      const upd = {
+        plan: 'free', subscriptionEnd: null, subscriptionStatus: 'inactive',
+        updatedAt: serverTimestamp(),
+      }
+      await updateDoc(doc(db, 'users', uid), upd)
+      if (u) Object.assign(u, upd)
+      renderUsersTable(); renderOverview(); renderAnalytics()
+      showToast('План знято, переведено на FREE')
+      logAdminAction('Забрано тарифний план', uid, u?.name || u?.email)
+      logSubscriptionChange(uid, {
+        plan: 'free', previousPlan: prevPlan, source: 'revoke',
+        changedBy: user.uid, changedByName: profile.name || user.email,
+      })
+    } catch (err) { console.error(err); showToast('Помилка: ' + err.message, 'error') }
   }
 
   // ── Delete user ───────────────────────────────────────────
@@ -1235,6 +2070,7 @@ export async function render(container) {
       allUsers = allUsers.filter(u => u.id !== uid)
       renderUsersTable(); renderOverview()
       showToast(`Акаунт «${name}» видалено`)
+      logAdminAction('Видалено акаунт', uid, name)
     } catch (err) {
       console.error('deleteUser error:', err)
       showToast(err.message || 'Помилка видалення', 'error')
@@ -1250,6 +2086,7 @@ export async function render(container) {
       const u = allUsers.find(u => u.id === uid); if (u) u.isBanned = !isBanned
       renderUsersTable(); renderOverview()
       showToast(isBanned ? 'Користувача розбановано' : 'Користувача забановано')
+      logAdminAction(isBanned ? 'Розбановано' : 'Забановано', uid, u?.name || u?.email)
     } catch (err) { console.error(err); showToast('Помилка', 'error') }
   }
 
@@ -1325,6 +2162,12 @@ export async function render(container) {
         if (uid === user.uid) updateProfileCache(uid, upd)
         modal.remove(); renderUsersTable(); renderOverview(); renderAnalytics()
         showToast(`План змінено на ${selectedPlan.toUpperCase()}`)
+        logAdminAction(`Змінено план на ${selectedPlan.toUpperCase()}`, uid, u.name || u.email)
+        logSubscriptionChange(uid, {
+          plan: selectedPlan, previousPlan: currentPlan, source: 'admin',
+          months: null, changedBy: user.uid, changedByName: profile.name || user.email,
+          note: modal.querySelector('#cp-reason').value.trim() || null,
+        })
       } catch (err) { console.error(err); btn.disabled = false; btn.textContent = 'Зберегти' }
     })
   }
@@ -1345,7 +2188,7 @@ export async function render(container) {
     el.innerHTML = `
       <table class="adm-table">
         <thead><tr>
-          <th>Користувач</th><th>План</th><th>Сума</th><th>Крипто</th><th>Дата</th><th>ID платежу</th>
+          <th>Користувач</th><th>План</th><th>Термін</th><th>Сума</th><th>Крипто</th><th>Дата</th><th>ID платежу</th>
           <th>${payFilter === 'pending' ? 'Дії' : 'Статус'}</th>
         </tr></thead>
         <tbody>
@@ -1365,6 +2208,7 @@ export async function render(container) {
                   </div>
                 </td>
                 <td><span class="adm-plan-pill" style="color:${pm.color};background:${pm.color}18">${pm.label}</span></td>
+                <td style="font-size:12px;color:var(--text-muted)">${p.months || 1} міс</td>
                 <td><strong>₴${p.amount}</strong></td>
                 <td style="font-family:monospace;font-size:12px;color:var(--text-muted)">${p.cryptoAmount ? `${p.cryptoAmount} ${p.currency||''}` : '—'}</td>
                 <td>${date}</td>
@@ -1388,15 +2232,23 @@ export async function render(container) {
         if (!confirm('Підтвердити платіж і активувати підписку?')) return
         btn.disabled = true; btn.textContent = '...'
         try {
-          const endDate = new Date(); endDate.setMonth(endDate.getMonth() + 1)
+          const p0 = allPayments.find(p => p.id === btn.dataset.pid)
+          const months = p0?.months || 1
+          const endDate = new Date(); endDate.setMonth(endDate.getMonth() + months)
           await Promise.all([
             updateDoc(doc(db, 'users', btn.dataset.uid), { plan: btn.dataset.plan||'pro', subscriptionEnd: endDate.toISOString(), subscriptionStatus: 'active', updatedAt: serverTimestamp() }),
             updateDoc(doc(db, 'users', btn.dataset.uid, 'pendingPayments', btn.dataset.pid), { status: 'approved', approvedAt: serverTimestamp(), approvedBy: user.uid }),
           ])
           const p = allPayments.find(p => p.id === btn.dataset.pid); if (p) p.status = 'approved'
-          const u = allUsers.find(u => u.id === btn.dataset.uid); if (u) { u.plan = btn.dataset.plan||'pro'; u.subscriptionStatus = 'active' }
+          const u = allUsers.find(u => u.id === btn.dataset.uid)
+          const prevPlan = u?.plan || 'free'
+          if (u) { u.plan = btn.dataset.plan||'pro'; u.subscriptionStatus = 'active' }
           renderPayments(); renderOverview(); renderAnalytics()
           showToast('Підписку активовано')
+          logSubscriptionChange(btn.dataset.uid, {
+            plan: btn.dataset.plan || 'pro', previousPlan: prevPlan, source: 'payment',
+            amount: p0?.amount || null, months, changedBy: user.uid, changedByName: profile.name || user.email,
+          })
         } catch (err) { console.error(err); btn.disabled = false; btn.innerHTML = icon('check', 13) + ' Підтвердити' }
       })
     })
@@ -1433,7 +2285,7 @@ export async function render(container) {
       <table class="adm-table">
         <thead><tr>
           <th>Тип</th><th>Заголовок</th><th>Від</th>
-          <th>Пріоритет</th><th>Статус</th><th>Дата</th><th>Відп.</th>
+          <th>Пріоритет</th><th>Статус</th><th>Дата</th><th>Відп.</th><th></th>
         </tr></thead>
         <tbody>
           ${list.map(t => {
@@ -1452,19 +2304,40 @@ export async function render(container) {
                 </td>
                 <td>
                   <div style="font-size:13px">${esc(t.userName || '—')}</div>
-                  <div style="font-size:11px;color:var(--text-muted)">${esc(t.userEmail || '')}</div>
+                  <div style="font-size:11px;color:var(--text-muted)">${esc(t.userEmail || '')} ${t.appVersion ? `· v${esc(t.appVersion)}` : ''}</div>
                 </td>
                 <td style="color:${pm.color};font-size:12px;font-weight:700">● ${pm.label}</td>
                 <td style="color:${sm.color};font-size:12px;font-weight:700">${icon(sm.iconName, 12)} ${sm.label}</td>
                 <td style="font-size:12px">${date}</td>
                 <td style="font-size:12px;color:var(--text-muted)">${replyCnt > 0 ? `<span style="display:inline-flex;align-items:center;gap:3px">${icon('message-circle', 12)} ${replyCnt}</span>` : '—'}</td>
+                <td>
+                  <button class="adm-action-btn adm-btn-delete" data-tid="${t.id}" data-action="del-ticket" title="Видалити заявку">${icon('trash', 12)}</button>
+                </td>
               </tr>`
           }).join('')}
         </tbody>
       </table>`
 
     el.querySelectorAll('tbody tr').forEach(row => {
-      row.addEventListener('click', () => openTicketDetailAdmin(row.dataset.tid))
+      row.addEventListener('click', e => {
+        if (e.target.closest('[data-action="del-ticket"]')) return
+        openTicketDetailAdmin(row.dataset.tid)
+      })
+    })
+
+    el.querySelectorAll('[data-action="del-ticket"]').forEach(btn => {
+      btn.addEventListener('click', async e => {
+        e.stopPropagation()
+        const t = allTickets.find(x => x.id === btn.dataset.tid)
+        if (!await wbConfirm(`Видалити заявку "${t?.title || ''}"? Цю дію не можна скасувати.`, { okLabel: 'Видалити', danger: true })) return
+        try {
+          await deleteDoc(doc(db, 'tickets', btn.dataset.tid))
+          allTickets = allTickets.filter(x => x.id !== btn.dataset.tid)
+          renderTickets()
+          showToast('Заявку видалено')
+          logAdminAction('Видалено заявку підтримки', null, t?.title)
+        } catch (err) { showToast('Помилка: ' + err.message, 'error') }
+      })
     })
   }
 
@@ -1483,6 +2356,7 @@ export async function render(container) {
         <div class="adm-modal-head" style="flex-wrap:wrap;gap:8px">
           <span class="adm-plan-pill" style="color:${tm.color};background:${tm.bg};font-size:12px">${icon(tm.iconName, 12)} ${tm.label}</span>
           <h2 style="font-family:var(--font-display);font-size:17px;font-weight:800;flex:1;min-width:0">${esc(t.title)}</h2>
+          <button class="adm-btn adm-btn-danger adm-btn-sm" id="tad-delete">${icon('trash',12)} Видалити</button>
           <button class="adm-modal-close" id="tad-close">${icon('x', 14)}</button>
         </div>
 
@@ -1490,6 +2364,7 @@ export async function render(container) {
           <span style="color:${sm.color};font-size:12px;font-weight:700">${icon(sm.iconName, 12)} ${sm.label}</span>
           <span style="color:${pm.color};font-size:12px;font-weight:700">● ${pm.label}</span>
           <span style="font-size:12px;color:var(--text-muted)">${esc(t.userName||'—')} · ${esc(t.userEmail||'')}</span>
+          ${t.appVersion ? `<span style="font-size:11px;color:var(--text-muted);background:var(--bg-tertiary);padding:2px 8px;border-radius:99px;font-family:monospace">v${esc(t.appVersion)}</span>` : ''}
           <span style="font-size:12px;color:var(--text-muted)">${date}</span>
           <div style="margin-left:auto;display:flex;gap:6px" id="tad-status-btns">
             ${Object.entries(TICKET_STATUS_META).map(([id, m]) => `
@@ -1503,6 +2378,7 @@ export async function render(container) {
           <div style="background:var(--bg-tertiary);border-radius:var(--radius-lg);padding:14px">
             <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--text-muted)">${esc(t.userName||'Користувач')}</div>
             <div style="font-size:14px;line-height:1.55;white-space:pre-wrap;word-break:break-word">${esc(t.description)}</div>
+            ${(t.attachments||[]).length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">${t.attachments.map(a => `<a href="${a.url}" target="_blank"><img src="${a.url}" style="width:90px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--border)"></a>`).join('')}</div>` : ''}
           </div>
           ${(t.replies || []).map(r => `
             <div style="background:${r.fromAdmin ? 'rgba(79,142,247,.08)' : 'var(--bg-tertiary)'};border:1px solid ${r.fromAdmin ? 'rgba(79,142,247,.2)' : 'var(--border)'};border-radius:var(--radius-lg);padding:14px;${r.fromAdmin ? 'margin-left:24px' : 'margin-right:24px'}">
@@ -1511,14 +2387,23 @@ export async function render(container) {
                 ${r.fromAdmin ? '<span style="font-size:10px;background:rgba(79,142,247,.15);color:var(--accent-blue);padding:1px 6px;border-radius:99px;margin-left:4px">Адмін</span>' : ''}
               </div>
               <div style="font-size:14px;line-height:1.55;white-space:pre-wrap;word-break:break-word">${esc(r.text)}</div>
+              ${(r.attachments||[]).length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${r.attachments.map(a => `<a href="${a.url}" target="_blank"><img src="${a.url}" style="width:90px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--border)"></a>`).join('')}</div>` : ''}
               <div style="font-size:11px;color:var(--text-muted);margin-top:6px">${r.createdAt?.toDate?.()?.toLocaleString('uk-UA') || '—'}</div>
             </div>
           `).join('')}
         </div>
 
         <div class="adm-modal-foot" style="flex-direction:column;gap:10px;align-items:stretch">
-          <textarea class="adm-input adm-textarea" id="tad-reply" placeholder="Написати відповідь користувачеві…" rows="3" style="min-height:70px"></textarea>
+          ${allTemplates.length ? `
+          <select class="adm-input adm-select" id="tad-template-sel" style="font-size:12px">
+            <option value="">— Вставити шаблон відповіді —</option>
+            ${allTemplates.map(tpl => `<option value="${tpl.id}">${esc(tpl.name)}</option>`).join('')}
+          </select>` : ''}
+          <textarea class="adm-input adm-textarea" id="tad-reply" placeholder="Написати відповідь користувачеві… (Ctrl+V щоб вставити скріншот)" rows="3" style="min-height:70px"></textarea>
+          <div id="tad-attach-previews" style="display:flex;flex-wrap:wrap;gap:8px"></div>
           <div style="display:flex;gap:10px;justify-content:flex-end">
+            <input type="file" id="tad-attach-files" multiple accept="image/*" style="display:none">
+            <button type="button" class="adm-btn adm-btn-ghost" id="tad-attach-btn" style="margin-right:auto">${icon('image', 13)} Фото</button>
             <button class="adm-btn adm-btn-ghost" id="tad-cancel">Закрити</button>
             <button class="adm-btn adm-btn-primary" id="tad-send">${icon('send', 14)} Надіслати відповідь</button>
           </div>
@@ -1529,6 +2414,17 @@ export async function render(container) {
     modal.querySelector('#tad-close').addEventListener('click',  () => modal.remove())
     modal.querySelector('#tad-cancel').addEventListener('click', () => modal.remove())
     modal.addEventListener('click', e => { if (e.target === modal) modal.remove() })
+    modal.querySelector('#tad-delete').addEventListener('click', async () => {
+      if (!await wbConfirm(`Видалити заявку "${t.title}"? Цю дію не можна скасувати.`, { okLabel: 'Видалити', danger: true })) return
+      try {
+        await deleteDoc(doc(db, 'tickets', ticketId))
+        allTickets = allTickets.filter(x => x.id !== ticketId)
+        modal.remove()
+        renderTickets()
+        showToast('Заявку видалено')
+        logAdminAction('Видалено заявку підтримки', null, t.title)
+      } catch (err) { showToast('Помилка: ' + err.message, 'error') }
+    })
 
     // Status change
     modal.querySelector('#tad-status-btns').addEventListener('click', async e => {
@@ -1545,15 +2441,68 @@ export async function render(container) {
       } catch (err) { console.error(err) }
     })
 
+    // ── Attach photos to reply ─────────────────────────────────
+    let tadFiles = []
+    function addTadPreview(file) {
+      const wrap = modal.querySelector('#tad-attach-previews')
+      const item = document.createElement('div')
+      item.style.position = 'relative'
+      const reader = new FileReader()
+      reader.onload = e => {
+        item.innerHTML = `
+          <img src="${e.target.result}" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--border)">
+          <button type="button" data-filename="${file.name}" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:#EF4444;color:#fff;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer">${icon('x', 10)}</button>
+        `
+        item.querySelector('button').addEventListener('click', () => {
+          tadFiles = tadFiles.filter(f => f.name !== file.name)
+          item.remove()
+        })
+      }
+      reader.readAsDataURL(file)
+      wrap.appendChild(item)
+    }
+    modal.querySelector('#tad-template-sel')?.addEventListener('change', e => {
+      const tpl = allTemplates.find(t => t.id === e.target.value)
+      if (tpl) {
+        const textarea = modal.querySelector('#tad-reply')
+        textarea.value = textarea.value ? `${textarea.value}\n${tpl.text}` : tpl.text
+        e.target.value = ''
+        textarea.focus()
+      }
+    })
+    modal.querySelector('#tad-attach-btn').addEventListener('click', () => modal.querySelector('#tad-attach-files').click())
+    modal.querySelector('#tad-attach-files').addEventListener('change', e => {
+      Array.from(e.target.files).forEach(file => {
+        if (tadFiles.some(f => f.name === file.name && f.size === file.size)) return
+        tadFiles.push(file)
+        addTadPreview(file)
+      })
+      e.target.value = ''
+    })
+    modal.querySelector('#tad-reply').addEventListener('paste', e => {
+      const items = Array.from(e.clipboardData?.items || [])
+      const imgs  = items.filter(i => i.type.startsWith('image/')).map(i => i.getAsFile()).filter(Boolean)
+      if (!imgs.length) return
+      e.preventDefault()
+      imgs.forEach((file, i) => {
+        const named = new File([file], file.name || `screenshot_${Date.now()}_${i}.png`, { type: file.type })
+        if (tadFiles.some(f => f.name === named.name && f.size === named.size)) return
+        tadFiles.push(named)
+        addTadPreview(named)
+      })
+    })
+
     // Send reply
     modal.querySelector('#tad-send').addEventListener('click', async () => {
       const text = modal.querySelector('#tad-reply').value.trim()
-      if (!text) { modal.querySelector('#tad-reply').focus(); return }
+      if (!text && !tadFiles.length) { modal.querySelector('#tad-reply').focus(); return }
       const btn = modal.querySelector('#tad-send')
       btn.disabled = true; btn.textContent = '...'
       try {
+        const attachments = await Promise.all(tadFiles.map(file => uploadToCloudinary(file)))
         const reply = {
           text,
+          attachments,
           fromAdmin: true,
           authorName: profile.name || user.email,
           createdAt: new Date(),
@@ -1675,6 +2624,16 @@ function injectStyles() {
     .adm-refresh-btn { font-size:13px; font-weight:600; padding:5px 14px; background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-md); cursor:pointer; transition:all .15s; color:var(--text-secondary); }
     .adm-refresh-btn:hover { border-color:var(--accent-blue); color:var(--accent-blue); }
 
+    .adm-global-search { position:relative; display:flex; align-items:center; gap:8px; padding:6px 12px; background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-md); color:var(--text-muted); min-width:240px; }
+    .adm-global-search input { background:none; border:none; outline:none; color:var(--text-primary); font-size:13px; flex:1; min-width:0; }
+    .adm-global-search-dropdown { position:absolute; top:100%; left:0; right:0; margin-top:6px; background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-lg); box-shadow:var(--shadow-xl); z-index:50; max-height:360px; overflow-y:auto; }
+    .adm-gsr-item { display:flex; align-items:center; gap:10px; padding:10px 14px; cursor:pointer; transition:background .15s; }
+    .adm-gsr-item:hover { background:var(--bg-tertiary); }
+    .adm-gsr-empty { padding:14px; font-size:13px; color:var(--text-muted); text-align:center; }
+
+    .adm-bulk-bar { display:flex; align-items:center; gap:10px; padding:10px 14px; margin-bottom:12px; background:rgba(79,142,247,.08); border:1px solid rgba(79,142,247,.25); border-radius:var(--radius-md); font-size:13px; font-weight:600; }
+    .adm-row-checkbox { width:16px; height:16px; cursor:pointer; }
+
     /* Tabs */
     .adm-tabs  { display:flex; gap:4px; margin-bottom:22px; background:var(--bg-secondary); padding:4px; border-radius:var(--radius-md); border:1px solid var(--border); width:fit-content; }
     .adm-tab   { display:flex; align-items:center; gap:6px; padding:7px 18px; border-radius:var(--radius-sm); font-size:13px; font-weight:600; color:var(--text-muted); cursor:pointer; border:none; background:none; transition:all .15s; white-space:nowrap; }
@@ -1682,8 +2641,10 @@ function injectStyles() {
     .adm-tab.active { background:var(--bg-primary); color:var(--text-primary); box-shadow:0 1px 4px rgba(0,0,0,.3); }
 
     /* Stats row */
-    .adm-stats-row  { display:grid; grid-template-columns:repeat(6,1fr); gap:12px; margin-bottom:20px; }
+    .adm-stats-row  { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin-bottom:20px; }
     .adm-stat-card  { background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-lg); padding:18px 16px; }
+    .adm-online-dot { display:inline-block; width:10px; height:10px; border-radius:50%; background:#34D399; box-shadow:0 0 0 0 rgba(52,211,153,.6); animation:adm-pulse 2s infinite; }
+    @keyframes adm-pulse { 0%{box-shadow:0 0 0 0 rgba(52,211,153,.6)} 70%{box-shadow:0 0 0 8px rgba(52,211,153,0)} 100%{box-shadow:0 0 0 0 rgba(52,211,153,0)} }
     .adm-stat-blue   { border-color:rgba(79,142,247,.3); }
     .adm-stat-purple { border-color:rgba(167,139,250,.3); }
     .adm-stat-green  { border-color:rgba(52,211,153,.3); }
@@ -1722,6 +2683,12 @@ function injectStyles() {
     .adm-reg-col   { display:flex; flex-direction:column; align-items:center; flex:1; min-width:14px; }
     .adm-reg-bar   { width:100%; background:linear-gradient(180deg,#4F8EF7,#667eea); border-radius:3px 3px 0 0; min-height:3px; transition:height .3s; }
     .adm-reg-label { font-size:9px; color:var(--text-muted); margin-top:4px; white-space:nowrap; }
+    .adm-ret-chart { display:flex; align-items:flex-end; gap:10px; height:120px; padding-bottom:18px; }
+    .adm-ret-col   { display:flex; flex-direction:column; align-items:center; flex:1; height:100%; }
+    .adm-ret-bar-wrap { flex:1; width:100%; display:flex; align-items:flex-end; }
+    .adm-ret-bar   { width:100%; background:linear-gradient(180deg,#34D399,#10B981); border-radius:5px 5px 0 0; min-height:2px; position:relative; transition:height .5s cubic-bezier(.34,1.56,.64,1); }
+    .adm-ret-tip   { position:absolute; top:-18px; left:50%; transform:translateX(-50%); font-size:11px; font-weight:700; white-space:nowrap; }
+    .adm-ret-label { font-size:11px; color:var(--text-muted); margin-top:6px; }
     .adm-rev-total { font-family:var(--font-display); font-size:32px; font-weight:800; margin-bottom:14px; }
     .adm-conv-ring { position:relative; width:100px; height:100px; margin:8px auto 12px; }
     .adm-ring-svg  { width:100%; height:100%; transform:rotate(-90deg); }
@@ -1826,6 +2793,8 @@ function injectStyles() {
     .adm-detail-meta  { width:100%; margin-top:8px; }
     .adm-meta-row     { display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--border); font-size:12px; }
     .adm-meta-row:last-child { border:none; }
+    .adm-sub-history  { display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+    .adm-sub-hist-row { display:flex; flex-direction:column; gap:3px; padding:8px 10px; background:var(--bg-tertiary); border-radius:var(--radius-md); }
     .adm-meta-label   { color:var(--text-muted); width:70px; flex-shrink:0; }
     .adm-meta-val     { flex:1; text-align:left; font-weight:500; overflow:hidden; text-overflow:ellipsis; }
     .adm-detail-actions { display:flex; flex-direction:column; gap:8px; width:100%; margin-top:8px; }
@@ -1880,6 +2849,7 @@ function injectStyles() {
     .err-row { padding:14px; border:1px solid var(--border); border-radius:10px; margin-bottom:10px; background:var(--bg-secondary); }
     .err-top { display:flex; align-items:center; gap:10px; margin-bottom:6px; font-size:12px; flex-wrap:wrap; }
     .err-type { font-weight:700; text-transform:uppercase; letter-spacing:.05em; }
+    .err-count { font-weight:700; font-size:11px; background:rgba(248,113,113,.15); color:#F87171; padding:1px 7px; border-radius:99px; }
     .err-route { color:var(--text-muted); }
     .err-ver { color:var(--text-muted); }
     .err-ts { color:var(--text-muted); margin-left:auto; }

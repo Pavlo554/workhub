@@ -39,10 +39,13 @@ export async function checkSubscriptionExpiry(uid, profile) {
     return { ...profile, plan: 'free', subscriptionStatus: 'expired' }
   }
 
-  if (daysLeft <= 3) {
-    // Якщо вже показано в цій сесії — не дублюємо
-    if (!sessionStorage.getItem('sub-warning-dismissed')) {
-      showWarningBanner(daysLeft, profile.plan)
+  // Декілька порогів нагадування — чим ближче дата, тим тривожніший вигляд.
+  // Кожен порог має свій ключ "закрито", тож закриття м'якого 7-денного
+  // попередження не приховує критичне 1-денне.
+  if (daysLeft <= 7) {
+    const bucket = daysLeft <= 1 ? 'critical' : daysLeft <= 3 ? 'urgent' : 'info'
+    if (!sessionStorage.getItem(`sub-warning-dismissed-${bucket}`)) {
+      showWarningBanner(daysLeft, profile.plan, bucket)
     }
   }
 
@@ -50,21 +53,30 @@ export async function checkSubscriptionExpiry(uid, profile) {
 }
 
 // ── Warning banner ────────────────────────────────────────
-function showWarningBanner(daysLeft, planName) {
+const BUCKET_STYLE = {
+  info:     { bg: 'linear-gradient(135deg, rgba(79,142,247,.1), rgba(79,142,247,.06))',  border: 'rgba(79,142,247,.28)',  iconColor: '#4F8EF7', btnBg: 'linear-gradient(135deg, #4F8EF7, #3B7DE8)' },
+  urgent:   { bg: 'linear-gradient(135deg, rgba(251,191,36,.1), rgba(245,158,11,.07))',  border: 'rgba(251,191,36,.28)',  iconColor: '#FBBF24', btnBg: 'linear-gradient(135deg, #F59E0B, #D97706)' },
+  critical: { bg: 'linear-gradient(135deg, rgba(239,68,68,.12), rgba(220,38,38,.08))',   border: 'rgba(239,68,68,.32)',   iconColor: '#F87171', btnBg: 'linear-gradient(135deg, #EF4444, #DC2626)' },
+}
+
+function showWarningBanner(daysLeft, planName, bucket = 'urgent') {
   if (document.getElementById('sub-expiry-banner')) return
+  const style = BUCKET_STYLE[bucket] || BUCKET_STYLE.urgent
 
   const banner = document.createElement('div')
   banner.id    = 'sub-expiry-banner'
   banner.className = 'sub-exp-banner'
+  banner.style.background   = style.bg
+  banner.style.borderBottom = `1px solid ${style.border}`
   banner.innerHTML = `
     <div class="sub-exp-inner">
-      <span class="sub-exp-icon">${icon('timer', 15)}</span>
+      <span class="sub-exp-icon" style="color:${style.iconColor}">${icon('timer', 15)}</span>
       <span class="sub-exp-text">
         Підписка <strong>${planName.toUpperCase()}</strong> закінчується
         ${daysLeft === 1 ? '<strong>сьогодні</strong>' : `через <strong>${daysLeft} ${daysWord(daysLeft)}</strong>`}.
         Продовжіть підписку, щоб не втратити доступ до всіх функцій.
       </span>
-      <button class="sub-exp-btn" id="sub-exp-renew">Продовжити підписку</button>
+      <button class="sub-exp-btn" id="sub-exp-renew" style="background:${style.btnBg}">Продовжити підписку</button>
       <button class="sub-exp-close" id="sub-exp-close" title="Закрити">${icon('x', 13)}</button>
     </div>
   `
@@ -78,7 +90,7 @@ function showWarningBanner(daysLeft, planName) {
   banner.querySelector('#sub-exp-close').addEventListener('click', () => {
     banner.style.animation = 'subExpBannerOut .2s forwards'
     setTimeout(() => banner.remove(), 200)
-    sessionStorage.setItem('sub-warning-dismissed', '1')
+    sessionStorage.setItem(`sub-warning-dismissed-${bucket}`, '1')
   })
 }
 

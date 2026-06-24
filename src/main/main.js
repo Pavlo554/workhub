@@ -80,11 +80,11 @@ function appIcon(proc) {
 }
 
 // ── IPC: timer:start ──────────────────────────────────────
+// Відстеження активного вікна (яка програма у фокусі) працює лише на Windows
+// через PowerShell + WinAPI. На Linux/Mac таймер все одно рахує час,
+// просто без розбивки по програмах.
 ipcMain.handle('timer:start', async () => {
-  if (trackerProcess) return { error: 'Already running' }
-
-  const scriptPath = path.join(os.tmpdir(), 'wh-tracker.ps1')
-  fs.writeFileSync(scriptPath, PS_SCRIPT, 'utf8')
+  if (trackingData) return { error: 'Already running' }
 
   trackingData = {
     startTime:    Date.now(),
@@ -95,61 +95,76 @@ ipcMain.handle('timer:start', async () => {
     currentStart: null,
   }
 
-  trackerProcess = spawn('powershell', [
-    '-NoProfile', '-NonInteractive',
-    '-ExecutionPolicy', 'Bypass',
-    '-File', scriptPath,
-  ])
+  if (process.platform === 'win32') {
+    try {
+      const scriptPath = path.join(os.tmpdir(), 'wh-tracker.ps1')
+      fs.writeFileSync(scriptPath, PS_SCRIPT, 'utf8')
 
-  let buffer = ''
+      trackerProcess = spawn('powershell', [
+        '-NoProfile', '-NonInteractive',
+        '-ExecutionPolicy', 'Bypass',
+        '-File', scriptPath,
+      ])
 
-  trackerProcess.stdout.on('data', (chunk) => {
-    buffer += chunk.toString()
-    const lines = buffer.split('\n')
-    buffer = lines.pop()
+      let buffer = ''
 
-    for (const raw of lines) {
-      const line = raw.trim()
-      if (!line || !trackingData) continue
+      trackerProcess.stdout.on('data', (chunk) => {
+        buffer += chunk.toString()
+        const lines = buffer.split('\n')
+        buffer = lines.pop()
 
-      const sep   = line.indexOf('|')
-      const proc  = sep === -1 ? line : line.slice(0, sep)
-      const title = sep === -1 ? ''   : line.slice(sep + 1).trim()
-      const now   = Date.now()
+        for (const raw of lines) {
+          const line = raw.trim()
+          if (!line || !trackingData) continue
 
-      const lp = proc.toLowerCase()
-      if (['powershell', 'cmd', 'conhost', 'workhub', 'electron'].includes(lp)) continue
+          const sep   = line.indexOf('|')
+          const proc  = sep === -1 ? line : line.slice(0, sep)
+          const title = sep === -1 ? ''   : line.slice(sep + 1).trim()
+          const now   = Date.now()
 
-      if (trackingData.currentApp && trackingData.currentApp !== proc) {
-        trackingData.sessions.push({
-          app:      trackingData.currentApp,
-          icon:     trackingData.currentIcon,
-          title:    trackingData.currentTitle || '',
-          name:     friendlyName(trackingData.currentApp),
-          startMs:  trackingData.currentStart,
-          endMs:    now,
-          duration: now - trackingData.currentStart,
-        })
-      }
+          const lp = proc.toLowerCase()
+          if (['powershell', 'cmd', 'conhost', 'workhub', 'electron'].includes(lp)) continue
 
-      if (!trackingData.currentApp || trackingData.currentApp !== proc) {
-        trackingData.currentApp   = proc
-        trackingData.currentTitle = title
-        trackingData.currentIcon  = appIcon(proc)
-        trackingData.currentStart = now
-      }
+          if (trackingData.currentApp && trackingData.currentApp !== proc) {
+            trackingData.sessions.push({
+              app:      trackingData.currentApp,
+              icon:     trackingData.currentIcon,
+              title:    trackingData.currentTitle || '',
+              name:     friendlyName(trackingData.currentApp),
+              startMs:  trackingData.currentStart,
+              endMs:    now,
+              duration: now - trackingData.currentStart,
+            })
+          }
+
+          if (!trackingData.currentApp || trackingData.currentApp !== proc) {
+            trackingData.currentApp   = proc
+            trackingData.currentTitle = title
+            trackingData.currentIcon  = appIcon(proc)
+            trackingData.currentStart = now
+          }
+        }
+      })
+
+      trackerProcess.stderr.on('data', () => {})
+      // Без цього необроблена 'error' (напр. ENOENT на Linux/Mac) валить весь main-процес
+      trackerProcess.on('error', (err) => {
+        console.error('[timer] tracker process error:', err.message)
+        trackerProcess = null
+      })
+      trackerProcess.on('close', () => { trackerProcess = null })
+    } catch (err) {
+      console.error('[timer] Failed to start tracker:', err.message)
+      trackerProcess = null
     }
-  })
-
-  trackerProcess.stderr.on('data', () => {})
-  trackerProcess.on('close', () => { trackerProcess = null })
+  }
 
   return { ok: true, startTime: trackingData.startTime }
 })
 
 // ── IPC: timer:stop ───────────────────────────────────────
 ipcMain.handle('timer:stop', async () => {
-  if (!trackerProcess || !trackingData) return { error: 'Not running' }
+  if (!trackingData) return { error: 'Not running' }
 
   const now = Date.now()
 
@@ -165,8 +180,7 @@ ipcMain.handle('timer:stop', async () => {
     })
   }
 
-  trackerProcess.kill()
-  trackerProcess = null
+  if (trackerProcess) { trackerProcess.kill(); trackerProcess = null }
 
   const totals = {}
   for (const s of trackingData.sessions) {
@@ -373,11 +387,17 @@ ipcMain.handle('docs:delete', async (_, { localPath }) => {
 })
 
 // ── IPC: open-external ────────────────────────────────────────
+// ipcMain.handle('open-external', async (_, url) => {
+//   try { await shell.openExternal(url); return { ok: true } }
+//   catch (e) { return { error: e.message } }
+// })
 ipcMain.handle('open-external', async (_, url) => {
-  try { await shell.openExternal(url); return { ok: true } }
-  catch (e) { return { error: e.message } }
+  try {
+    const u = new NodeURL(url)
+    if (!['https:', 'http:'].includes(u.protocol)) return { error: 'Заборонений протокол' }
+    await shell.openExternal(url); return { ok: true }
+  } catch (e) { return { error: e.message } }
 })
-
 // ── IPC: shop:request (bypasses renderer CSP for store APIs) ──
 const http  = require('http')
 const { URL: NodeURL } = require('url')

@@ -1,6 +1,6 @@
 // src/renderer/modules/invoices/index.js
 import { db } from '../../services/firebase.js'
-import { getCurrentUser, getUserProfile, getActivePathSegments } from '../../services/auth.js'
+import { getCurrentUser, getActiveProfile, getActivePathSegments } from '../../services/auth.js'
 import { checkPlanLimit, showUpgradePrompt } from '../../services/plan-guard.js'
 import { planHasFeature } from '../../../core/permissions.js'
 import { generateInvoicePDF } from './invoice-pdf.js'
@@ -31,7 +31,7 @@ const EXPENSE_CATS = [
 export async function render(container) {
   const user    = getCurrentUser()
   const base    = getActivePathSegments(user.uid)
-  const profile = await getUserProfile(user.uid)
+  const profile = await getActiveProfile(user.uid)
 
   injectStyles()
 
@@ -142,7 +142,10 @@ export async function render(container) {
 
             <div class="field">
               <label>Клієнт *</label>
-              <input id="f-client" type="text" class="input" placeholder="Назва клієнта або компанії" />
+              <select id="f-client-select" class="input">
+                <option value="">— Оберіть клієнта з бази —</option>
+              </select>
+              <input id="f-client" type="text" class="input" placeholder="або введіть назву вручну" style="margin-top:8px" />
               <span class="field-error" id="e-client"></span>
             </div>
 
@@ -188,8 +191,16 @@ export async function render(container) {
 
             <!-- Crypto details (shown when crypto selected) -->
             <div class="field" id="crypto-field" style="display:none">
-              <label>Крипто адреса / TxID</label>
+              <label>Реквізити для оплати</label>
+              <div id="crypto-requisites-box" class="card-requisites-box" style="margin-bottom:10px"></div>
+              <label>Крипто адреса / TxID (можна змінити для цього рахунку)</label>
               <input id="f-crypto-addr" type="text" class="input" placeholder="0x... або TxID" />
+            </div>
+
+            <!-- Card requisites (shown when card selected) -->
+            <div class="field" id="card-field" style="display:none">
+              <label>Реквізити для оплати</label>
+              <div id="card-requisites-box" class="card-requisites-box"></div>
             </div>
 
             <div class="field">
@@ -269,6 +280,7 @@ export async function render(container) {
 
   let invoices      = []
   let expenses      = []
+  let clients       = []
   let editInvId     = null
   let editExpId     = null
   let invFilter     = 'all'
@@ -288,18 +300,58 @@ export async function render(container) {
 
   // ── Payment method toggle ──────────────────────────────────
   container.querySelector('#pay-method-grid').addEventListener('change', e => {
-    container.querySelector('#crypto-field').style.display =
-      e.target.value === 'crypto' ? 'block' : 'none'
+    container.querySelector('#crypto-field').style.display = e.target.value === 'crypto' ? 'block' : 'none'
+    container.querySelector('#card-field').style.display   = e.target.value === 'card'   ? 'block' : 'none'
+    if (e.target.value === 'card')   renderCardRequisites()
+    if (e.target.value === 'crypto') renderCryptoRequisites()
+  })
+
+  function renderCardRequisites() {
+    const box = container.querySelector('#card-requisites-box')
+    if (!profile?.iban && !profile?.bankName && !profile?.taxCode) {
+      box.innerHTML = `<div class="card-req-empty">Реквізити не заповнені — додай їх у "Мій бізнес" → Редагувати, щоб вони підтягувались сюди автоматично.</div>`
+      return
+    }
+    box.innerHTML = `
+      ${profile?.bankName ? `<div class="card-req-row"><span>Банк</span><strong>${profile.bankName}</strong></div>` : ''}
+      ${profile?.iban     ? `<div class="card-req-row"><span>IBAN</span><strong>${profile.iban}</strong></div>` : ''}
+      ${profile?.taxCode  ? `<div class="card-req-row"><span>ІПН/ЄДРПОУ</span><strong>${profile.taxCode}</strong></div>` : ''}
+    `
+  }
+
+  function renderCryptoRequisites() {
+    const box = container.querySelector('#crypto-requisites-box')
+    if (!profile?.cryptoAddress) {
+      box.innerHTML = `<div class="card-req-empty">Адреса кошелька не заповнена — додай її у "Мій бізнес" → Редагувати, щоб вона підтягувалась сюди автоматично.</div>`
+      return
+    }
+    box.innerHTML = `
+      <div class="card-req-row"><span>Тип</span><strong>${profile.cryptoAddrType || profile.cryptoType || 'USDT TRC20'}</strong></div>
+      <div class="card-req-row"><span>Адреса</span><strong style="word-break:break-all">${profile.cryptoAddress}</strong></div>
+    `
+    const addrInput = container.querySelector('#f-crypto-addr')
+    if (!addrInput.value) addrInput.value = profile.cryptoAddress
+  }
+
+  // ── Client select ────────────────────────────────────────────
+  container.querySelector('#f-client-select').addEventListener('change', e => {
+    const c = clients.find(c => c.id === e.target.value)
+    if (c) container.querySelector('#f-client').value = c.name
   })
 
   // ── Load ──────────────────────────────────────────────────
   async function loadAll() {
-    const [invSnap, expSnap] = await Promise.all([
+    const [invSnap, expSnap, cliSnap] = await Promise.all([
       getDocs(query(collection(db, ...base, 'invoices'),  orderBy('date', 'desc'))).catch(() => null),
       getDocs(query(collection(db, ...base, 'expenses'),  orderBy('date', 'desc'))).catch(() => null),
+      getDocs(collection(db, ...base, 'clients')).catch(() => null),
     ])
     invoices = invSnap ? invSnap.docs.map(d => ({ id: d.id, ...d.data() })) : []
     expenses = expSnap ? expSnap.docs.map(d => ({ id: d.id, ...d.data() })) : []
+    clients  = cliSnap ? cliSnap.docs.map(d => ({ id: d.id, ...d.data() })) : []
+    const sel = container.querySelector('#f-client-select')
+    sel.innerHTML = `<option value="">— Оберіть клієнта з бази —</option>` +
+      clients.map(c => `<option value="${c.id}">${c.name}</option>`).join('')
     renderAll()
   }
 
@@ -590,6 +642,7 @@ export async function render(container) {
     container.querySelector('#f-number').value      = inv?.number      || `INV-${String(invoices.length + 1).padStart(3, '0')}`
     container.querySelector('#f-date').value        = inv?.date        || today()
     container.querySelector('#f-client').value      = inv?.client      || ''
+    container.querySelector('#f-client-select').value = inv?.clientId  || ''
     container.querySelector('#f-description').value = inv?.description || ''
     container.querySelector('#f-amount').value      = inv?.amount      || ''
     container.querySelector('#f-status').value      = inv?.status      || 'unpaid'
@@ -599,6 +652,9 @@ export async function render(container) {
     const pm = inv?.payMethod || 'card'
     container.querySelectorAll('input[name="pay-method"]').forEach(r => { r.checked = r.value === pm })
     container.querySelector('#crypto-field').style.display = pm === 'crypto' ? 'block' : 'none'
+    container.querySelector('#card-field').style.display   = pm === 'card'   ? 'block' : 'none'
+    if (pm === 'card')   renderCardRequisites()
+    if (pm === 'crypto') renderCryptoRequisites()
 
     container.querySelectorAll('#inv-modal .field-error').forEach(el => el.textContent = '')
     container.querySelector('#inv-modal').style.display = 'flex'
@@ -637,8 +693,9 @@ export async function render(container) {
     btn.disabled = true; btn.innerHTML = '<div class="spinner"></div>'
 
     const payMethod = container.querySelector('input[name="pay-method"]:checked').value
+    const clientId  = container.querySelector('#f-client-select').value || null
     const data = {
-      number, client, description, amount,
+      number, client, clientId, description, amount,
       status:     container.querySelector('#f-status').value,
       date:       container.querySelector('#f-date').value,
       note:       container.querySelector('#f-note').value.trim() || null,
@@ -943,6 +1000,11 @@ function injectStyles() {
     .amount-input { padding-left:36px !important; font-family:var(--font-display); font-size:18px; font-weight:600; }
     .field label { display:block; font-size:12px; font-weight:600; color:var(--text-secondary); text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px; }
     .field-error  { font-size:12px; color:#EF4444; margin-top:4px; display:block; }
+
+    .card-requisites-box { background:var(--bg-tertiary); border:1px solid var(--border); border-radius:var(--radius-md); padding:12px 14px; }
+    .card-req-row  { display:flex; justify-content:space-between; font-size:13px; padding:4px 0; gap:12px; }
+    .card-req-row span { color:var(--text-muted); }
+    .card-req-empty { font-size:12px; color:var(--text-muted); line-height:1.5; }
   `
   document.head.appendChild(s)
 }

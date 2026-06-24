@@ -194,6 +194,20 @@ export async function render(container) {
             </div>
             <div class="cl-row">
               <div class="field">
+                <label>ЄДРПОУ / ІПН</label>
+                <input id="f-taxcode" type="text" class="input" placeholder="12345678" />
+              </div>
+              <div class="field">
+                <label>Розрахунковий рахунок (IBAN)</label>
+                <input id="f-iban" type="text" class="input" placeholder="UA00 0000 0000 0000 0000 0000 0" />
+              </div>
+            </div>
+            <div class="field">
+              <label>Юридична адреса</label>
+              <input id="f-legaladdr" type="text" class="input" placeholder="м. Київ, вул. ..., буд. ..." />
+            </div>
+            <div class="cl-row">
+              <div class="field">
                 <label>Сайт</label>
                 <input id="f-site" type="url" class="input" placeholder="https://..." />
               </div>
@@ -623,6 +637,9 @@ export async function render(container) {
             ${client.whatsapp ? `<div class="cl-contact-row"><span class="cl-contact-icon">${icon('message-circle', 13)}</span><a href="https://wa.me/${client.whatsapp}" target="_blank" class="cl-link">+${client.whatsapp}</a></div>` : ''}
             ${client.site     ? `<div class="cl-contact-row"><span class="cl-contact-icon">${icon('globe', 13)}</span><a href="${client.site}" target="_blank" class="cl-link">${client.site}</a></div>` : ''}
             ${client.budget   ? `<div class="cl-contact-row"><span class="cl-contact-icon">${icon('finances', 13)}</span><span>${fmtMoney(client.budget)} грн</span></div>` : ''}
+            ${client.taxCode      ? `<div class="cl-contact-row"><span class="cl-contact-icon">${icon('file', 13)}</span><span>ЄДРПОУ/ІПН: ${client.taxCode}</span></div>` : ''}
+            ${client.iban         ? `<div class="cl-contact-row"><span class="cl-contact-icon">${icon('bank', 13)}</span><span>${client.iban}</span></div>` : ''}
+            ${client.legalAddress ? `<div class="cl-contact-row"><span class="cl-contact-icon">${icon('building', 13)}</span><span>${client.legalAddress}</span></div>` : ''}
           </div>
           ${client.note ? `<div class="cl-note-box">${client.note}</div>` : ''}
         </div>
@@ -707,6 +724,9 @@ export async function render(container) {
     container.querySelector('#f-phone').value    = client?.phone    || ''
     container.querySelector('#f-email').value    = client?.email    || ''
     container.querySelector('#f-company').value  = client?.company  || ''
+    container.querySelector('#f-taxcode').value   = client?.taxCode     || ''
+    container.querySelector('#f-iban').value      = client?.iban        || ''
+    container.querySelector('#f-legaladdr').value = client?.legalAddress || ''
     container.querySelector('#f-telegram').value = client?.telegram || ''
     container.querySelector('#f-whatsapp').value = client?.whatsapp || ''
     container.querySelector('#f-site').value     = client?.site     || ''
@@ -746,6 +766,9 @@ export async function render(container) {
       phone:    container.querySelector('#f-phone').value.trim()    || null,
       email:    container.querySelector('#f-email').value.trim()    || null,
       company:  container.querySelector('#f-company').value.trim()  || null,
+      taxCode:      container.querySelector('#f-taxcode').value.trim()   || null,
+      iban:         container.querySelector('#f-iban').value.trim()      || null,
+      legalAddress: container.querySelector('#f-legaladdr').value.trim() || null,
       telegram: container.querySelector('#f-telegram').value.trim().replace(/^@/,'') || null,
       whatsapp: container.querySelector('#f-whatsapp').value.trim().replace(/^\+/,'') || null,
       site:     container.querySelector('#f-site').value.trim()     || null,

@@ -2,6 +2,7 @@
 import { icon }                               from '../../utils/icons.js'
 import { db }                                 from '../../services/firebase.js'
 import { getCurrentUser, getActivePathSegments } from '../../services/auth.js'
+import { invalidateRoute } from '../../../core/router.js'
 import {
   collection, addDoc, getDocs, deleteDoc, doc, updateDoc,
   query, orderBy, where, serverTimestamp,
@@ -13,8 +14,59 @@ const VZ_RATE    = 0.05  // ВЗ (воєнний збір) — з 01.10.2024 с�
 const ESV_RATE   = 0.22  // ЄСВ — нараховується зверху (платить роботодавець)
 const MIN_WAGE   = 8000  // Мінімальна зарплата 2024 (базова ставка ЄСВ)
 
-function calcPayroll(gross, bonus = 0) {
-  const accrual     = gross + bonus
+// Кількість робочих днів у місяці (Пн-Пт, без урахування свят)
+function workingDaysInMonth(year, month) {
+  const daysInMonth = new Date(year, month, 0).getDate()
+  let count = 0
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dow = new Date(year, month - 1, d).getDay()
+    if (dow !== 0 && dow !== 6) count++
+  }
+  return count
+}
+
+// Скільки робочих днів співробітник реально мав відпрацювати в цьому місяці,
+// враховуючи дату прийняття на роботу (startDate) та дату звільнення (dismissalDate).
+// Якщо прийнятий/звільнений в середині місяця — рахує лише ту частину періоду.
+// "YYYY-MM-DD" → local midnight Date. new Date(str) парсить такі рядки як UTC,
+// що через зсув часової зони ламає порівняння з датами, побудованими через
+// new Date(y,m,d) (локальний час) — звідси й "зайва" чи "відсутня" доба.
+function parseLocalDate(s) {
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+function calcWorkedDaysForPeriod(emp, year, month) {
+  const monthStart = new Date(year, month - 1, 1)
+  const monthEnd   = new Date(year, month, 0)
+  let from = monthStart, to = monthEnd
+
+  if (emp?.startDate) {
+    const sd = parseLocalDate(emp.startDate)
+    if (sd > monthEnd) return 0           // ще не прийнятий у цьому періоді
+    if (sd > from) from = sd
+  }
+  if (emp?.dismissalDate) {
+    const dd = parseLocalDate(emp.dismissalDate)
+    if (dd < monthStart) return 0         // вже звільнений до цього періоду
+    if (dd < to) to = dd
+  }
+  if (from > to) return 0
+
+  let count = 0
+  for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
+    const dow = d.getDay()
+    if (dow !== 0 && dow !== 6) count++
+  }
+  return count
+}
+
+function calcPayroll(gross, bonus = 0, workedDays = null, normDays = null) {
+  // Якщо вказано відпрацьовані дні — оклад пропорційно зменшується
+  const baseForPeriod = (workedDays != null && normDays > 0)
+    ? Math.round((gross / normDays) * workedDays * 100) / 100
+    : gross
+  const accrual     = baseForPeriod + bonus
   const pdfo        = Math.round(accrual * PDFO_RATE * 100) / 100
   const vz          = Math.round(accrual * VZ_RATE  * 100) / 100
   const net         = Math.round((accrual - pdfo - vz) * 100) / 100
@@ -33,6 +85,11 @@ const MONTH_NAMES = ['Січень','Лютий','Березень','Квіте�
 
 function monthLabel(y, m) { return `${MONTH_NAMES[m - 1]} ${y}` }
 function today() { return new Date().toISOString().slice(0, 10) }
+function fmtDate(s) {
+  if (!s) return '—'
+  const [y, m, d] = s.split('-')
+  return `${d}.${m}.${y}`
+}
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 function injectStyles() {
@@ -82,6 +139,11 @@ function injectStyles() {
     .pr-table tr:hover .pr-edit-btn { opacity:1; }
     .pr-del-btn { padding:3px 7px; border-radius:5px; border:none; background:rgba(239,68,68,.1); color:#EF4444; cursor:pointer; font-size:11px; opacity:0; transition:.15s; margin-left:4px; }
     .pr-table tr:hover .pr-del-btn { opacity:1; }
+    .pr-pay-btn { padding:4px 10px; border-radius:6px; border:none; font-size:11px; font-weight:600; cursor:pointer; white-space:nowrap; transition:.15s; }
+    .pr-pay-advance { background:rgba(245,158,11,.15); color:#FBBF24; }
+    .pr-pay-advance:hover { background:rgba(245,158,11,.25); }
+    .pr-pay-final { background:rgba(52,211,153,.15); color:#34D399; }
+    .pr-pay-final:hover { background:rgba(52,211,153,.25); }
     .pr-empty { text-align:center; padding:60px; color:var(--text-muted,#8B97B0); }
     .pr-info-box { background:rgba(79,142,247,.08); border:1px solid rgba(79,142,247,.2); border-radius:8px; padding:10px 14px; margin:0 24px 12px; font-size:12px; color:var(--text-muted,#8B97B0); display:flex; gap:8px; align-items:flex-start; flex-shrink:0; }
     .pr-tabs { display:flex; gap:2px; background:var(--bg-secondary,#1A1D27); border-radius:8px; padding:3px; margin-left:auto; }
@@ -122,9 +184,33 @@ export async function render(container) {
   injectStyles()
   const user = getCurrentUser()
   const base = getActivePathSegments(user.uid)
-  const periodsRef = () => collection(db, ...base, 'payroll_periods')
-  const entriesRef = () => collection(db, ...base, 'payroll_entries')
-  const empRef     = () => collection(db, ...base, 'employees')
+  const periodsRef  = () => collection(db, ...base, 'payroll_periods')
+  const entriesRef  = () => collection(db, ...base, 'payroll_entries')
+  const empRef      = () => collection(db, ...base, 'employees')
+  const cashbookRef = () => collection(db, ...base, 'cashbook')
+
+  // Створює РКО (видатковий касовий ордер) в Касі при виплаті авансу/зарплати
+  async function payOut(emp, amount, category, paymentMethod) {
+    const snap = await getDocs(cashbookRef())
+    const maxNum = snap.docs
+      .map(d => d.data())
+      .filter(e => e.type === 'rko')
+      .map(e => parseInt((e.docNum || '').replace(/\D/g, '')) || 0)
+      .reduce((a, b) => Math.max(a, b), 0)
+    const docNum = `РКО-${String(maxNum + 1).padStart(3, '0')}`
+    await addDoc(cashbookRef(), {
+      type: 'rko',
+      docNum,
+      date: today(),
+      counterparty: emp.name,
+      paymentMethod,
+      category,
+      description: `${category} — ${emp.name} (${monthLabel(selYear, selMonth)})`,
+      amount,
+      createdAt: serverTimestamp(),
+    })
+    invalidateRoute('cashbook')
+  }
 
   const now = new Date()
   let selYear  = now.getFullYear()
@@ -193,6 +279,7 @@ export async function render(container) {
           <div class="pr-emp-pos">${e.position || ''}</div>
         </td>
         <td>${fmt(e.baseSalary)}</td>
+        <td style="${e.workedDays != null && e.workedDays < (e.normDays||0) ? 'color:#F59E0B' : ''}">${e.workedDays != null ? `${e.workedDays}/${e.normDays||'—'}` : '—'}</td>
         <td>${e.bonus > 0 ? fmt(e.bonus) : '—'}</td>
         <td>${fmt(e.accrual)}</td>
         <td class="pr-pdfo">${fmt(e.pdfo)}</td>
@@ -204,6 +291,22 @@ export async function render(container) {
             <button class="pr-edit-btn" data-id="${e.id}">✎</button>
             <button class="pr-del-btn" data-id="${e.id}">✕</button>
           ` : ''}
+        </td>
+        <td style="text-align:left">
+          ${(() => {
+            const advance  = e.advancePaid || 0
+            const remain   = Math.round((e.net - advance) * 100) / 100
+            const paidFull = !!e.salaryPaidAt
+            return `
+              <div style="display:flex;flex-direction:column;gap:4px;font-family:inherit">
+                ${advance > 0 ? `<span style="font-size:11px;color:#FBBF24">Аванс: ${fmt(advance)} (${fmtDate(e.advancePaidAt)})</span>` : ''}
+                ${paidFull ? `<span style="font-size:11px;color:#34D399">✓ Виплачено повністю (${fmtDate(e.salaryPaidAt)})</span>` : ''}
+                <div style="display:flex;gap:6px">
+                  ${(!paidFull && advance === 0) ? `<button class="pr-pay-btn pr-pay-advance" data-id="${e.id}">Аванс</button>` : ''}
+                  ${!paidFull ? `<button class="pr-pay-btn pr-pay-final" data-id="${e.id}">Виплатити ${advance > 0 ? `залишок (${fmt(remain)})` : 'ЗП'}</button>` : ''}
+                </div>
+              </div>`
+          })()}
         </td>
       </tr>`).join('')
 
@@ -232,7 +335,8 @@ export async function render(container) {
             ${!currentPeriod
               ? `<button class="pr-btn pr-btn-primary" id="pr-init">${icon('plus', 14)} Розрахувати зарплату</button>`
               : (!isApproved ? `
-                  <button class="pr-btn pr-btn-green" id="pr-add-emp">${icon('plus', 14)} Додати співробітника</button>
+                  <button class="pr-btn pr-btn-green" id="pr-sync-hr">${icon('refresh', 14)} Підтягнути з Кадрів</button>
+                  <button class="pr-btn pr-btn-outline" id="pr-add-emp">${icon('plus', 14)} Додати вручну</button>
                   <button class="pr-btn pr-btn-outline" id="pr-approve">Затвердити відомість</button>
                   <button class="pr-btn" style="background:rgba(239,68,68,.1);color:#EF4444" id="pr-del-period">Видалити</button>
                 ` : `
@@ -285,6 +389,7 @@ export async function render(container) {
                   <thead><tr>
                     <th>Співробітник</th>
                     <th>Оклад</th>
+                    <th>Дні</th>
                     <th>Доп.</th>
                     <th>Нарах.</th>
                     <th>ПДФО</th>
@@ -292,17 +397,19 @@ export async function render(container) {
                     <th>До виплати</th>
                     <th>ЄСВ</th>
                     <th>Витрати</th>
+                    <th>Виплата</th>
                   </tr></thead>
                   <tbody>${rows}</tbody>
                   <tfoot><tr>
                     <td>Разом</td>
-                    <td></td><td></td>
+                    <td></td><td></td><td></td>
                     <td>${fmt(totals.accrual)}</td>
                     <td class="pr-pdfo">${fmt(totals.pdfo)}</td>
                     <td class="pr-vz">${fmt(totals.vz)}</td>
                     <td class="pr-net">${fmt(totals.net)}</td>
                     <td class="pr-esv">${fmt(totals.esvEmployer)}</td>
                     <td class="pr-cost">${fmt(totals.totalCost)}</td>
+                    <td></td>
                   </tr></tfoot>
                 </table>
               `}
@@ -322,6 +429,7 @@ export async function render(container) {
     container.querySelector('#pr-tab-curr')?.addEventListener('click', () => { activeTab = 'current'; rerender() })
     container.querySelector('#pr-tab-hist')?.addEventListener('click', () => { activeTab = 'history'; rerender(); loadHistory() })
     container.querySelector('#pr-init')?.addEventListener('click', () => initPeriod())
+    container.querySelector('#pr-sync-hr')?.addEventListener('click', () => syncFromHR())
     container.querySelector('#pr-add-emp')?.addEventListener('click', () => openEntryModal(null))
     container.querySelector('#pr-approve')?.addEventListener('click', () => approvePeriod())
     container.querySelector('#pr-del-period')?.addEventListener('click', () => deletePeriod())
@@ -336,6 +444,72 @@ export async function render(container) {
     container.querySelectorAll('.pr-del-btn').forEach(btn => {
       btn.addEventListener('click', () => deleteEntry(btn.dataset.id))
     })
+    container.querySelectorAll('.pr-pay-advance').forEach(btn => {
+      btn.addEventListener('click', () => openPayModal(currentEntries.find(e => e.id === btn.dataset.id), 'advance'))
+    })
+    container.querySelectorAll('.pr-pay-final').forEach(btn => {
+      btn.addEventListener('click', () => openPayModal(currentEntries.find(e => e.id === btn.dataset.id), 'final'))
+    })
+  }
+
+  // ── Виплата авансу / зарплати ───────────────────────────────
+  function openPayModal(entry, kind) {
+    if (!entry) return
+    const advance  = entry.advancePaid || 0
+    const defaultAmount = kind === 'advance'
+      ? Math.round(entry.net / 2 * 100) / 100
+      : Math.round((entry.net - advance) * 100) / 100
+
+    const overlay = document.createElement('div')
+    overlay.className = 'pr-overlay'
+    overlay.innerHTML = `
+      <div class="pr-modal">
+        <h3>${icon('finances', 16)} ${kind === 'advance' ? 'Виплата авансу' : 'Виплата зарплати'} — ${entry.name}</h3>
+        <div class="pr-field">
+          <label>Сума (грн)</label>
+          <input id="pm-amount" type="number" min="0.01" step="0.01" value="${defaultAmount}">
+        </div>
+        <div class="pr-field">
+          <label>Спосіб виплати</label>
+          <select id="pm-method">
+            <option value="cash">Готівка</option>
+            <option value="terminal">Термінал</option>
+            <option value="transfer">Безготівково (на картку)</option>
+          </select>
+        </div>
+        <div class="pr-modal-actions">
+          <button class="pr-modal-cancel" id="pm-cancel">Скасувати</button>
+          <button class="pr-modal-save" id="pm-save">Виплатити</button>
+        </div>
+      </div>
+    `
+    document.body.appendChild(overlay)
+    const close = () => overlay.remove()
+    overlay.querySelector('#pm-cancel').addEventListener('click', close)
+    overlay.addEventListener('click', e => { if (e.target === overlay) close() })
+    overlay.querySelector('#pm-save').addEventListener('click', async () => {
+      const amount = parseFloat(overlay.querySelector('#pm-amount').value)
+      const method = overlay.querySelector('#pm-method').value
+      if (!amount || amount <= 0) { alert('Введіть суму'); return }
+      const btn = overlay.querySelector('#pm-save')
+      btn.disabled = true; btn.textContent = 'Виплата...'
+      try {
+        const methodLabels = { cash: 'Готівка', terminal: 'Термінал', transfer: 'Контрагент' }
+        await payOut(entry, amount, kind === 'advance' ? 'Аванс' : 'Зарплата', method)
+        if (kind === 'advance') {
+          await updateDoc(doc(db, ...base, 'payroll_entries', entry.id), {
+            advancePaid: amount, advancePaidAt: today(), advancePayMethod: method,
+          })
+        } else {
+          await updateDoc(doc(db, ...base, 'payroll_entries', entry.id), {
+            salaryPaidAt: today(), salaryPayMethod: method, finalPaidAmount: amount,
+          })
+        }
+        close()
+        await loadPeriod()
+        alert(`Виплачено ${fmt(amount)} (${methodLabels[method]}). Запис додано в Касу як РКО.`)
+      } catch (err) { btn.disabled = false; btn.textContent = 'Виплатити'; alert('Помилка: ' + err.message) }
+    })
   }
 
   // Initialize payroll period from HR employees
@@ -348,9 +522,11 @@ export async function render(container) {
     currentPeriod = { id: periodDoc.id, year: selYear, month: selMonth, status: 'draft' }
 
     // Auto-populate from HR employees
+    const normDays = workingDaysInMonth(selYear, selMonth)
     if (employees.length > 0) {
       const saves = employees.map(emp => {
-        const calc = calcPayroll(emp.salary || 0, 0)
+        const workedDays = calcWorkedDaysForPeriod(emp, selYear, selMonth)
+        const calc = calcPayroll(emp.salary || 0, 0, workedDays, normDays)
         return addDoc(entriesRef(), {
           periodId:    periodDoc.id,
           employeeId:  emp.id,
@@ -358,12 +534,44 @@ export async function render(container) {
           position:    emp.position || emp.role || '',
           baseSalary:  emp.salary || 0,
           bonus:       0,
+          workedDays,
+          normDays,
           ...calc,
           createdAt: serverTimestamp(),
         })
       })
       await Promise.all(saves)
     }
+    await loadPeriod()
+  }
+
+  // Підтягнути в існуючу (ще не затверджену) відомість співробітників з HR,
+  // яких там ще немає — корисно якщо HR оновили вже після створення відомості
+  async function syncFromHR() {
+    if (!currentPeriod) return
+    const normDays = workingDaysInMonth(selYear, selMonth)
+    const existingEmpIds = new Set(currentEntries.map(e => e.employeeId).filter(Boolean))
+    const toAdd = employees.filter(emp => !existingEmpIds.has(emp.id))
+
+    if (toAdd.length === 0) { alert('Усі співробітники з Кадрів вже у відомості'); return }
+
+    const saves = toAdd.map(emp => {
+      const workedDays = calcWorkedDaysForPeriod(emp, selYear, selMonth)
+      const calc = calcPayroll(emp.salary || 0, 0, workedDays, normDays)
+      return addDoc(entriesRef(), {
+        periodId:    currentPeriod.id,
+        employeeId:  emp.id,
+        name:        emp.name || '',
+        position:    emp.position || emp.role || '',
+        baseSalary:  emp.salary || 0,
+        bonus:       0,
+        workedDays,
+        normDays,
+        ...calc,
+        createdAt: serverTimestamp(),
+      })
+    })
+    await Promise.all(saves)
     await loadPeriod()
   }
 
@@ -397,9 +605,10 @@ export async function render(container) {
   function openEntryModal(existing) {
     const overlay = document.createElement('div')
     overlay.className = 'pr-overlay'
+    const normDays = existing?.normDays || workingDaysInMonth(selYear, selMonth)
 
     const empOptions = employees.map(e =>
-      `<option value="${e.id}" ${existing?.employeeId === e.id ? 'selected' : ''} data-salary="${e.salary||0}" data-pos="${e.position||e.role||''}" data-name="${e.name||''}">${e.name}${e.position ? ' · ' + e.position : ''}</option>`
+      `<option value="${e.id}" ${existing?.employeeId === e.id ? 'selected' : ''} data-salary="${e.salary||0}" data-pos="${e.position||e.role||''}" data-name="${e.name||''}" data-worked="${calcWorkedDaysForPeriod(e, selYear, selMonth)}">${e.name}${e.position ? ' · ' + e.position : ''}</option>`
     ).join('')
 
     overlay.innerHTML = `
@@ -431,6 +640,16 @@ export async function render(container) {
             <input id="pr-bonus" type="number" min="0" step="100" value="${existing?.bonus || 0}" placeholder="0.00">
           </div>
         </div>
+        <div class="pr-modal-row">
+          <div class="pr-field">
+            <label>Відпрацьовано днів</label>
+            <input id="pr-workdays" type="number" min="0" step="1" value="${existing?.workedDays ?? normDays}" placeholder="0">
+          </div>
+          <div class="pr-field">
+            <label>Норма днів (місяць)</label>
+            <input id="pr-normdays" type="number" min="1" step="1" value="${normDays}">
+          </div>
+        </div>
         <div class="pr-calc-preview" id="pr-preview">
           <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">ПОПЕРЕДНІЙ РОЗРАХУНОК</div>
           <div class="pr-calc-row"><span>Нараховано</span><span id="pv-accrual">—</span></div>
@@ -449,9 +668,11 @@ export async function render(container) {
     document.body.appendChild(overlay)
 
     function updatePreview() {
-      const salary = parseFloat(overlay.querySelector('#pr-salary').value) || 0
-      const bonus  = parseFloat(overlay.querySelector('#pr-bonus').value)  || 0
-      const calc   = calcPayroll(salary, bonus)
+      const salary     = parseFloat(overlay.querySelector('#pr-salary').value) || 0
+      const bonus      = parseFloat(overlay.querySelector('#pr-bonus').value)  || 0
+      const workedDays = parseFloat(overlay.querySelector('#pr-workdays').value)
+      const normD      = parseFloat(overlay.querySelector('#pr-normdays').value) || normDays
+      const calc   = calcPayroll(salary, bonus, isNaN(workedDays) ? normD : workedDays, normD)
       overlay.querySelector('#pv-accrual').textContent = fmt(calc.accrual)
       overlay.querySelector('#pv-pdfo').textContent    = fmt(calc.pdfo)
       overlay.querySelector('#pv-vz').textContent      = fmt(calc.vz)
@@ -460,13 +681,16 @@ export async function render(container) {
       overlay.querySelector('#pv-cost').textContent    = fmt(calc.totalCost)
     }
     overlay.querySelector('#pr-salary')?.addEventListener('input', updatePreview)
+    overlay.querySelector('#pr-workdays')?.addEventListener('input', updatePreview)
+    overlay.querySelector('#pr-normdays')?.addEventListener('input', updatePreview)
     overlay.querySelector('#pr-bonus')?.addEventListener('input', updatePreview)
     overlay.querySelector('#pr-emp-sel')?.addEventListener('change', e => {
       const opt = e.target.selectedOptions[0]
       if (opt?.value) {
-        overlay.querySelector('#pr-name').value   = opt.dataset.name || ''
-        overlay.querySelector('#pr-pos').value    = opt.dataset.pos  || ''
-        overlay.querySelector('#pr-salary').value = opt.dataset.salary || ''
+        overlay.querySelector('#pr-name').value     = opt.dataset.name || ''
+        overlay.querySelector('#pr-pos').value      = opt.dataset.pos  || ''
+        overlay.querySelector('#pr-salary').value   = opt.dataset.salary || ''
+        overlay.querySelector('#pr-workdays').value = opt.dataset.worked ?? normDays
         updatePreview()
       }
     })
@@ -475,18 +699,21 @@ export async function render(container) {
     overlay.querySelector('#pr-cancel').addEventListener('click', () => overlay.remove())
     overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove() })
     overlay.querySelector('#pr-save').addEventListener('click', async () => {
-      const name   = overlay.querySelector('#pr-name').value.trim()
-      const salary = parseFloat(overlay.querySelector('#pr-salary').value) || 0
-      const bonus  = parseFloat(overlay.querySelector('#pr-bonus').value)  || 0
+      const name       = overlay.querySelector('#pr-name').value.trim()
+      const salary      = parseFloat(overlay.querySelector('#pr-salary').value) || 0
+      const bonus       = parseFloat(overlay.querySelector('#pr-bonus').value)  || 0
+      const normD       = parseFloat(overlay.querySelector('#pr-normdays').value) || normDays
+      const workedDaysV = overlay.querySelector('#pr-workdays').value
+      const workedDays  = workedDaysV === '' ? normD : parseFloat(workedDaysV)
       if (!name || !salary) { alert("Введіть ім'я та оклад"); return }
-      const calc = calcPayroll(salary, bonus)
+      const calc = calcPayroll(salary, bonus, workedDays, normD)
       const btn  = overlay.querySelector('#pr-save')
       btn.textContent = 'Збереження...'; btn.disabled = true
       try {
         if (existing) {
           await updateDoc(doc(db, ...base, 'payroll_entries', existing.id), {
             name, position: overlay.querySelector('#pr-pos').value.trim(),
-            baseSalary: salary, bonus, ...calc,
+            baseSalary: salary, bonus, workedDays, normDays: normD, ...calc,
           })
         } else {
           const empSel = overlay.querySelector('#pr-emp-sel')
@@ -495,7 +722,7 @@ export async function render(container) {
             employeeId:  empSel?.value || null,
             name,
             position:    overlay.querySelector('#pr-pos').value.trim(),
-            baseSalary:  salary, bonus,
+            baseSalary:  salary, bonus, workedDays, normDays: normD,
             ...calc,
             createdAt: serverTimestamp(),
           })
@@ -547,7 +774,9 @@ export async function render(container) {
     const totals = calcTotals(currentEntries)
     const rows = currentEntries.map(e =>
       `<tr><td>${e.name}</td><td>${e.position||''}</td>
-       <td style="text-align:right">${fmt(e.baseSalary)}</td><td style="text-align:right">${fmt(e.bonus)}</td>
+       <td style="text-align:right">${fmt(e.baseSalary)}</td>
+       <td style="text-align:right">${e.workedDays != null ? `${e.workedDays}/${e.normDays||'—'}` : '—'}</td>
+       <td style="text-align:right">${fmt(e.bonus)}</td>
        <td style="text-align:right">${fmt(e.accrual)}</td><td style="text-align:right">${fmt(e.pdfo)}</td>
        <td style="text-align:right">${fmt(e.vz)}</td><td style="text-align:right">${fmt(e.net)}</td>
        <td style="text-align:right">${fmt(e.esvEmployer)}</td></tr>`
@@ -560,10 +789,10 @@ export async function render(container) {
       <h2>Розрахунково-платіжна відомість</h2>
       <p>Період: ${monthLabel(selYear, selMonth)}</p>
       <table><thead><tr>
-        <th>П.І.Б.</th><th>Посада</th><th>Оклад</th><th>Доп.</th>
+        <th>П.І.Б.</th><th>Посада</th><th>Оклад</th><th>Дні</th><th>Доп.</th>
         <th>Нарах.</th><th>ПДФО</th><th>ВЗ</th><th>До виплати</th><th>ЄСВ</th>
       </tr></thead><tbody>${rows}</tbody>
-      <tfoot><tr><td colspan="4">Разом</td>
+      <tfoot><tr><td colspan="5">Разом</td>
         <td style="text-align:right">${fmt(totals.accrual)}</td>
         <td style="text-align:right">${fmt(totals.pdfo)}</td>
         <td style="text-align:right">${fmt(totals.vz)}</td>

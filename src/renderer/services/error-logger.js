@@ -3,7 +3,6 @@ import { collection, addDoc, serverTimestamp } from 'https://www.gstatic.com/fir
 import { getCurrentUser } from './auth.js'
 import { getCurrentRoute } from '../../core/router.js'
 
-const APP_VERSION = '1.0.0'
 let _initialized = false
 
 export function initErrorLogger() {
@@ -42,7 +41,7 @@ async function logError(data) {
       userId:     user?.uid   || null,
       userEmail:  user?.email || null,
       route:      route       || null,
-      appVersion: APP_VERSION,
+      appVersion: window.electron?.appVersion || 'unknown',
       platform:   window.electron?.platform || 'unknown',
       createdAt:  serverTimestamp(),
     })

@@ -1,12 +1,14 @@
 // src/renderer/app.js
 import { addRoute, navigate, clearModuleCache, setPageTracker } from '../core/router.js'
-import { onAuthChange, getUserProfile, logoutUser }             from './services/auth.js'
+import { onAuthChange, getUserProfile, logoutUser, getCurrentUser, getImpersonation, stopImpersonation } from './services/auth.js'
 import { checkSubscriptionExpiry }                              from './services/subscription-guard.js'
 import { initTheme }                                            from '../core/theme.js'
 import { renderNavigation }                                     from './components/navigation.js'
 import { trackPage, identifyUser }                              from './services/analytics.js'
 import { initAutoUpdater }                                      from './services/updater.js'
 import { initErrorLogger }                                      from './services/error-logger.js'
+import { startPresenceHeartbeat, stopPresenceHeartbeat }         from './services/presence.js'
+import { trackLogin }                                           from './services/device-tracking.js'
 
 initErrorLogger()
 setPageTracker(trackPage)
@@ -85,6 +87,7 @@ document.getElementById('tb-close')?.addEventListener('click',    () => window.e
 onAuthChange(async (user) => {
   if (!user) {
     hideSidebar()
+    stopPresenceHeartbeat()
     navigate('login')
     return
   }
@@ -138,7 +141,10 @@ onAuthChange(async (user) => {
 
   // Все ок — показуємо app
   showSidebar(profile)
+  _realProfile = profile
   navigate('dashboard')
+  startPresenceHeartbeat(user.uid)
+  trackLogin(user.uid)
 
   identifyUser(user.uid, {
     plan:       profile.plan        ?? 'free',
@@ -149,6 +155,50 @@ onAuthChange(async (user) => {
   // Перевірка терміну підписки (після рендеру UI)
   checkSubscriptionExpiry(user.uid, profile)
 })
+
+// ── Режим перегляду користувача (admin impersonation) ───────
+let _realProfile = null
+
+window.addEventListener('impersonate-start', async () => {
+  const imp = getImpersonation()
+  if (!imp) return
+  clearModuleCache()
+  const targetProfile = await getUserProfile(getCurrentUser().uid)
+  showSidebar(targetProfile)
+  renderImpersonationBanner()
+  navigate('dashboard')
+})
+
+function renderImpersonationBanner() {
+  document.getElementById('impersonate-banner')?.remove()
+  const imp = getImpersonation()
+  if (!imp) return
+
+  const banner = document.createElement('div')
+  banner.id = 'impersonate-banner'
+  banner.innerHTML = `
+    <span>👁 Перегляд CRM користувача: <strong>${imp.name}</strong></span>
+    <button id="impersonate-exit-btn">Вийти з режиму перегляду</button>
+  `
+  Object.assign(banner.style, {
+    position: 'fixed', top: '0', left: '0', right: '0', zIndex: '99999',
+    background: '#A78BFA', color: '#1a1a2e', padding: '8px 16px',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px',
+    fontSize: '13px', fontWeight: '700', boxShadow: '0 2px 12px rgba(0,0,0,.3)',
+  })
+  document.body.appendChild(banner)
+  const appEl = document.getElementById('app')
+  if (appEl) appEl.style.marginTop = '36px'
+
+  banner.querySelector('#impersonate-exit-btn').addEventListener('click', () => {
+    stopImpersonation()
+    clearModuleCache()
+    showSidebar(_realProfile)
+    banner.remove()
+    if (appEl) appEl.style.marginTop = ''
+    navigate('admin')
+  })
+}
 
 // ── Sidebar ───────────────────────────────────────────────
 let _cachedProfile = null

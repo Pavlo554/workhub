@@ -2,9 +2,26 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Owner — single source of truth is config/ownerClaim (immutable once set).
+    // We don't trust users/{uid}.isOwner alone, since that field could otherwise
+    // be spoofed by a direct write if any rule branch were misconfigured.
+    function isOwner() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/config/ownerClaim) &&
+        get(/databases/$(database)/documents/config/ownerClaim).data.uid == request.auth.uid;
+    }
+
     function isAdmin() {
       return request.auth != null &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+
+    // Does the current admin's assigned role include this admin-panel tab?
+    function hasTabAccess(tab) {
+      let roleId = get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('adminRoleId', null);
+      return roleId != null &&
+        exists(/databases/$(database)/documents/adminRoles/$(roleId)) &&
+        tab in get(/databases/$(database)/documents/adminRoles/$(roleId)).data.get('allowedTabs', []);
     }
 
     function isNotBanned() {
@@ -20,13 +37,30 @@ service cloud.firestore {
     // Fields only admin / Cloud Functions may change
     function touchesProtectedFields() {
       let protected = [
-        'isAdmin', 'isBanned',
+        'isAdmin', 'isOwner', 'adminRoleId', 'isBanned',
         'plan', 'subscriptionEnd', 'planExpiresAt',
         'subscriptionStatus', 'planActivatedAt', 'planMethod'
       ];
       return resource == null
         ? request.resource.data.keys().hasAny(protected)
         : request.resource.data.diff(resource.data).affectedKeys().hasAny(protected);
+    }
+
+    // Privilege fields — only Owner may grant/revoke these on ANY user doc
+    function touchesOwnerFields() {
+      let ownerFields = ['isAdmin', 'isOwner', 'adminRoleId'];
+      return resource == null
+        ? request.resource.data.keys().hasAny(ownerFields)
+        : request.resource.data.diff(resource.data).affectedKeys().hasAny(ownerFields);
+    }
+
+    // One-time self-claim: a user may set isOwner:true on their OWN doc,
+    // and only that field, and only while nobody has claimed ownership yet.
+    function isFirstOwnerClaim(userId) {
+      return request.auth.uid == userId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isOwner']) &&
+        request.resource.data.isOwner == true &&
+        !exists(/databases/$(database)/documents/config/ownerClaim);
     }
 
     // Subcollections workspace members must NOT read/write
@@ -38,28 +72,69 @@ service cloud.firestore {
              subcol == 'payroll'      ||
              subcol == 'api-keys'     ||
              subcol == 'api_keys'     ||
+             subcol == 'subscriptionHistory' ||
+             subcol == 'loginEvents'  ||
              subcol == 'prro';
+    }
+
+    // ── 2FA secrets — STRICTLY self-only. No isAdmin()/isOwner() bypass here:
+    // an admin must never be able to read another account's TOTP secret,
+    // otherwise 2FA protection would be meaningless against a malicious admin.
+    match /twoFactorSecrets/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // ── Owner claim (singleton, immutable) ──────────────────────────────────
+    match /config/ownerClaim {
+      allow read:   if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // ── Admin audit log — write-only for admins, readable only by Owner ─────
+    match /adminLogs/{logId} {
+      allow create: if (isAdmin() || isOwner()) && request.resource.data.actorUid == request.auth.uid;
+      allow read:   if isOwner();
+      allow update, delete: if false;
+    }
+
+    // ── Support reply templates (admins with "support" tab access) ──────────
+    match /supportTemplates/{tplId} {
+      allow read, write: if isOwner() || (isAdmin() && hasTabAccess('support'));
+    }
+
+    // ── Admin roles (Owner manages, any admin can read to resolve own role) ─
+    match /adminRoles/{roleId} {
+      allow read:  if isAdmin() || isOwner();
+      allow write: if isOwner();
     }
 
     // ── Users ──────────────────────────────────────────────────────────────
     match /users/{userId} {
-      allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      allow read: if request.auth != null && (request.auth.uid == userId || isAdmin() || isOwner());
 
       // New account creation: allow only safe default values
       allow create: if request.auth != null &&
         request.auth.uid == userId &&
         request.resource.data.get('plan', 'free') == 'free' &&
         request.resource.data.get('isAdmin', false) == false &&
+        request.resource.data.get('isOwner', false) == false &&
         request.resource.data.get('isBanned', false) == false &&
-        !request.resource.data.keys().hasAny(['subscriptionEnd', 'planExpiresAt', 'subscriptionStatus', 'planActivatedAt', 'planMethod']);
+        !request.resource.data.keys().hasAny(['subscriptionEnd', 'planExpiresAt', 'subscriptionStatus', 'planActivatedAt', 'planMethod', 'adminRoleId']);
 
-      // Updates: user cannot change protected fields
+      // Updates:
+      //  - Owner: unrestricted
+      //  - Tab-scoped admin ("users" tab): everything except privilege fields
+      //  - Self: everything except protected fields
+      //  - Anyone: one-time self-claim of ownership (only before anyone owns it)
       allow update: if request.auth != null && (
-        isAdmin() ||
-        (request.auth.uid == userId && !touchesProtectedFields())
+        isOwner() ||
+        (isAdmin() && hasTabAccess('users') && !touchesOwnerFields()) ||
+        (request.auth.uid == userId && !touchesProtectedFields()) ||
+        isFirstOwnerClaim(userId)
       );
 
-      allow delete: if isAdmin();
+      allow delete: if isOwner() || (isAdmin() && hasTabAccess('users'));
     }
 
     // {subcol}/{doc=**} requires at least ONE path segment after userId,
@@ -68,7 +143,8 @@ service cloud.firestore {
     match /users/{userId}/{subcol}/{doc=**} {
       allow read, write: if request.auth != null && isNotBanned() && (
         request.auth.uid == userId ||
-        isAdmin() ||
+        isOwner() ||
+        (isAdmin() && hasTabAccess('users')) ||
         (isWorkspaceMember(userId) && !isSensitivePath(subcol))
       );
     }
@@ -76,58 +152,70 @@ service cloud.firestore {
     // ── Tickets ────────────────────────────────────────────────────────────
     match /tickets/{ticketId} {
       allow read: if request.auth != null && (
-        resource.data.userId == request.auth.uid || isAdmin()
+        resource.data.userId == request.auth.uid || isOwner() || (isAdmin() && hasTabAccess('support'))
       );
+      // Rate limit: max 1 new ticket per 60s per user (checks users/{uid}.lastTicketAt)
       allow create: if request.auth != null && isNotBanned() &&
-        request.auth.uid == request.resource.data.userId;
+        request.auth.uid == request.resource.data.userId &&
+        (
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('lastTicketAt', null) == null ||
+          request.time > get(/databases/$(database)/documents/users/$(request.auth.uid)).data.lastTicketAt + duration.value(60, 's')
+        );
       // Prevent userId substitution on update
       allow update: if request.auth != null && (
-        isAdmin() ||
+        isOwner() || (isAdmin() && hasTabAccess('support')) ||
         (resource.data.userId == request.auth.uid &&
          request.resource.data.userId == resource.data.userId)
       );
+      allow delete: if isOwner() || (isAdmin() && hasTabAccess('support'));
     }
 
     // ── Announcements ──────────────────────────────────────────────────────
     match /announcements/{id} {
       allow read:  if request.auth != null;
-      allow write: if isAdmin();
+      allow write: if isOwner() || (isAdmin() && hasTabAccess('notifications'));
     }
 
     // ── Config — sensitive docs MUST come before the wildcard ──────────────
     // Private keys: admin only (Cloud Functions should use env vars instead)
     match /config/liqpay_keys {
-      allow read, write: if isAdmin();
+      allow read, write: if isOwner() || (isAdmin() && hasTabAccess('payments'));
     }
     match /config/telegram {
-      allow read, write: if isAdmin();
+      allow read, write: if isOwner() || (isAdmin() && hasTabAccess('payments'));
+    }
+    // Read is open to any authenticated user — required for client-side HMAC
+    // signing during checkout (same trust model as the existing LiqPay flow).
+    match /config/aifo_keys {
+      allow read:  if request.auth != null;
+      allow write: if isOwner() || (isAdmin() && hasTabAccess('payments'));
     }
 
     // Public payment config (crypto addresses, monobank jar, liqpay public key)
     match /config/payments {
       allow read:  if request.auth != null;
-      allow write: if isAdmin();
+      allow write: if isOwner() || (isAdmin() && hasTabAccess('payments'));
     }
 
     // All other config — wildcard explicitly excludes sensitive docs
     // (Firestore ORs all matching rules, so the exclusion here is mandatory)
     match /config/{docId} {
       allow read: if request.auth != null &&
-        docId != 'liqpay_keys' && docId != 'telegram';
-      allow write: if isAdmin();
+        docId != 'liqpay_keys' && docId != 'telegram' && docId != 'ownerClaim' && docId != 'aifo_keys';
+      allow write: if isOwner() || isAdmin();
     }
 
     // ── Error Logs ─────────────────────────────────────────────────────────
     match /errors/{errorId} {
       allow create: if request.auth != null;
-      allow read, update, delete: if isAdmin();
+      allow read, update, delete: if isOwner() || (isAdmin() && hasTabAccess('errors'));
     }
 
     // ── Pending Payments ───────────────────────────────────────────────────
     match /{path=**}/pendingPayments/{paymentId} {
-      allow read:           if request.auth != null && isAdmin();
+      allow read:           if request.auth != null && (isOwner() || (isAdmin() && hasTabAccess('payments')));
       allow create:         if request.auth != null && isNotBanned();
-      allow update, delete: if request.auth != null && isAdmin();
+      allow update, delete: if request.auth != null && (isOwner() || (isAdmin() && hasTabAccess('payments')));
     }
 
     // ── Workspaces ─────────────────────────────────────────────────────────

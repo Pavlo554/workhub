@@ -1,13 +1,11 @@
 // src/renderer/modules/tasks/index.js
-import { db, storage } from '../../services/firebase.js'
+import { db } from '../../services/firebase.js'
 import { getCurrentUser, getActivePathSegments } from '../../services/auth.js'
 import {
   collection, addDoc, getDocs, deleteDoc,
   doc, updateDoc, query, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
-import {
-  ref, uploadBytes, getDownloadURL, deleteObject
-} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js'
+import { uploadToCloudinary } from '../../services/cloudinary.js'
 import { icon } from '../../utils/icons.js'
 import { t } from '../../core/i18n.js'
 
@@ -121,11 +119,12 @@ export async function render(container) {
               </select>
             </div>
 
-            <!-- Photo attachments — hidden, coming soon -->
-            <div style="display:none" id="attach-zone-wrap">
+            <div class="field" id="attach-zone-wrap">
+              <label>Фото / файли</label>
               <div class="attach-zone" id="attach-zone">
                 <input type="file" id="f-files" multiple accept="image/*,.pdf,.doc,.docx" style="display:none" />
                 <button type="button" class="attach-btn" id="attach-pick-btn">Додати файли</button>
+                <span class="attach-hint">або вставте <kbd>Ctrl+V</kbd></span>
               </div>
               <div class="attach-previews" id="attach-previews"></div>
             </div>
@@ -324,12 +323,6 @@ export async function render(container) {
       btn.addEventListener('click', async e => {
         e.stopPropagation()
         if (!confirm('Видалити задачу?')) return
-        const task = tasks.find(t => t.id === btn.dataset.id)
-        if (task?.attachments?.length) {
-          await Promise.all(task.attachments.map(a =>
-            deleteObject(ref(storage, a.storagePath)).catch(() => {})
-          ))
-        }
         await deleteDoc(doc(db, ...base, 'tasks', btn.dataset.id))
         await loadTasks()
       })
@@ -453,11 +446,6 @@ export async function render(container) {
 
     detEl.querySelector('#tkd-delete').addEventListener('click', async () => {
       if (!confirm('Видалити задачу?')) return
-      if (task?.attachments?.length) {
-        await Promise.all(task.attachments.map(a =>
-          deleteObject(ref(storage, a.storagePath)).catch(() => {})
-        ))
-      }
       await deleteDoc(doc(db, ...base, 'tasks', task.id))
       closeDetail()
       await loadTasks()
@@ -545,7 +533,32 @@ export async function render(container) {
     container.querySelector('#f-files').click()
   })
 
-  // clipboard paste — disabled while attachments are hidden
+  // ── Clipboard paste (Ctrl+V) ────────────────────────────────
+  container.querySelector('#task-form').addEventListener('paste', (e) => {
+    const items = Array.from(e.clipboardData?.items || [])
+    const imageFiles = items
+      .filter(item => item.type.startsWith('image/'))
+      .map(item => item.getAsFile())
+      .filter(Boolean)
+
+    if (imageFiles.length === 0) return
+    e.preventDefault()
+
+    const zone = container.querySelector('#attach-zone')
+    zone.classList.add('attach-zone--pasted')
+    setTimeout(() => zone.classList.remove('attach-zone--pasted'), 400)
+
+    imageFiles.forEach((file, i) => {
+      const named = new File(
+        [file],
+        file.name || `screenshot_${Date.now()}_${i}.png`,
+        { type: file.type }
+      )
+      if (newFiles.some(f => f.name === named.name && f.size === named.size)) return
+      newFiles.push(named)
+      addFilePreview(named)
+    })
+  })
 
   container.querySelector('#f-files').addEventListener('change', (e) => {
     const files = Array.from(e.target.files)
@@ -610,32 +623,13 @@ export async function render(container) {
       const remainingItems = [...container.querySelectorAll('#attach-previews .attach-item:not([data-filename])')]
       const keptPaths = remainingItems.map(el => el.dataset.path).filter(Boolean)
 
-      // Видаляємо прибрані існуючі вкладення
-      if (editingTask?.attachments) {
-        const removed = editingTask.attachments.filter(a => a.storagePath && !keptPaths.includes(a.storagePath))
-        await Promise.all(removed.map(a => deleteObject(ref(storage, a.storagePath)).catch(() => {})))
-      }
-
       // Зберігаємо існуючі вкладення що залишились
       const keptAttachments = (editingTask?.attachments || []).filter(
         a => !a.storagePath || keptPaths.includes(a.storagePath)
       )
 
-      // Завантажуємо нові файли
-      const taskId = editingId || `temp_${Date.now()}`
-      const uploadedAttachments = await Promise.all(newFiles.map(async file => {
-        const safeName = file.name.replace(/[^\w.\-]/g, '_')
-        const path = `users/${user.uid}/tasks/${taskId}/${Date.now()}_${safeName}`
-        const storageRef = ref(storage, path)
-        await uploadBytes(storageRef, file)
-        const url = await getDownloadURL(storageRef)
-        return {
-          name:        file.name,
-          url,
-          storagePath: path,
-          type:        file.type.startsWith('image/') ? 'image' : 'file',
-        }
-      }))
+      // Завантажуємо нові файли на Cloudinary
+      const uploadedAttachments = await Promise.all(newFiles.map(file => uploadToCloudinary(file)))
 
       const attachments = [...keptAttachments, ...uploadedAttachments]
 

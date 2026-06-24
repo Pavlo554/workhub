@@ -41,6 +41,32 @@ ${cryptoAmount ? `📊 Сума в крипті: ${cryptoAmount} ${currency}\n�
 ⏰ Час: ${new Date().toLocaleString('uk-UA')}
   `.trim()
 
+  await _send(cfg, message)
+}
+
+const TICKET_TYPE_LABEL = { bug: 'Bug Report', feature: 'Пропозиція', support: 'Підтримка' }
+const TICKET_PRIORITY_LABEL = { low: 'Низький', medium: 'Середній', high: 'Високий', critical: 'Критичний' }
+
+export async function sendTicketNotification(ticket) {
+  const cfg = await getTgConfig()
+  if (!cfg) return
+
+  const message = `
+🎫 Нова заявка в підтримку!
+
+📁 Тип: ${TICKET_TYPE_LABEL[ticket.type] || ticket.type}
+⚡ Пріоритет: ${TICKET_PRIORITY_LABEL[ticket.priority] || ticket.priority}
+
+📝 ${ticket.title}
+
+👤 ${ticket.userName || 'Без імені'} (${ticket.userEmail || '—'})
+⏰ ${new Date().toLocaleString('uk-UA')}
+  `.trim()
+
+  await _send(cfg, message)
+}
+
+async function _send(cfg, message) {
   try {
     const res = await fetch(`https://api.telegram.org/bot${cfg.botToken}/sendMessage`, {
       method: 'POST',
@@ -48,11 +74,20 @@ ${cryptoAmount ? `📊 Сума в крипті: ${cryptoAmount} ${currency}\n�
       body: JSON.stringify({ chat_id: cfg.chatId, text: message }),
     })
     const data = await res.json()
-    if (!data.ok) console.error('Telegram API error:', data.description)
+    if (!data.ok) {
+      console.error('Telegram API error:', data.description)
+      const newChatId = data.parameters?.migrate_to_chat_id
+      if (newChatId) {
+        console.error(
+          `Група оновлена до супергрупи — новий Chat ID: ${newChatId}. ` +
+          `Встав його в Адмінка → Платежі → Telegram → Chat ID.`
+        )
+      }
+    }
     // Invalidate cache if token changed
     else _tgCfg = null
   } catch (err) {
     console.error('Telegram notification failed:', err.message)
-    // Don't throw — payment flow should continue even if notification fails
+    // Don't throw — caller's flow should continue even if notification fails
   }
 }

@@ -1,12 +1,16 @@
 // src/renderer/modules/support/index.js
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getUserProfile } from '../../services/auth.js'
+import { uploadToCloudinary } from '../../services/cloudinary.js'
+import { sendTicketNotification } from '../../services/telegram-notifications.js'
 import { icon } from '../../utils/icons.js'
 import { t } from '../../core/i18n.js'
 import {
   collection, query, where, orderBy, getDocs, addDoc,
-  updateDoc, doc, serverTimestamp, arrayUnion, limit,
+  updateDoc, doc, serverTimestamp, arrayUnion, limit, writeBatch,
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
+
+const TICKET_COOLDOWN_MS = 60 * 1000 // 1 заявка на хвилину — захист від спаму
 
 const TYPE_META = {
   bug:     { iconName: 'x-circle',       label: 'Bug',                                               color: '#F87171', bg: 'rgba(248,113,113,.12)' },
@@ -248,6 +252,10 @@ export async function render(container) {
             <div class="sup-msg-body">
               <div class="sup-msg-author">${esc(profile?.name || user.email)} <span class="sup-msg-you">Ви</span></div>
               <div class="sup-msg-text">${esc(t.description)}</div>
+              ${(t.attachments || []).length ? `
+                <div class="sup-msg-attachments">
+                  ${t.attachments.map(a => `<a href="${a.url}" target="_blank"><img src="${a.url}" class="sup-msg-attach-img"></a>`).join('')}
+                </div>` : ''}
               <div class="sup-msg-time">${date}</div>
             </div>
           </div>
@@ -263,6 +271,10 @@ export async function render(container) {
                   ${r.fromAdmin ? '<span class="sup-msg-admin-badge">Адмін</span>' : '<span class="sup-msg-you">Ви</span>'}
                 </div>
                 <div class="sup-msg-text">${esc(r.text)}</div>
+                ${(r.attachments || []).length ? `
+                  <div class="sup-msg-attachments">
+                    ${r.attachments.map(a => `<a href="${a.url}" target="_blank"><img src="${a.url}" class="sup-msg-attach-img"></a>`).join('')}
+                  </div>` : ''}
                 <div class="sup-msg-time">${r.createdAt?.toDate?.()?.toLocaleString('uk-UA') || '—'}</div>
               </div>
             </div>
@@ -271,8 +283,11 @@ export async function render(container) {
 
         ${!isClosed ? `
           <div class="sup-reply-form">
-            <textarea class="sup-reply-input" id="sup-reply-text" placeholder="Написати відповідь…" rows="3"></textarea>
+            <textarea class="sup-reply-input" id="sup-reply-text" placeholder="Написати відповідь… (Ctrl+V щоб вставити скріншот)" rows="3"></textarea>
+            <div class="sup-attach-previews" id="sup-reply-previews"></div>
             <div class="sup-reply-actions">
+              <input type="file" id="sup-reply-files" multiple accept="image/*" style="display:none">
+              <button type="button" class="sup-btn-ghost" id="sup-reply-attach-btn" style="padding:7px 14px;margin-right:auto">${icon('image', 13)} Фото</button>
               <button class="sup-btn-close-ticket" id="sup-close-ticket-btn">Закрити заявку</button>
               <button class="sup-btn-primary" id="sup-send-reply">Надіслати</button>
             </div>
@@ -286,13 +301,59 @@ export async function render(container) {
       showRightEmpty()
     })
 
+    // ── Reply attachments ─────────────────────────────────
+    let replyFiles = []
+    function addReplyPreview(file) {
+      const wrap = rp.querySelector('#sup-reply-previews')
+      const item = document.createElement('div')
+      item.className = 'sup-attach-item'
+      item.dataset.filename = file.name
+      const reader = new FileReader()
+      reader.onload = e => {
+        item.innerHTML = `
+          <img src="${e.target.result}" class="sup-attach-img">
+          <button type="button" class="sup-attach-remove" data-filename="${file.name}">${icon('x', 10)}</button>
+        `
+        item.querySelector('.sup-attach-remove').addEventListener('click', () => {
+          replyFiles = replyFiles.filter(f => f.name !== file.name)
+          item.remove()
+        })
+      }
+      reader.readAsDataURL(file)
+      wrap.appendChild(item)
+    }
+    rp.querySelector('#sup-reply-attach-btn')?.addEventListener('click', () => {
+      rp.querySelector('#sup-reply-files').click()
+    })
+    rp.querySelector('#sup-reply-files')?.addEventListener('change', e => {
+      Array.from(e.target.files).forEach(file => {
+        if (replyFiles.some(f => f.name === file.name && f.size === file.size)) return
+        replyFiles.push(file)
+        addReplyPreview(file)
+      })
+      e.target.value = ''
+    })
+    rp.querySelector('#sup-reply-text')?.addEventListener('paste', e => {
+      const items = Array.from(e.clipboardData?.items || [])
+      const imgs  = items.filter(i => i.type.startsWith('image/')).map(i => i.getAsFile()).filter(Boolean)
+      if (!imgs.length) return
+      e.preventDefault()
+      imgs.forEach((file, i) => {
+        const named = new File([file], file.name || `screenshot_${Date.now()}_${i}.png`, { type: file.type })
+        if (replyFiles.some(f => f.name === named.name && f.size === named.size)) return
+        replyFiles.push(named)
+        addReplyPreview(named)
+      })
+    })
+
     rp.querySelector('#sup-send-reply')?.addEventListener('click', async () => {
       const text = rp.querySelector('#sup-reply-text').value.trim()
-      if (!text) return
+      if (!text && !replyFiles.length) return
       const btn = rp.querySelector('#sup-send-reply')
       btn.disabled = true; btn.textContent = '...'
       try {
-        const reply = { text, fromAdmin: false, authorName: profile?.name || user.email, createdAt: new Date() }
+        const attachments = await Promise.all(replyFiles.map(file => uploadToCloudinary(file)))
+        const reply = { text, attachments, fromAdmin: false, authorName: profile?.name || user.email, createdAt: new Date() }
         await updateDoc(doc(db, 'tickets', ticketId), {
           replies: arrayUnion(reply),
           status: t.status === 'new' ? 'open' : t.status,
@@ -364,7 +425,17 @@ export async function render(container) {
 
           <div class="sup-form-group">
             <label class="sup-form-label">Опис *</label>
-            <textarea class="sup-input sup-textarea" id="sup-ndesc" rows="5" placeholder="Детальний опис: кроки відтворення, очікувана поведінка, скріншоти тощо…"></textarea>
+            <textarea class="sup-input sup-textarea" id="sup-ndesc" rows="5" placeholder="Детальний опис: кроки відтворення, очікувана поведінка тощо…"></textarea>
+          </div>
+
+          <div class="sup-form-group">
+            <label class="sup-form-label">Фото / скріншоти</label>
+            <div class="sup-attach-zone" id="sup-attach-zone">
+              <input type="file" id="sup-nfiles" multiple accept="image/*" style="display:none">
+              <button type="button" class="sup-btn-ghost" id="sup-attach-pick" style="padding:7px 16px">${icon('image', 13)} Додати фото</button>
+              <span class="sup-attach-hint">або вставте <kbd>Ctrl+V</kbd></span>
+            </div>
+            <div class="sup-attach-previews" id="sup-attach-previews"></div>
           </div>
         </div>
 
@@ -379,6 +450,51 @@ export async function render(container) {
 
     let selectedType = 'bug'
     let selectedPrio = 'medium'
+    let newFiles      = []
+
+    function addAttachPreview(file) {
+      const wrap = modal.querySelector('#sup-attach-previews')
+      const item = document.createElement('div')
+      item.className = 'sup-attach-item'
+      item.dataset.filename = file.name
+      const reader = new FileReader()
+      reader.onload = e => {
+        item.innerHTML = `
+          <img src="${e.target.result}" class="sup-attach-img">
+          <button type="button" class="sup-attach-remove" data-filename="${file.name}">${icon('x', 10)}</button>
+        `
+        item.querySelector('.sup-attach-remove').addEventListener('click', () => {
+          newFiles = newFiles.filter(f => f.name !== file.name)
+          item.remove()
+        })
+      }
+      reader.readAsDataURL(file)
+      wrap.appendChild(item)
+    }
+
+    modal.querySelector('#sup-attach-pick').addEventListener('click', () => {
+      modal.querySelector('#sup-nfiles').click()
+    })
+    modal.querySelector('#sup-nfiles').addEventListener('change', e => {
+      Array.from(e.target.files).forEach(file => {
+        if (newFiles.some(f => f.name === file.name && f.size === file.size)) return
+        newFiles.push(file)
+        addAttachPreview(file)
+      })
+      e.target.value = ''
+    })
+    modal.addEventListener('paste', e => {
+      const items = Array.from(e.clipboardData?.items || [])
+      const imgs  = items.filter(i => i.type.startsWith('image/')).map(i => i.getAsFile()).filter(Boolean)
+      if (!imgs.length) return
+      e.preventDefault()
+      imgs.forEach((file, i) => {
+        const named = new File([file], file.name || `screenshot_${Date.now()}_${i}.png`, { type: file.type })
+        if (newFiles.some(f => f.name === named.name && f.size === named.size)) return
+        newFiles.push(named)
+        addAttachPreview(named)
+      })
+    })
 
     modal.querySelector('#sup-type-sel').addEventListener('click', e => {
       const btn = e.target.closest('.sup-type-card')
@@ -407,28 +523,46 @@ export async function render(container) {
       if (!title) { modal.querySelector('#sup-ntitle').focus(); return }
       if (!desc)  { modal.querySelector('#sup-ndesc').focus(); return }
 
+      const lastAt = profile?.lastTicketAt?.toDate?.() || (profile?.lastTicketAt ? new Date(profile.lastTicketAt) : null)
+      if (lastAt) {
+        const waitMs = TICKET_COOLDOWN_MS - (Date.now() - lastAt.getTime())
+        if (waitMs > 0) {
+          showToast(`Зачекайте ${Math.ceil(waitMs / 1000)} сек. перед наступною заявкою`, 'error')
+          return
+        }
+      }
+
       const btn = modal.querySelector('#sup-nsubmit')
       btn.disabled = true; btn.textContent = 'Надсилання...'
 
       try {
+        const attachments = await Promise.all(newFiles.map(file => uploadToCloudinary(file)))
         const data = {
           userId:    user.uid,
           userName:  profile?.name  || '',
           userEmail: user.email     || '',
+          appVersion: window.electron?.appVersion || null,
           type:      selectedType,
           priority:  selectedPrio,
           title,
           description: desc,
+          attachments,
           status:    'new',
           replies:   [],
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         }
-        const ref = await addDoc(collection(db, 'tickets'), data)
-        tickets.unshift({ id: ref.id, ...data, createdAt: { toDate: () => new Date() } })
+        const ticketRef = doc(collection(db, 'tickets'))
+        const batch = writeBatch(db)
+        batch.set(ticketRef, data)
+        batch.update(doc(db, 'users', user.uid), { lastTicketAt: serverTimestamp() })
+        await batch.commit()
+        if (profile) profile.lastTicketAt = new Date()
+        tickets.unshift({ id: ticketRef.id, ...data, createdAt: { toDate: () => new Date() } })
         closeModal()
         renderTicketList()
         showToast('Заявку надіслано')
+        sendTicketNotification(data).catch(() => {})
       } catch (err) {
         console.error('ticket create error:', err)
         btn.disabled = false; btn.textContent = 'Надіслати заявку'
@@ -604,6 +738,18 @@ function injectStyles() {
     .sup-input       { padding:10px 14px; background:var(--bg-tertiary); border:1.5px solid var(--border); border-radius:var(--radius-md); font-size:14px; color:var(--text-primary); outline:none; transition:border-color .15s; font-family:inherit; width:100%; box-sizing:border-box; }
     .sup-input:focus { border-color:var(--accent-blue); }
     .sup-textarea    { resize:vertical; min-height:100px; }
+
+    /* ── Attachments (new ticket + reply) ────────────────── */
+    .sup-attach-zone     { display:flex; align-items:center; gap:10px; }
+    .sup-attach-hint     { font-size:11px; color:var(--text-muted); }
+    .sup-attach-hint kbd { background:var(--bg-tertiary); border:1px solid var(--border); border-radius:4px; padding:1px 5px; font-size:10px; font-family:monospace; }
+    .sup-attach-previews { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+    .sup-attach-item     { position:relative; }
+    .sup-attach-img      { width:64px; height:64px; object-fit:cover; border-radius:8px; border:1px solid var(--border); display:block; }
+    .sup-attach-remove   { position:absolute; top:-6px; right:-6px; width:18px; height:18px; border-radius:50%; background:#EF4444; color:#fff; border:none; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+    .sup-msg-attachments { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+    .sup-msg-attach-img  { width:90px; height:90px; object-fit:cover; border-radius:8px; border:1px solid var(--border); cursor:pointer; transition:opacity .15s; }
+    .sup-msg-attach-img:hover { opacity:.85; }
 
     .sup-type-selector { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
     .sup-type-card     { padding:12px 10px; border-radius:var(--radius-lg); background:var(--bg-tertiary); border:2px solid var(--border); cursor:pointer; transition:all .15s; display:flex; flex-direction:column; align-items:center; gap:6px; }
