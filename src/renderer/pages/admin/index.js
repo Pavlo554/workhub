@@ -260,26 +260,6 @@ export async function render(container) {
         <div class="adm-pay-config" id="pay-config-block">
           <div class="adm-section-title" style="margin-bottom:16px">Налаштування способів оплати</div>
 
-          <!-- LiqPay (автоматична оплата) -->
-          <div style="margin-bottom:18px;padding:16px;background:rgba(255,107,53,.06);border:1px solid rgba(255,107,53,.25);border-radius:12px">
-            <div style="font-size:12px;font-weight:700;color:#FF6B35;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">
-              LiqPay — Автоматична оплата картою
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-              <div>
-                <label style="font-size:12px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">Public Key</label>
-                <input class="adm-input" id="cfg-liqpay-pub" placeholder="sandbox_i12345..." type="text">
-              </div>
-              <div>
-                <label style="font-size:12px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">Private Key</label>
-                <input class="adm-input" id="cfg-liqpay-priv" placeholder="sandbox_..." type="password">
-              </div>
-            </div>
-            <div style="font-size:11px;color:var(--text-muted);margin-top:8px">
-              Ключі з кабінету liqpay.ua → Бізнес → Склад. Приватний ключ зберігається в захищеному документі.
-            </div>
-          </div>
-
           <!-- AIFO -->
           <div class="adm-pay-config" style="margin-bottom:18px;padding:16px;background:rgba(91,141,239,.06);border:1px solid rgba(91,141,239,.25);border-radius:12px">
             <div style="font-size:12px;font-weight:700;color:#5B8DEF;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">
@@ -291,32 +271,12 @@ export async function render(container) {
                 <input class="adm-input" id="cfg-aifo-shop" placeholder="123" type="text">
               </div>
               <div>
-                <label style="font-size:12px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">Secret Key</label>
-                <input class="adm-input" id="cfg-aifo-secret" placeholder="••••••••" type="password">
+                <label style="font-size:12px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">Secret Key <span id="cfg-aifo-secret-status" style="color:#34D399;font-weight:700"></span></label>
+                <input class="adm-input" id="cfg-aifo-secret" placeholder="Введіть, щоб змінити ключ" type="password">
               </div>
             </div>
             <div style="font-size:11px;color:var(--text-muted);margin-top:8px">
-              Ключі з кабінету aifo.pro → Інформація про касу. Webhook (для майбутньої авто-активації): https://europe-west1-desktop-crm.cloudfunctions.net/aifoWebhook
-            </div>
-          </div>
-
-          <!-- Telegram notifications -->
-          <div style="margin-bottom:18px;padding:16px;background:rgba(79,142,247,.06);border:1px solid rgba(79,142,247,.25);border-radius:12px">
-            <div style="font-size:12px;font-weight:700;color:#4F8EF7;text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">
-              Telegram — Сповіщення про платежі
-            </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-              <div>
-                <label style="font-size:12px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">Bot Token</label>
-                <input class="adm-input" id="cfg-tg-token" placeholder="5885495961:AAH..." type="password">
-              </div>
-              <div>
-                <label style="font-size:12px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">Chat ID</label>
-                <input class="adm-input" id="cfg-tg-chatid" placeholder="-100123456789">
-              </div>
-            </div>
-            <div style="font-size:11px;color:var(--text-muted);margin-top:8px">
-              Токен від @BotFather, Chat ID від @userinfobot
+              Ключі з кабінету aifo.pro → Інформація про касу. Secret Key читається лише серверною Cloud Function. Webhook: https://europe-west1-desktop-crm.cloudfunctions.net/aifoWebhook
             </div>
           </div>
 
@@ -659,32 +619,16 @@ export async function render(container) {
 
   // ── Payment config ────────────────────────────────────────
   async function loadPayCfg() {
-    const [paySnap, keysSnap, tgSnap, aifoSnap] = await Promise.all([
-      getDoc(doc(db, 'config', 'payments')),
-      getDoc(doc(db, 'config', 'liqpay_keys')),
-      getDoc(doc(db, 'config', 'telegram')),
-      getDoc(doc(db, 'config', 'aifo_keys')),
-    ])
+    const paySnap = await getDoc(doc(db, 'config', 'payments'))
     if (paySnap.exists()) {
       const d = paySnap.data()
-      container.querySelector('#cfg-liqpay-pub').value = d.liqpayPublicKey  || ''
       container.querySelector('#cfg-usdt').value       = d.address_usdt     || ''
       container.querySelector('#cfg-btc').value        = d.address_btc      || ''
       container.querySelector('#cfg-eth').value        = d.address_eth      || ''
       container.querySelector('#cfg-mono').value       = d.monobankJar      || ''
-    }
-    if (keysSnap.exists()) {
-      container.querySelector('#cfg-liqpay-priv').value = keysSnap.data().privateKey || ''
-    }
-    if (tgSnap.exists()) {
-      const t = tgSnap.data()
-      container.querySelector('#cfg-tg-token').value  = t.botToken || ''
-      container.querySelector('#cfg-tg-chatid').value = t.chatId   || ''
-    }
-    if (aifoSnap.exists()) {
-      const a = aifoSnap.data()
-      container.querySelector('#cfg-aifo-shop').value   = a.shopId    || ''
-      container.querySelector('#cfg-aifo-secret').value = a.secretKey || ''
+      container.querySelector('#cfg-aifo-shop').value  = d.aifoShopId       || ''
+      const aifoStatus = container.querySelector('#cfg-aifo-secret-status')
+      if (aifoStatus) aifoStatus.textContent = d.aifoKeyConfigured ? '✓ встановлено' : ''
     }
   }
 
@@ -693,36 +637,30 @@ export async function render(container) {
     const st  = container.querySelector('#pay-cfg-status')
     btn.disabled = true
     try {
-      const privateKey = container.querySelector('#cfg-liqpay-priv').value.trim()
-      const tgToken     = container.querySelector('#cfg-tg-token').value.trim()
-      const tgChatId    = container.querySelector('#cfg-tg-chatid').value.trim()
       const aifoShopId  = container.querySelector('#cfg-aifo-shop').value.trim()
       const aifoSecret  = container.querySelector('#cfg-aifo-secret').value.trim()
 
       await Promise.all([
         // Public payment config
         setDoc(doc(db, 'config', 'payments'), {
-          liqpayPublicKey: container.querySelector('#cfg-liqpay-pub').value.trim() || null,
           address_usdt:    container.querySelector('#cfg-usdt').value.trim() || null,
           address_btc:     container.querySelector('#cfg-btc').value.trim()  || null,
           address_eth:     container.querySelector('#cfg-eth').value.trim()  || null,
           monobankJar:     container.querySelector('#cfg-mono').value.trim() || null,
           aifoShopId:      aifoShopId || null,
+          ...(aifoSecret ? { aifoKeyConfigured: true } : {}),
           updatedAt:       serverTimestamp(),
         }),
-        // LiqPay private key — admin-only doc
-        privateKey
-          ? setDoc(doc(db, 'config', 'liqpay_keys'), { privateKey, updatedAt: serverTimestamp() })
-          : Promise.resolve(),
-        // Telegram config — admin-only doc
-        (tgToken || tgChatId)
-          ? setDoc(doc(db, 'config', 'telegram'), { botToken: tgToken || null, chatId: tgChatId || null, updatedAt: serverTimestamp() })
-          : Promise.resolve(),
-        // AIFO keys — read by any authenticated user (client-side HMAC signing)
+        // AIFO secret key — write-only, admin-only doc (read by Cloud Function via Admin SDK)
         (aifoShopId || aifoSecret)
-          ? setDoc(doc(db, 'config', 'aifo_keys'), { shopId: aifoShopId || null, secretKey: aifoSecret || null, updatedAt: serverTimestamp() })
+          ? setDoc(doc(db, 'config', 'aifo_keys'), {
+              ...(aifoShopId ? { shopId: aifoShopId } : {}),
+              ...(aifoSecret ? { secretKey: aifoSecret } : {}),
+              updatedAt: serverTimestamp(),
+            }, { merge: true })
           : Promise.resolve(),
       ])
+      container.querySelector('#cfg-aifo-secret').value = ''
       st.textContent = 'Збережено'
       setTimeout(() => { st.textContent = '' }, 3000)
     } catch (err) {

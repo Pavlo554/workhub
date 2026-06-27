@@ -32,11 +32,3 @@ export { auth, db }
 export const storage   = getStorage(app)
 export const functions = getFunctions(app, 'europe-west1')
 export default app
-
-// DEV: debug helper — прибрати перед релізом
-if (location.href.includes('--dev') || localStorage.getItem('wh-dev')) {
-  import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js').then(fs => {
-    window.__t = { db, auth, doc: fs.doc, getDoc: fs.getDoc, getDocFromServer: fs.getDocFromServer, updateDoc: fs.updateDoc, setDoc: fs.setDoc }
-    console.log('[WorkHub DEV] window.__t доступний для тестів')
-  })
-}

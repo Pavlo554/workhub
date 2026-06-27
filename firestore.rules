@@ -177,21 +177,19 @@ service cloud.firestore {
     }
 
     // ── Config — sensitive docs MUST come before the wildcard ──────────────
-    // Private keys: admin only (Cloud Functions should use env vars instead)
-    match /config/liqpay_keys {
-      allow read, write: if isOwner() || (isAdmin() && hasTabAccess('payments'));
+    // Payment signing secrets: write-only from the client. Only the Cloud
+    // Function that signs AIFO requests reads this (via Admin SDK, which
+    // bypasses these rules entirely) — no client, including admins, can
+    // read the live secret key back out of Firestore.
+    match /config/aifo_keys {
+      allow read:  if false;
+      allow write: if isOwner() || (isAdmin() && hasTabAccess('payments'));
     }
     match /config/telegram {
       allow read, write: if isOwner() || (isAdmin() && hasTabAccess('payments'));
     }
-    // Read is open to any authenticated user — required for client-side HMAC
-    // signing during checkout (same trust model as the existing LiqPay flow).
-    match /config/aifo_keys {
-      allow read:  if request.auth != null;
-      allow write: if isOwner() || (isAdmin() && hasTabAccess('payments'));
-    }
 
-    // Public payment config (crypto addresses, monobank jar, liqpay public key)
+    // Public payment config (crypto addresses, monobank jar, aifo shop id)
     match /config/payments {
       allow read:  if request.auth != null;
       allow write: if isOwner() || (isAdmin() && hasTabAccess('payments'));
@@ -201,7 +199,7 @@ service cloud.firestore {
     // (Firestore ORs all matching rules, so the exclusion here is mandatory)
     match /config/{docId} {
       allow read: if request.auth != null &&
-        docId != 'liqpay_keys' && docId != 'telegram' && docId != 'ownerClaim' && docId != 'aifo_keys';
+        docId != 'telegram' && docId != 'ownerClaim' && docId != 'aifo_keys';
       allow write: if isOwner() || isAdmin();
     }
 

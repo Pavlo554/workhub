@@ -5,9 +5,8 @@ import {
   fetchCryptoRate, calculateCryptoAmount, createPendingPayment
 } from '../../services/crypto-payment.js'
 import { sendPaymentNotification } from '../../services/telegram-notifications.js'
-import { db } from '../../services/firebase.js'
-import { createLiqPayUrl } from '../../services/liqpay-client.js'
-import { createAifoInvoice } from '../../services/aifo-client.js'
+import { db, functions } from '../../services/firebase.js'
+import { httpsCallable } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js'
 import { doc, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 import { icon } from '../../utils/icons.js'
 
@@ -167,10 +166,10 @@ export async function render(container) {
         <h2 class="sub-section-title">Часті питання</h2>
         <div class="sub-faq-grid">
           ${[
-            { q: 'Які способи оплати?',        a: 'LiqPay (Visa/Mastercard — авто), Monobank або криптовалюта.' },
+            { q: 'Які способи оплати?',        a: 'AIFO (Visa/Mastercard — авто), Monobank або криптовалюта.' },
             { q: 'Можна скасувати підписку?',  a: 'Так, в будь-який момент. Доступ зберігається до кінця оплаченого терміну.' },
             { q: 'Що буде з моїми даними?',    a: 'Всі дані залишаються навіть після скасування підписки.' },
-            { q: 'Коли активується план?',     a: 'LiqPay (картка) — автоматично одразу після оплати. Monobank / крипта — 1-2 год.' },
+            { q: 'Коли активується план?',     a: 'AIFO (картка) — автоматично одразу після оплати. Monobank / крипта — 1-2 год.' },
           ].map(i => `
             <div class="sub-faq-card">
               <div class="sub-faq-q">${i.q}</div>
@@ -204,7 +203,6 @@ export async function render(container) {
     const hasBtc    = !!getCryptoAddress(cfg, 'BTC')
     const hasEth    = !!getCryptoAddress(cfg, 'ETH')
     const hasCrypto = hasUsdt || hasBtc || hasEth
-    const hasLiqPay = !!(cfg.liqpayPublicKey && cfg.liqpayPrivateKey)
     const hasAifo   = !!cfg.aifoShopId
 
     const modal = document.createElement('div')
@@ -245,15 +243,6 @@ export async function render(container) {
 
           <div class="section-label" style="margin-top:20px">Спосіб оплати</div>
           <div class="payment-methods-grid">
-            ${hasLiqPay ? `
-            <button class="payment-method-card payment-method-featured" data-method="liqpay">
-              <div class="payment-method-icon" style="color:#FF6B35">${icon('finances', 26)}</div>
-              <div class="payment-method-content">
-                <div class="payment-method-title">Картка (LiqPay) <span class="pay-auto-badge">Авто</span></div>
-                <div class="payment-method-desc">Visa / Mastercard — миттєва активація</div>
-              </div>
-              <div class="payment-method-arrow">${icon('chevron-right', 16)}</div>
-            </button>` : ''}
             ${mono ? `
             <button class="payment-method-card" data-method="monobank">
               <div class="payment-method-icon">${icon('finances', 26)}</div>
@@ -281,7 +270,7 @@ export async function render(container) {
               </div>
               <div class="payment-method-arrow">${icon('chevron-right', 16)}</div>
             </button>` : ''}
-            ${!hasLiqPay && !mono && !hasCrypto && !hasAifo ? `
+            ${!mono && !hasCrypto && !hasAifo ? `
             <div style="padding:20px;text-align:center;color:var(--text-muted);font-size:14px">
               Способи оплати ще не налаштовані.<br>Зверніться до адміністратора.
             </div>` : ''}
@@ -310,114 +299,11 @@ export async function render(container) {
       btn.addEventListener('click', () => {
         const method = btn.dataset.method
         modal.remove()
-        if (method === 'liqpay')         showLiqPayPayment(plan, selectedMonths)
-        else if (method === 'monobank') showMonobankPayment(plan, cfg, selectedMonths)
+        if (method === 'monobank')      showMonobankPayment(plan, cfg, selectedMonths)
         else if (method === 'crypto')   showCryptoPayment(plan, cfg, selectedMonths)
         else if (method === 'aifo')     showAifoPayment(plan, selectedMonths)
       })
     })
-  }
-
-  function showLiqPayPayment(plan, months = 1) {
-    const DISCOUNTS = { 1: 1, 3: 0.95, 6: 0.90, 12: 0.80 }
-    const amount = Math.round(plan.price * months * DISCOUNTS[months])
-    const modal = document.createElement('div')
-    modal.className = 'modal-overlay'
-    modal.innerHTML = `
-      <div class="modal-container" style="max-width:460px">
-        <div class="modal-header">
-          <div class="modal-header-content">
-            <div class="modal-icon" style="background:linear-gradient(135deg,#FF6B35,#FF8C00)">${icon('finances', 24)}</div>
-            <div>
-              <h2 class="modal-title">Оплата карткою</h2>
-              <p class="modal-subtitle">LiqPay — Visa / Mastercard</p>
-            </div>
-          </div>
-          <button class="modal-close" id="close-liqpay">${icon('x', 16)}</button>
-        </div>
-        <div class="modal-body" id="liqpay-body">
-          <div style="display:flex;align-items:center;justify-content:center;gap:12px;padding:40px 0;color:var(--text-muted)">
-            <div class="btn-spinner" style="border-color:rgba(255,107,53,.3);border-top-color:#FF6B35;width:22px;height:22px"></div>
-            <span style="font-size:14px">Створюємо платіж...</span>
-          </div>
-        </div>
-      </div>
-    `
-    document.body.appendChild(modal)
-
-    let unsubscribePlan = null
-
-    const closeBtn = modal.querySelector('#close-liqpay')
-    closeBtn.addEventListener('click', () => {
-      if (unsubscribePlan) unsubscribePlan()
-      modal.remove()
-    })
-    modal.addEventListener('click', e => {
-      if (e.target === modal) {
-        if (unsubscribePlan) unsubscribePlan()
-        modal.remove()
-      }
-    })
-
-    createLiqPayUrl(user.uid, plan.id, months)
-      .then(({ url }) => {
-        // Open LiqPay checkout in system browser
-        if (window.electron?.openExternal) {
-          window.electron.openExternal(url)
-        } else {
-          window.open(url, '_blank')
-        }
-
-        // Show waiting UI
-        modal.querySelector('#liqpay-body').innerHTML = `
-          <div class="liqpay-waiting">
-            <div class="liqpay-waiting-icon">
-              <div class="liqpay-pulse"></div>
-              ${icon('finances', 36)}
-            </div>
-            <div class="liqpay-waiting-title">Очікуємо оплату</div>
-            <div class="liqpay-waiting-desc">
-              Сторінка оплати відкрита у браузері.<br>
-              Після успішної оплати адміністратор активує підписку.
-            </div>
-            <div class="liqpay-plan-pill">
-              ${plan.svgIcon} <strong>${plan.name}</strong> × ${months} міс — ₴${amount}
-            </div>
-            <div class="liqpay-status" id="liqpay-status">
-              <div class="btn-spinner" style="border-color:rgba(255,107,53,.3);border-top-color:#FF6B35"></div>
-              <span>Очікуємо підтвердження...</span>
-            </div>
-          </div>
-        `
-
-        // Listen for plan activation via Firestore onSnapshot (fires when admin approves OR webhook activates)
-        unsubscribePlan = onSnapshot(doc(db, 'users', user.uid), snap => {
-          const data = snap.data()
-          if (data?.plan === plan.id) {
-            unsubscribePlan()
-            unsubscribePlan = null
-            modal.remove()
-            showSuccessModal(plan.name)
-          }
-        })
-      })
-      .catch(err => {
-        console.error('createLiqPayUrl error:', err)
-        modal.querySelector('#liqpay-body').innerHTML = `
-          <div style="padding:24px;text-align:center">
-            <div style="color:#F87171;font-size:14px;margin-bottom:16px">
-              ${icon('x', 18)} Помилка: ${err.message || 'Не вдалося створити платіж'}
-            </div>
-            <button class="btn-primary-large" id="liqpay-retry" style="max-width:200px;margin:0 auto">
-              Спробувати ще
-            </button>
-          </div>
-        `
-        modal.querySelector('#liqpay-retry')?.addEventListener('click', () => {
-          modal.remove()
-          showLiqPayPayment(plan)
-        })
-      })
   }
 
   function showAifoPayment(plan, months = 1) {
@@ -461,8 +347,8 @@ export async function render(container) {
       }
     })
 
-    createAifoInvoice(user.uid, plan.id, months)
-      .then(({ url }) => {
+    httpsCallable(functions, 'createAifoInvoice')({ planId: plan.id, months })
+      .then(({ data: { url } }) => {
         if (window.electron?.openExternal) {
           window.electron.openExternal(url)
         } else {
