@@ -176,6 +176,11 @@ export function renderNavigation(sidebar, profile) {
           <span class="nav-item-label">${t('nav.settings')}</span>
         </button>
 
+        <button class="nav-item" data-route="faq">
+          <span class="nav-item-icon">${icon('info')}</span>
+          <span class="nav-item-label">FAQ</span>
+        </button>
+
         ${!isMember && plan === 'free' ? `
         <button class="nav-item nav-item-upgrade" data-route="subscribe">
           <span class="nav-item-icon">${icon('upgrade')}</span>

@@ -176,6 +176,12 @@ service cloud.firestore {
       allow write: if isOwner() || (isAdmin() && hasTabAccess('notifications'));
     }
 
+    // ── FAQ — public read, admin-managed ────────────────────────────────────
+    match /faq/{id} {
+      allow read:  if request.auth != null;
+      allow write: if isOwner() || (isAdmin() && hasTabAccess('faq'));
+    }
+
     // ── Config — sensitive docs MUST come before the wildcard ──────────────
     // Payment signing secrets: write-only from the client. Only the Cloud
     // Function that signs AIFO requests reads this (via Admin SDK, which

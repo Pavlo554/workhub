@@ -1,5 +1,5 @@
 // src/renderer/app.js
-import { addRoute, navigate, clearModuleCache, setPageTracker } from '../core/router.js'
+import { addRoute, navigate, clearModuleCache, setPageTracker, prefetchRoute } from '../core/router.js'
 import { onAuthChange, getUserProfile, logoutUser, getCurrentUser, getImpersonation, stopImpersonation } from './services/auth.js'
 import { checkSubscriptionExpiry }                              from './services/subscription-guard.js'
 import { initTheme }                                            from '../core/theme.js'
@@ -30,6 +30,7 @@ addRoute('setup-business',    () => import('./pages/onboarding/setup-business.js
 addRoute('dashboard',         () => import('./pages/dashboard/index.js'))
 addRoute('profile',           () => import('./pages/profile/index.js'))
 addRoute('settings',          () => import('./pages/settings/index.js'))
+addRoute('faq',               () => import('./modules/faq/index.js'))
 addRoute('subscribe',         () => import('./pages/subscribe/index.js'))
 addRoute('admin',             () => import('./pages/admin/index.js'))
 addRoute('legal',             () => import('./pages/legal/index.js'))
@@ -203,8 +204,22 @@ function renderImpersonationBanner() {
 // ── Sidebar ───────────────────────────────────────────────
 let _cachedProfile = null
 
+// Most-visited modules — warm their dynamic import once per session, in
+// idle time, so the first real click feels instant (only Firestore latency
+// remains, not also the module download/parse).
+const PREFETCH_ROUTES = ['clients', 'projects', 'invoices', 'finances', 'tasks', 'settings']
+let _prefetched = false
+function prefetchCommonModules() {
+  if (_prefetched) return
+  _prefetched = true
+  const run = () => PREFETCH_ROUTES.forEach(r => prefetchRoute(r))
+  if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 4000 })
+  else setTimeout(run, 1500)
+}
+
 function showSidebar(profile) {
   _cachedProfile = profile
+  prefetchCommonModules()
   let sidebar = document.getElementById('sidebar')
   if (!sidebar) {
     sidebar = document.createElement('div')

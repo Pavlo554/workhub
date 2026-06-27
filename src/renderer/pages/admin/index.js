@@ -25,6 +25,7 @@ const TABS = [
   { id: 'payments',       iconName: 'credit-card',  label: 'Платежі' },
   { id: 'support',        iconName: 'support',      label: 'Підтримка' },
   { id: 'notifications',  iconName: 'bell',         label: 'Новини' },
+  { id: 'faq',            iconName: 'info',         label: 'FAQ' },
   { id: 'errors',         iconName: 'alert-triangle', label: 'Помилки' },
 ]
 const ADMIN_TAB = { id: 'admins', iconName: 'shield', label: 'Адміни' }
@@ -383,6 +384,49 @@ export async function render(container) {
         </div>
       </div>
 
+      <!-- ── FAQ ── -->
+      <div id="tab-faq" class="adm-panel" style="display:none">
+        <div class="adm-card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <div class="adm-card-title">Часті запитання</div>
+            <button class="adm-btn adm-btn-primary" id="faq-add-btn">+ Додати питання</button>
+          </div>
+          <div id="faq-admin-list"><div class="adm-loading"></div></div>
+        </div>
+      </div>
+
+      <!-- FAQ edit modal -->
+      <div class="adm-overlay" id="faq-modal" style="display:none">
+        <div class="adm-modal" style="max-width:520px">
+          <div class="adm-modal-head">
+            <h2 id="faq-modal-title">Нове питання</h2>
+            <button class="adm-modal-close" id="faq-modal-close">${icon('x', 14)}</button>
+          </div>
+          <div class="adm-modal-body" style="gap:10px">
+            <div class="adm-field">
+              <label>Категорія</label>
+              <input type="text" class="adm-input" id="faq-f-category" placeholder="напр. Оплата">
+            </div>
+            <div class="adm-field">
+              <label>Питання</label>
+              <input type="text" class="adm-input" id="faq-f-question" placeholder="Текст питання">
+            </div>
+            <div class="adm-field">
+              <label>Відповідь</label>
+              <textarea class="adm-input adm-textarea" id="faq-f-answer" rows="5" placeholder="Текст відповіді"></textarea>
+            </div>
+            <div class="adm-field">
+              <label>Порядок (менше число — вище в списку)</label>
+              <input type="number" class="adm-input" id="faq-f-order" value="0">
+            </div>
+          </div>
+          <div class="adm-modal-foot">
+            <button class="adm-btn adm-btn-secondary" id="faq-modal-cancel">Скасувати</button>
+            <button class="adm-btn adm-btn-primary" id="faq-modal-save">Зберегти</button>
+          </div>
+        </div>
+      </div>
+
       <!-- ── ERRORS ── -->
       <div id="tab-errors" class="adm-panel" style="display:none">
         <div class="adm-card">
@@ -685,6 +729,7 @@ export async function render(container) {
     renderPayments()
     renderTickets()
     renderAnnouncements()
+    loadAndRenderFaq()
     loadAndRenderErrors()
     renderOwnerBootstrap()
     if (isOwner) { renderRolesList(); renderAdminsList(); loadAndRenderAdminLogs() }
@@ -987,6 +1032,112 @@ export async function render(container) {
       el.innerHTML = `<div class="adm-empty" style="color:#F87171">Помилка завантаження: ${err.message}</div>`
     }
   }
+
+  // ── FAQ ──────────────────────────────────────────────────────────────────
+  let allFaq = []
+  let editingFaqId = null
+
+  async function loadAndRenderFaq() {
+    const el = container.querySelector('#faq-admin-list')
+    if (!el) return
+    try {
+      const snap = await getDocs(query(collection(db, 'faq'), orderBy('order', 'asc')))
+      allFaq = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    } catch {
+      try {
+        const snap = await getDocs(collection(db, 'faq'))
+        allFaq = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      } catch (err) {
+        el.innerHTML = `<div class="adm-empty" style="color:#F87171">Помилка завантаження: ${err.message}</div>`
+        return
+      }
+    }
+    renderFaqList()
+  }
+
+  function renderFaqList() {
+    const el = container.querySelector('#faq-admin-list')
+    if (!el) return
+    if (!allFaq.length) { el.innerHTML = `<div class="adm-empty">Питань ще немає</div>`; return }
+    el.innerHTML = allFaq.map(f => `
+      <div class="adm-card" style="margin-bottom:8px;padding:14px 16px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+        <div style="flex:1;min-width:0">
+          ${f.category ? `<div style="font-size:11px;font-weight:700;color:var(--accent-blue);text-transform:uppercase;margin-bottom:4px">${esc(f.category)}</div>` : ''}
+          <div style="font-size:14px;font-weight:700;margin-bottom:4px">${esc(f.question)}</div>
+          <div style="font-size:12.5px;color:var(--text-muted);white-space:pre-wrap">${esc((f.answer || '').slice(0, 160))}${(f.answer || '').length > 160 ? '…' : ''}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="adm-btn adm-btn-secondary faq-edit-btn" data-id="${f.id}">${icon('pencil', 12)}</button>
+          <button class="adm-btn adm-btn-secondary faq-del-btn" data-id="${f.id}">${icon('trash', 12)}</button>
+        </div>
+      </div>
+    `).join('')
+
+    el.querySelectorAll('.faq-edit-btn').forEach(btn =>
+      btn.addEventListener('click', () => openFaqModal(allFaq.find(f => f.id === btn.dataset.id))))
+    el.querySelectorAll('.faq-del-btn').forEach(btn =>
+      btn.addEventListener('click', async () => {
+        if (!await wbConfirm('Видалити це питання?')) return
+        await deleteDoc(doc(db, 'faq', btn.dataset.id))
+        allFaq = allFaq.filter(f => f.id !== btn.dataset.id)
+        renderFaqList()
+      }))
+  }
+
+  function openFaqModal(faq = null) {
+    editingFaqId = faq?.id || null
+    container.querySelector('#faq-modal-title').textContent = faq ? 'Редагувати питання' : 'Нове питання'
+    container.querySelector('#faq-f-category').value = faq?.category || ''
+    container.querySelector('#faq-f-question').value = faq?.question || ''
+    container.querySelector('#faq-f-answer').value   = faq?.answer   || ''
+    container.querySelector('#faq-f-order').value     = faq?.order ?? allFaq.length
+    container.querySelector('#faq-modal').style.display = 'flex'
+  }
+  function closeFaqModal() {
+    container.querySelector('#faq-modal').style.display = 'none'
+    editingFaqId = null
+  }
+
+  container.querySelector('#faq-add-btn')?.addEventListener('click', () => openFaqModal())
+  container.querySelector('#faq-modal-close')?.addEventListener('click', closeFaqModal)
+  container.querySelector('#faq-modal-cancel')?.addEventListener('click', closeFaqModal)
+  container.querySelector('#faq-modal')?.addEventListener('click', e => {
+    if (e.target.id === 'faq-modal') closeFaqModal()
+  })
+  container.querySelector('#faq-modal-save')?.addEventListener('click', async () => {
+    const question = container.querySelector('#faq-f-question').value.trim()
+    const answer   = container.querySelector('#faq-f-answer').value.trim()
+    if (!question || !answer) { await wbAlert('Заповніть питання і відповідь'); return }
+
+    const payload = {
+      category: container.querySelector('#faq-f-category').value.trim() || null,
+      question, answer,
+      order:    Number(container.querySelector('#faq-f-order').value) || 0,
+      updatedAt: serverTimestamp(),
+    }
+
+    const btn = container.querySelector('#faq-modal-save')
+    btn.disabled = true
+    try {
+      if (editingFaqId) {
+        await updateDoc(doc(db, 'faq', editingFaqId), payload)
+        const idx = allFaq.findIndex(f => f.id === editingFaqId)
+        if (idx !== -1) allFaq[idx] = { ...allFaq[idx], ...payload }
+      } else {
+        payload.createdAt = serverTimestamp()
+        const ref = await addDoc(collection(db, 'faq'), payload)
+        allFaq.push({ id: ref.id, ...payload })
+      }
+      allFaq.sort((a, b) => (a.order || 0) - (b.order || 0))
+      closeFaqModal()
+      renderFaqList()
+      invalidateRoute('faq')
+    } catch (err) {
+      await wbAlert('Помилка збереження: ' + err.message)
+    } finally {
+      btn.disabled = false
+    }
+  })
 
   async function loadAndRenderErrors() {
     const el = container.querySelector('#errors-list')

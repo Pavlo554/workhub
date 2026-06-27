@@ -83,6 +83,13 @@ export function getCurrentRoute() {
   return currentRoute
 }
 
+// Warm the dynamic-import cache for a route without rendering it, so the
+// first real navigate() there skips the module-download/parse cost and
+// only pays for the Firestore round-trip.
+export function prefetchRoute(routeName) {
+  if (routes[routeName]) routes[routeName]().catch(() => {})
+}
+
 function _showOnly(targetRoute) {
   for (const [name, el] of _cache) {
     el.style.display = name === targetRoute ? '' : 'none'
