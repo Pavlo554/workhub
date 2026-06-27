@@ -180,19 +180,19 @@ export async function render(container) {
     })
   }
 
-  function ticketCard(t) {
-    const tm  = TYPE_META[t.type]     || TYPE_META.support
-    const sm  = STATUS_META[t.status] || STATUS_META.new
-    const pm  = PRIORITY_META[t.priority] || PRIORITY_META.medium
-    const date = t.createdAt?.toDate?.()?.toLocaleDateString('uk-UA') || '—'
-    const repliesCount = t.replies?.length || 0
-    const hasNewReply  = t.replies?.some(r => r.fromAdmin) && t.status !== 'closed'
+  function ticketCard(ticket) {
+    const tm  = TYPE_META[ticket.type]     || TYPE_META.support
+    const sm  = STATUS_META[ticket.status] || STATUS_META.new
+    const pm  = PRIORITY_META[ticket.priority] || PRIORITY_META.medium
+    const date = ticket.createdAt?.toDate?.()?.toLocaleDateString('uk-UA') || '—'
+    const repliesCount = ticket.replies?.length || 0
+    const hasNewReply  = ticket.replies?.some(r => r.fromAdmin) && ticket.status !== 'closed'
 
     return `
-      <div class="sup-ticket-card ${hasNewReply ? 'sup-ticket-card--new-reply' : ''}" data-id="${t.id}">
+      <div class="sup-ticket-card ${hasNewReply ? 'sup-ticket-card--new-reply' : ''}" data-id="${ticket.id}">
         <div class="sup-ticket-type-badge" style="background:${tm.bg};color:${tm.color};display:inline-flex;align-items:center;gap:4px">${icon(tm.iconName, 11)} ${tm.label}</div>
         <div class="sup-ticket-main">
-          <div class="sup-ticket-title">${esc(t.title)}</div>
+          <div class="sup-ticket-title">${esc(ticket.title)}</div>
           <div class="sup-ticket-meta">
             <span class="sup-status-chip" style="color:${sm.color};display:inline-flex;align-items:center;gap:3px">${icon(sm.iconName, 11)} ${sm.label}</span>
             <span class="sup-priority-chip" style="color:${pm.color}">● ${pm.label}</span>

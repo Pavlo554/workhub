@@ -956,7 +956,7 @@ function bindEvents(container, ctxIn) {
       .map(id => ALL_MODULES.find(x => x.id === id)).filter(Boolean).map(m => `
         <label class="biz-check-item">
           <input type="checkbox" value="${m.id}" ${(member.modules || []).includes(m.id) ? 'checked' : ''}>
-          <span class="biz-check-box"><span>${m.icon}</span><span>${m.label}</span></span>
+          <span class="biz-check-box"><span>${icon(m.id, 12)}</span><span>${m.label}</span></span>
         </label>`).join('')
     container.querySelector('#biz-member-modal').dataset.uid = uid
     container.querySelector('#biz-member-modal').style.display = 'flex'
