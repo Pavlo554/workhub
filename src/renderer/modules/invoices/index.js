@@ -11,6 +11,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 import { icon } from '../../utils/icons.js'
 import { t } from '../../core/i18n.js'
+import { invalidateRoute } from '../../../core/router.js'
 
 const PAY_METHODS = {
   card:   { label: 'Картка', iconName: 'finances'  },
@@ -548,18 +549,21 @@ export async function render(container) {
       if (inv.status === 'paid') await removeInvoiceFinanceRecord(base, inv.id)
       closeInvDetail()
       await loadAll()
+      invalidateRoute('dashboard')
     })
     detEl.querySelector('#invd-mark-paid')?.addEventListener('click', async () => {
       await updateDoc(doc(db, ...base, 'invoices', inv.id), { status: 'paid', updatedAt: serverTimestamp() })
       await syncInvoiceToFinances(base, inv, 'paid', inv.status)
       await loadAll()
       openInvDetail(id)
+      invalidateRoute('dashboard')
     })
     detEl.querySelector('#invd-mark-unpaid')?.addEventListener('click', async () => {
       await updateDoc(doc(db, ...base, 'invoices', inv.id), { status: 'unpaid', updatedAt: serverTimestamp() })
       await syncInvoiceToFinances(base, inv, 'unpaid', inv.status)
       await loadAll()
       openInvDetail(id)
+      invalidateRoute('dashboard')
     })
   }
 
@@ -718,6 +722,7 @@ export async function render(container) {
       }
       closeInvModal()
       await loadAll()
+      invalidateRoute('dashboard')
     } catch (err) { console.error(err) }
     finally { btn.disabled = false; btn.innerHTML = 'Зберегти' }
   })
@@ -776,6 +781,7 @@ export async function render(container) {
       }
       closeExpModal()
       await loadAll()
+      invalidateRoute('dashboard')
     } catch (err) { console.error(err) }
     finally { btn.disabled = false; btn.innerHTML = 'Зберегти' }
   })

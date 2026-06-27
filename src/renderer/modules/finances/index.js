@@ -7,6 +7,7 @@ import {
   doc, updateDoc, query, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 import { loadRates } from '../currency/index.js'
+import { invalidateRoute } from '../../../core/router.js'
 
 const FN_CURRENCIES = ['UAH', 'USD', 'EUR', 'GBP', 'PLN']
 const CUR_SYMBOLS   = { UAH: '₴', USD: '$', EUR: '€', GBP: '£', PLN: 'zł' }
@@ -869,6 +870,7 @@ export async function render(container) {
         transactions = transactions.filter(tx => tx.id !== t.id)
         closeDetail()
         renderAll()
+        invalidateRoute('dashboard')
       } catch (err) {
         alert('Помилка видалення: ' + err.message)
       }
@@ -1001,6 +1003,7 @@ export async function render(container) {
       }
       closeModal()
       renderAll()
+      invalidateRoute('dashboard')
     } catch (err) {
       alert('Помилка збереження: ' + err.message)
     } finally {

@@ -97,12 +97,15 @@ export async function joinWorkspace(uid, userProfile, invite) {
     inviteCode:  invite.code,
     joinedAt:    serverTimestamp(),
   })
+  // Назва бізнесу — щоб дашборд воркера показував її, а не порожній фолбек
+  const ws = await getWorkspace(invite.workspaceId)
   // Оновлюємо профіль юзера
   await updateDoc(doc(db, 'users', uid), {
     workspaceId:      invite.workspaceId,
     isWorkspaceOwner: false,
     workspaceRole:    invite.role,
     workspaceModules: invite.modules,
+    workspaceName:    ws?.name || null,
   })
   // Позначаємо запрошення як використане
   await updateDoc(doc(db, 'invites', invite.code), {

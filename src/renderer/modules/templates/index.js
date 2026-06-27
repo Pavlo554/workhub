@@ -32,7 +32,7 @@ export async function render(container) {
   }
 
   function rerender() {
-    const filtered = activeCat === 'all' ? templates : templates.filter(t => t.category === activeCat)
+    const filtered = activeCat === 'all' ? templates : templates.filter(tpl => tpl.category === activeCat)
 
     container.innerHTML = `
       <div class="tpl-page">
@@ -47,12 +47,12 @@ export async function render(container) {
         <div class="tpl-cats">
           <button class="tpl-cat ${activeCat === 'all' ? 'active' : ''}" data-cat="all">${t('common.all')} (${templates.length})</button>
           ${CATS.map(c => {
-            const cnt = templates.filter(t => t.category === c.id).length
+            const cnt = templates.filter(tpl => tpl.category === c.id).length
             if (!cnt && activeCat !== c.id) return ''
             return `<button class="tpl-cat ${activeCat === c.id ? 'active' : ''}" data-cat="${c.id}" style="${activeCat === c.id ? `--cc:${c.color}` : ''}">${c.label} (${cnt})</button>`
           }).join('')}
           ${CATS.map(c => {
-            const cnt = templates.filter(t => t.category === c.id).length
+            const cnt = templates.filter(tpl => tpl.category === c.id).length
             if (cnt) return ''
             return `<button class="tpl-cat ${activeCat === c.id ? 'active' : ''}" data-cat="${c.id}">${c.label}</button>`
           }).join('')}
@@ -60,22 +60,22 @@ export async function render(container) {
 
         ${filtered.length ? `
         <div class="tpl-grid">
-          ${filtered.map(t => {
-            const cat = CATS.find(c => c.id === t.category) || CATS.at(-1)
+          ${filtered.map(tpl => {
+            const cat = CATS.find(c => c.id === tpl.category) || CATS.at(-1)
             return `
               <div class="tpl-card">
                 <div class="tpl-card-head" style="border-left:3px solid ${cat.color}">
                   <div class="tpl-card-cat" style="color:${cat.color};background:${cat.color}15">${cat.label}</div>
                   <div class="tpl-card-btns">
-                    <button class="tpl-cb tpl-copy" data-id="${t.id}" title="Копіювати">${icon('copy', 12)}</button>
-                    <button class="tpl-cb tpl-view" data-id="${t.id}" title="Переглянути">${icon('eye', 12)}</button>
-                    <button class="tpl-cb tpl-edit" data-id="${t.id}" title="Редагувати">${icon('pencil', 12)}</button>
-                    <button class="tpl-cb tpl-del"  data-id="${t.id}" title="Видалити">${icon('trash', 12)}</button>
+                    <button class="tpl-cb tpl-copy" data-id="${tpl.id}" title="Копіювати">${icon('copy', 12)}</button>
+                    <button class="tpl-cb tpl-view" data-id="${tpl.id}" title="Переглянути">${icon('eye', 12)}</button>
+                    <button class="tpl-cb tpl-edit" data-id="${tpl.id}" title="Редагувати">${icon('pencil', 12)}</button>
+                    <button class="tpl-cb tpl-del"  data-id="${tpl.id}" title="Видалити">${icon('trash', 12)}</button>
                   </div>
                 </div>
-                <div class="tpl-card-name">${t.name}</div>
-                <div class="tpl-card-preview">${(t.content || '').slice(0, 120)}${t.content?.length > 120 ? '...' : ''}</div>
-                <div class="tpl-card-vars">${extractVars(t.content).map(v => `<span class="tpl-var">{{${v}}}</span>`).join('')}</div>
+                <div class="tpl-card-name">${tpl.name}</div>
+                <div class="tpl-card-preview">${(tpl.content || '').slice(0, 120)}${tpl.content?.length > 120 ? '...' : ''}</div>
+                <div class="tpl-card-vars">${extractVars(tpl.content).map(v => `<span class="tpl-var">{{${v}}}</span>`).join('')}</div>
               </div>
             `
           }).join('')}

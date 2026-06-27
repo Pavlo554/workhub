@@ -191,7 +191,19 @@ function renderWorkerDashboard(container, profile) {
     if (nameEl)   nameEl.textContent   = owner.name ? `Власник: ${owner.name}` : ''
     if (emailEl)  emailEl.textContent  = owner.email || ''
     if (avatarEl) avatarEl.textContent = (owner.businessName || owner.name || '?')[0].toUpperCase()
-  })
+  }).catch(() => {})
+
+  // Backfill workspaceName on the profile if missing (e.g. accounts that
+  // joined before this field started being saved at invite-accept time)
+  if (!profile.workspaceName && profile.workspaceId) {
+    getDoc(doc(db, 'workspaces', profile.workspaceId)).then(snap => {
+      const wsName = snap.exists() ? snap.data().name : null
+      if (!wsName) return
+      updateDoc(doc(db, 'users', user.uid), { workspaceName: wsName }).catch(() => {})
+      const wsEl = container.querySelector('.wdb-ws-name')
+      if (wsEl) wsEl.textContent = wsName
+    }).catch(() => {})
+  }
 
   // Load stats async
   if (profile.workspaceId) {
@@ -201,7 +213,7 @@ function renderWorkerDashboard(container, profile) {
       set('#wdb-proj-count',   stats.activeProjects)
       set('#wdb-client-count', stats.totalClients)
       set('#wdb-inv-count',    stats.unpaidInvoices)
-    })
+    }).catch(() => {})
   }
 }
 

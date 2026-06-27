@@ -117,6 +117,7 @@ export async function render(container) {
         isWorkspaceOwner: false,
         workspaceRole:    currentInvite.role,
         workspaceModules: currentInvite.modules,
+        workspaceName:    workspaceInfo?.name || null,
       })
       // Оновлюємо навігацію і переходимо на дашборд
       const { renderNavigation } = await import('../../components/navigation.js')
