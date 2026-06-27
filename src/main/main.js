@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, nativeImage } = require('electron')
+const { app, BrowserWindow, ipcMain, shell, nativeImage, Menu } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const path        = require('path')
 const { spawn }   = require('child_process')
@@ -325,6 +325,19 @@ function createWindow() {
   if (process.argv.includes('--dev')) {
     mainWindow.webContents.openDevTools()
     startHotReload(mainWindow)
+  } else {
+    // Production: block DevTools shortcuts/menu so curious users can't
+    // easily poke at the renderer (F12, Ctrl+Shift+I/J/C, Cmd+Opt+I/J/C)
+    Menu.setApplicationMenu(null)
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+      const key = input.key.toLowerCase()
+      if (key === 'f12') { event.preventDefault(); return }
+      const combo = (input.control || input.meta) && input.shift && ['i', 'j', 'c'].includes(key)
+      if (combo) event.preventDefault()
+    })
+    mainWindow.webContents.on('devtools-opened', () => {
+      mainWindow.webContents.closeDevTools()
+    })
   }
 }
 
