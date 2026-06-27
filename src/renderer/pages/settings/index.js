@@ -884,17 +884,19 @@ function attachSecurity(content, user) {
     box.innerHTML = `
       <div class="st-info-card" style="margin-top:14px">
         <div class="st-info-card-icon">${icon('lock', 22)}</div>
-        <div style="font-size:13px;color:var(--text-secondary);line-height:1.6">
-          1. Відкрий <b style="color:var(--text-primary)">Google Authenticator</b> (чи Authy) → "Додати акаунт" → "Ввести код вручну"<br>
-          2. Встав секретний код нижче (поле "Key"), тип — Time-based<br>
-          <div style="margin:10px 0;padding:10px 14px;background:var(--bg-tertiary);border-radius:8px;font-family:monospace;font-size:15px;letter-spacing:2px;word-break:break-all">${secret}</div>
-          3. Введи 6-значний код із застосунку щоб підтвердити:
+        <div style="font-size:13px;color:var(--text-secondary);line-height:1.6;flex:1">
+          1. Відкрий <b style="color:var(--text-primary)">Google Authenticator</b> (чи Authy) → "Додати акаунт" → "Скан QR-коду"<br>
+          <div id="totp-qr" style="width:188px;height:188px;background:#fff;border-radius:10px;margin:12px 0;display:flex;align-items:center;justify-content:center"></div>
+          Або введи код вручну (тип — Time-based):
+          <div style="margin:8px 0;padding:10px 14px;background:var(--bg-tertiary);border-radius:8px;font-family:monospace;font-size:15px;letter-spacing:2px;word-break:break-all">${secret}</div>
+          2. Введи 6-значний код із застосунку щоб підтвердити:
           <div style="display:flex;gap:8px;margin-top:10px">
             <input class="st-input" id="totp-confirm-code" placeholder="123456" maxlength="6" style="max-width:140px;font-family:monospace;font-size:16px;letter-spacing:3px">
             <button class="st-btn st-btn-primary" id="totp-confirm-btn">Підтвердити</button>
           </div>
         </div>
       </div>`
+    renderTotpQr(box.querySelector('#totp-qr'), uri)
     box.querySelector('#totp-confirm-btn').addEventListener('click', async () => {
       const code = box.querySelector('#totp-confirm-code').value.trim()
       if (!/^\d{6}$/.test(code)) { showToast('Введіть 6-значний код', 'error'); return }
@@ -959,6 +961,33 @@ function esc(s) {
   return String(s).replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
+// Lazy-load the QR lib once (cdnjs is already CSP-whitelisted) and render
+// the otpauth:// URI as a scannable code — the secret never leaves the
+// device, the library only draws pixels from the string we already have.
+let _qrLibPromise = null
+function loadQrLib() {
+  if (window.QRCode) return Promise.resolve()
+  if (_qrLibPromise) return _qrLibPromise
+  _qrLibPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'
+    s.onload = resolve
+    s.onerror = reject
+    document.head.appendChild(s)
+  })
+  return _qrLibPromise
+}
+async function renderTotpQr(el, uri) {
+  if (!el) return
+  try {
+    await loadQrLib()
+    el.innerHTML = ''
+    new window.QRCode(el, { text: uri, width: 168, height: 168, colorDark: '#000000', colorLight: '#ffffff' })
+  } catch {
+    el.innerHTML = `<span style="color:#1a1a2e;font-size:11px;padding:8px;text-align:center">QR недоступний — скористайтесь кодом нижче</span>`
+  }
+}
+
 function showToast(msg, type = 'info') {
   document.querySelector('.st-toast')?.remove()
   const el = document.createElement('div')
@@ -1009,6 +1038,7 @@ function injectStyles() {
       display: flex; align-items: center; justify-content: center;
       font-size: 26px; font-weight: 800; color: #fff;
       margin-bottom: 12px; flex-shrink: 0;
+      box-shadow: 0 6px 20px rgba(102,126,234,.35), 0 0 0 4px var(--bg-secondary);
     }
     .st-sidebar-name  { font-size: 15px; font-weight: 700; margin-bottom: 3px; }
     .st-sidebar-email { font-size: 11px; color: var(--text-muted); word-break: break-all; }
@@ -1023,7 +1053,11 @@ function injectStyles() {
       text-align: left; transition: all .15s; width: 100%;
     }
     .st-tab:hover { background: var(--bg-tertiary); color: var(--text-primary); }
-    .st-tab.active { background: rgba(91,141,239,.12); color: var(--accent-blue); font-weight: 700; }
+    .st-tab.active {
+      background: linear-gradient(90deg, rgba(91,141,239,.16), rgba(91,141,239,.05));
+      color: var(--accent-blue); font-weight: 700;
+      box-shadow: inset 2.5px 0 0 var(--accent-blue);
+    }
     .st-tab-icon {
       width: 22px; flex-shrink: 0;
       display: flex; align-items: center; justify-content: center;
@@ -1060,8 +1094,13 @@ function injectStyles() {
     .st-panel-title {
       font-family: var(--font-display); font-size: 22px; font-weight: 800;
       margin-bottom: 4px; letter-spacing: -0.02em;
+      position: relative; padding-left: 14px;
     }
-    .st-panel-subtitle { font-size: 13px; color: var(--text-muted); }
+    .st-panel-title::before {
+      content: ''; position: absolute; left: 0; top: 4px; bottom: 4px; width: 4px;
+      border-radius: 3px; background: linear-gradient(180deg,#667eea,#5B8DEF);
+    }
+    .st-panel-subtitle { font-size: 13px; color: var(--text-muted); margin-left: 14px; }
 
     /* ── Avatar row ── */
     .st-avatar-row {
@@ -1069,11 +1108,15 @@ function injectStyles() {
       padding: 20px; background: var(--bg-secondary);
       border: 1px solid var(--border); border-radius: var(--radius-xl);
       margin-bottom: 24px;
+      box-shadow: 0 4px 18px rgba(0,0,0,.18);
+      transition: box-shadow .2s, border-color .2s;
     }
+    .st-avatar-row:hover { border-color: rgba(91,141,239,.3); box-shadow: 0 6px 24px rgba(0,0,0,.24); }
     .st-big-avatar {
       width: 72px; height: 72px; border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
       font-size: 26px; font-weight: 800; color: #fff; flex-shrink: 0;
+      box-shadow: 0 6px 20px rgba(102,126,234,.35);
     }
     .st-avatar-name  { font-size: 17px; font-weight: 700; margin-bottom: 3px; }
     .st-avatar-email { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
@@ -1126,18 +1169,19 @@ function injectStyles() {
       font-size: 13.5px; font-weight: 700; cursor: pointer;
       border: none; transition: all .18s;
     }
+    .st-btn:active { transform: scale(.97); }
     .st-btn-primary {
       background: linear-gradient(135deg,#667eea,#5B8DEF);
-      color: #fff;
+      color: #fff; box-shadow: 0 2px 10px rgba(91,141,239,.25);
     }
     .st-btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(91,141,239,.4); }
     .st-btn-primary:disabled { opacity: .6; transform: none; box-shadow: none; }
-    .st-btn-ghost {
+    .st-btn-ghost, .st-btn-secondary {
       background: var(--bg-secondary); border: 1.5px solid var(--border);
       color: var(--text-primary);
     }
-    .st-btn-ghost:hover { border-color: var(--accent-blue); }
-    .st-btn-danger { background: linear-gradient(135deg,#EF4444,#DC2626); color: #fff; }
+    .st-btn-ghost:hover, .st-btn-secondary:hover { border-color: var(--accent-blue); background: var(--bg-tertiary); }
+    .st-btn-danger { background: linear-gradient(135deg,#EF4444,#DC2626); color: #fff; box-shadow: 0 2px 10px rgba(239,68,68,.2); }
     .st-btn-danger:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(239,68,68,.4); }
     .st-btn-outline {
       background: none; border: 1.5px solid var(--plan-color,var(--border));
@@ -1153,9 +1197,10 @@ function injectStyles() {
       padding: 16px 18px; background: var(--bg-secondary);
       border: 2px solid var(--border); border-radius: var(--radius-xl);
       cursor: pointer; transition: all .15s; text-align: left; width: 100%;
+      box-shadow: 0 2px 8px rgba(0,0,0,.1);
     }
-    .st-lang-card:hover { border-color: rgba(255,255,255,.2); }
-    .st-lang-card.active { border-color: var(--accent-blue); background: rgba(91,141,239,.07); }
+    .st-lang-card:hover { border-color: rgba(255,255,255,.2); transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0,0,0,.16); }
+    .st-lang-card.active { border-color: var(--accent-blue); background: rgba(91,141,239,.07); box-shadow: 0 4px 16px rgba(91,141,239,.18); }
     .st-lang-flag  { font-size: 28px; flex-shrink: 0; }
     .st-lang-info  { flex: 1; }
     .st-lang-name  { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
@@ -1177,9 +1222,10 @@ function injectStyles() {
       background: var(--bg-secondary); border: 2px solid var(--border);
       border-radius: var(--radius-xl); padding: 14px;
       cursor: pointer; transition: all .15s; text-align: left; position: relative; overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,.1);
     }
-    .st-theme-card:hover { border-color: rgba(255,255,255,.2); }
-    .st-theme-card.active { border-color: var(--accent-blue); }
+    .st-theme-card:hover { border-color: rgba(255,255,255,.2); transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,.2); }
+    .st-theme-card.active { border-color: var(--accent-blue); box-shadow: 0 6px 18px rgba(91,141,239,.2); }
     .st-theme-preview {
       height: 80px; border-radius: var(--radius-md); overflow: hidden;
       display: flex; margin-bottom: 10px;
@@ -1239,7 +1285,9 @@ function injectStyles() {
       display: flex; align-items: center; gap: 14px;
       padding: 14px 16px; background: var(--bg-secondary);
       border: 1px solid var(--border); border-radius: var(--radius-md);
+      box-shadow: 0 2px 10px rgba(0,0,0,.12); transition: box-shadow .2s, border-color .2s;
     }
+    .st-session-row:hover { border-color: rgba(91,141,239,.25); box-shadow: 0 4px 16px rgba(0,0,0,.18); }
     .st-session-icon  { display: flex; align-items: center; color: var(--text-muted); }
     .st-session-info  { flex: 1; }
     .st-session-name  { font-size: 14px; font-weight: 600; }
@@ -1254,6 +1302,7 @@ function injectStyles() {
       background: var(--bg-tertiary); border: 1px solid var(--border);
       border-radius: var(--radius-lg); padding: 16px 20px;
       margin-bottom: 24px; display: flex; gap: 14px; align-items: flex-start;
+      box-shadow: 0 2px 10px rgba(0,0,0,.1);
     }
     .st-info-card-icon { flex-shrink: 0; display: flex; align-items: center; color: var(--accent-blue); }
     .st-keys-active {
@@ -1269,8 +1318,10 @@ function injectStyles() {
       border-radius: var(--radius-xl); padding: 20px;
       display: flex; flex-direction: column; gap: 8px;
       transition: all .2s; position: relative;
+      box-shadow: 0 2px 10px rgba(0,0,0,.12);
     }
-    .st-plan-card.current { border-color: var(--plan-color); background: color-mix(in srgb, var(--plan-color) 6%, var(--bg-secondary)); }
+    .st-plan-card:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(0,0,0,.2); }
+    .st-plan-card.current { border-color: var(--plan-color); background: color-mix(in srgb, var(--plan-color) 6%, var(--bg-secondary)); box-shadow: 0 6px 20px color-mix(in srgb, var(--plan-color) 25%, transparent); }
     .st-plan-icon { display: flex; align-items: center; color: var(--plan-color, var(--text-muted)); }
     .st-plan-name { font-size: 11px; font-weight: 800; letter-spacing: .08em; }
     .st-plan-price { font-family: var(--font-display); font-size: 26px; font-weight: 800; line-height: 1; }
@@ -1301,6 +1352,7 @@ function injectStyles() {
       background: var(--bg-secondary);
       border: 2px solid rgba(239,68,68,.25); border-radius: var(--radius-xl);
       overflow: hidden;
+      box-shadow: 0 4px 16px rgba(239,68,68,.08);
     }
     .st-danger-row { display: flex; align-items: center; gap: 14px; padding: 20px 22px; }
     .st-danger-divider { height: 1px; background: rgba(239,68,68,.15); }
@@ -1405,6 +1457,7 @@ function injectStyles() {
     }
     .st-toggle input:checked + .st-toggle-track {
       background: var(--accent-blue); border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px rgba(91,141,239,.18);
     }
     .st-toggle input:checked + .st-toggle-track .st-toggle-thumb {
       transform: translateX(20px); background: #fff;
