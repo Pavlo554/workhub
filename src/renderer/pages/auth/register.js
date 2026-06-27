@@ -1,6 +1,6 @@
 // src/renderer/pages/auth/register.js
 import { registerUser, getAuthErrorMessage } from '../../services/auth.js'
-import { navigate } from '../../../core/router.js'
+import { navigate, invalidateRoute } from '../../../core/router.js'
 import { icon } from '../../utils/icons.js'
 
 export async function render(container) {
@@ -47,7 +47,9 @@ export async function render(container) {
         </form>
 
         <p class="auth-terms">
-          Реєструючись, ви погоджуєтесь з <a href="#">Умовами використання</a>
+          Реєструючись, ви погоджуєтесь з <a href="#" id="terms-link">Умовами використання</a>,
+          <a href="#" id="privacy-link">Політикою конфіденційності</a> та
+          <a href="#" id="cookies-link">Політикою cookies</a>
         </p>
         <div class="auth-footer">
           Вже є акаунт? <a href="#" id="go-login">Увійти</a>
@@ -86,6 +88,16 @@ export async function render(container) {
     e.preventDefault()
     navigate('login')
   })
+
+  const openLegal = (tab) => (e) => {
+    e.preventDefault()
+    location.hash = `#${tab}`
+    invalidateRoute('legal')
+    navigate('legal')
+  }
+  container.querySelector('#terms-link')?.addEventListener('click', openLegal('terms'))
+  container.querySelector('#privacy-link')?.addEventListener('click', openLegal('privacy'))
+  container.querySelector('#cookies-link')?.addEventListener('click', openLegal('cookies'))
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault()

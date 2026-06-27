@@ -1,19 +1,29 @@
+const TABS = {
+  privacy: privacyPolicy,
+  terms:   termsOfUse,
+  cookies: cookiePolicy,
+}
+const TAB_LABELS = {
+  privacy: 'Політика конфіденційності',
+  terms:   'Умови використання',
+  cookies: 'Політика cookies',
+}
+
 export function render(container) {
-  const hash = location.hash.includes('terms') ? 'terms' : 'privacy'
+  const initial = Object.keys(TABS).find(k => location.hash.includes(k)) || 'privacy'
 
   container.innerHTML = `
     <div class="legal-page">
       <div class="legal-tabs">
-        <button class="legal-tab ${hash === 'privacy' ? 'active' : ''}" data-tab="privacy">
-          Політика конфіденційності
-        </button>
-        <button class="legal-tab ${hash === 'terms' ? 'active' : ''}" data-tab="terms">
-          Умови використання
-        </button>
+        ${Object.keys(TABS).map(key => `
+          <button class="legal-tab ${key === initial ? 'active' : ''}" data-tab="${key}">
+            ${TAB_LABELS[key]}
+          </button>
+        `).join('')}
       </div>
 
       <div class="legal-content" id="legal-content">
-        ${hash === 'privacy' ? privacyPolicy() : termsOfUse()}
+        ${TABS[initial]()}
       </div>
     </div>
   `
@@ -24,8 +34,8 @@ export function render(container) {
     btn.addEventListener('click', () => {
       container.querySelectorAll('.legal-tab').forEach(b => b.classList.remove('active'))
       btn.classList.add('active')
-      container.querySelector('#legal-content').innerHTML =
-        btn.dataset.tab === 'privacy' ? privacyPolicy() : termsOfUse()
+      container.querySelector('#legal-content').innerHTML = TABS[btn.dataset.tab]()
+      container.querySelector('.legal-page').scrollTo({ top: 0 })
     })
   })
 }
@@ -162,6 +172,47 @@ function termsOfUse() {
   `
 }
 
+function cookiePolicy() {
+  return `
+    <h1>Політика cookies WorkHub</h1>
+    <p class="legal-date">Дата набрання чинності: 01.01.2025</p>
+
+    <h2>1. Загальні положення</h2>
+    <p>WorkHub — десктопний застосунок, тож традиційних браузерних cookies в ньому немає. Натомість застосунок використовує локальне сховище (localStorage) на вашому пристрої для аналогічних цілей. Ця Політика описує, що саме зберігається локально та навіщо.</p>
+
+    <h2>2. Що зберігається локально в застосунку</h2>
+    <table class="legal-table">
+      <thead><tr><th>Категорія</th><th>Призначення</th><th>Термін зберігання</th></tr></thead>
+      <tbody>
+        <tr><td>Необхідні</td><td>Мова інтерфейсу, налаштування теми, стан бічної панелі (розгорнуто/згорнуто)</td><td>До видалення вручну або перевстановлення застосунку</td></tr>
+        <tr><td>Функціональні</td><td>Кеш курсів валют НБУ (оновлюється щогодини), позначки виконаних податкових подій</td><td>1 година — 12 місяців</td></tr>
+        <tr><td>Сесійні</td><td>Токен автентифікації Firebase для збереження входу між запусками</td><td>До виходу з акаунту</td></tr>
+      </tbody>
+    </table>
+    <p>Жодні з цих даних не передаються третім особам — вони лишаються виключно на вашому пристрої.</p>
+
+    <h2>3. Cookies на сайті workhub.online (лендінг)</h2>
+    <p>Маркетинговий сайт WorkHub наразі <strong>не використовує</strong> cookies для аналітики чи реклами (Google Analytics, Facebook Pixel тощо не підключені). Якщо це зміниться — ми оновимо цю Політику і повідомимо про це на сайті банером згоди на cookies.</p>
+
+    <h2>4. Аналітика всередині застосунку</h2>
+    <p>Застосунок використовує Google Analytics 4 для збору анонімної статистики використання (які модулі відкривають, як часто запускають застосунок). Це не cookies у класичному вигляді — дані прив'язані до анонімного ідентифікатора пристрою, не до cookie-файлу браузера. Детальніше — у Політиці конфіденційності, розділ 2.3.</p>
+
+    <h2>5. Як очистити локальні дані</h2>
+    <p>Ви можете видалити локальне сховище застосунку:</p>
+    <ul>
+      <li>Вийшовши з акаунту (очищує токен сесії)</li>
+      <li>Видаливши папку даних застосунку (Windows: <code>%APPDATA%\\WorkHub</code>) — поверне застосунок до стану "як після встановлення"</li>
+    </ul>
+    <p>Зверніть увагу: видалення локального сховища не видаляє ваші бізнес-дані з хмари (Firebase) — вони лишаються прив'язаними до вашого акаунту.</p>
+
+    <h2>6. Зміни до Політики</h2>
+    <p>Про суттєві зміни ми повідомимо через застосунок не пізніше ніж за 14 днів до набрання чинності.</p>
+
+    <h2>7. Контакти</h2>
+    <p>З питань щодо цієї Політики звертайтесь через модуль «Підтримка» у застосунку.</p>
+  `
+}
+
 function injectStyles() {
   if (document.getElementById('legal-styles')) return
   const s = document.createElement('style')
@@ -184,6 +235,10 @@ function injectStyles() {
     .legal-content ul { padding-left: 20px; margin: 8px 0; }
     .legal-content li { margin-bottom: 4px; }
     .legal-date { color: var(--text-muted) !important; font-size: 13px !important; margin-bottom: 24px; }
+    .legal-table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+    .legal-table th, .legal-table td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; color: var(--text-secondary); }
+    .legal-table th { color: var(--text-primary); font-weight: 600; background: var(--bg-secondary, rgba(255,255,255,.03)); }
+    .legal-content code { background: var(--bg-secondary, rgba(255,255,255,.06)); padding: 2px 6px; border-radius: 4px; font-family: var(--font-mono, monospace); font-size: 12.5px; }
   `
   document.head.appendChild(s)
 }

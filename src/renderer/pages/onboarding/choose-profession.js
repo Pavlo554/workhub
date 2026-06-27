@@ -197,6 +197,9 @@ export async function render(container) {
             <button class="ob-select-all" id="toggle-all-btn">Вибрати всі</button>
           </div>
           <div class="ob-mod-grid" id="mod-grid"></div>
+          <div class="ob-mod-empty-hint" id="mod-empty-hint" style="display:none;color:#F87171;font-size:12px;margin-bottom:12px">
+            Оберіть хоча б один модуль — інакше в робочому просторі не буде з чим працювати
+          </div>
           <div class="onboarding-footer">
             <button class="btn btn-secondary" id="back-modules-btn">← Назад</button>
             <button class="btn btn-primary" id="next-modules-btn">Продовжити →</button>
@@ -270,6 +273,10 @@ export async function render(container) {
           selectedModules.add(id)
           card.classList.add('checked')
         }
+        if (selectedModules.size > 0) {
+          const hint = container.querySelector('#mod-empty-hint')
+          if (hint) hint.style.display = 'none'
+        }
       })
     })
   }
@@ -300,6 +307,10 @@ export async function render(container) {
 
   // Save and continue
   container.querySelector('#next-modules-btn').addEventListener('click', () => {
+    if (selectedModules.size === 0) {
+      container.querySelector('#mod-empty-hint').style.display = 'block'
+      return
+    }
     const btn = container.querySelector('#next-modules-btn')
     btn.disabled = true
     btn.innerHTML = '<div class="spinner"></div>'

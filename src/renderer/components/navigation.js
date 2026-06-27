@@ -75,9 +75,14 @@ export function renderNavigation(sidebar, profile) {
 
   const config = getProfessionConfig(activeProfession)
 
-  const professionModules = profile?.activeBusiness && profile?.activeBusinessModules?.length
+  // 'dashboard' alone isn't a usable workspace — treat it the same as "nothing
+  // selected" and fall back to the niche's default modules instead of leaving
+  // someone stuck with an empty sidebar (can happen if onboarding lets a user
+  // deselect every module before finishing setup).
+  const hasUsableSelection = arr => arr?.length > (arr.includes('dashboard') ? 1 : 0)
+  const professionModules = profile?.activeBusiness && hasUsableSelection(profile?.activeBusinessModules)
     ? profile.activeBusinessModules
-    : (profile?.selectedModules?.length ? profile.selectedModules : config.modules)
+    : (hasUsableSelection(profile?.selectedModules) ? profile.selectedModules : config.modules)
 
   const modules = isWorker
     ? (isMember ? (profile.workspaceModules || []) : [])

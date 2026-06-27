@@ -1,5 +1,5 @@
 // src/renderer/pages/settings/index.js
-import { navigate } from '../../../core/router.js'
+import { navigate, invalidateRoute } from '../../../core/router.js'
 import { getCurrentUser, getUserProfile, updateProfileCache } from '../../services/auth.js'
 import { auth, db } from '../../services/firebase.js'
 import { signOut, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js'
@@ -55,6 +55,11 @@ export async function render(container) {
             <div class="st-plan-badge st-plan-${profile?.plan || 'free'}">
               ${(profile?.plan || 'FREE').toUpperCase()} ПЛАН
             </div>
+            <div class="st-legal-links">
+              <a href="#" id="legal-terms-link">Умови</a>
+              <a href="#" id="legal-privacy-link">Конфіденційність</a>
+              <a href="#" id="legal-cookies-link">Cookies</a>
+            </div>
           </div>
         </aside>
 
@@ -79,6 +84,16 @@ export async function render(container) {
     })
 
     attachTabEvents(container.querySelector('#st-content'), activeTab, profile, user)
+
+    const openLegal = (tab) => (e) => {
+      e.preventDefault()
+      location.hash = `#${tab}`
+      invalidateRoute('legal')
+      navigate('legal')
+    }
+    container.querySelector('#legal-terms-link')?.addEventListener('click', openLegal('terms'))
+    container.querySelector('#legal-privacy-link')?.addEventListener('click', openLegal('privacy'))
+    container.querySelector('#legal-cookies-link')?.addEventListener('click', openLegal('cookies'))
   }
 
   renderPage()
@@ -1100,6 +1115,9 @@ function injectStyles() {
     .st-tab-label { flex: 1; }
 
     .st-sidebar-footer { padding: 16px 20px 0; border-top: 1px solid var(--border); margin-top: 16px; }
+    .st-legal-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .st-legal-links a { font-size: 11px; color: var(--text-muted); text-decoration: none; }
+    .st-legal-links a:hover { color: var(--text-secondary); text-decoration: underline; }
     .st-plan-badge {
       text-align: center; padding: 5px 12px; border-radius: var(--radius-full);
       font-size: 11px; font-weight: 800; letter-spacing: .06em;
