@@ -412,8 +412,13 @@ export async function render(container) {
               <input type="text" class="adm-input" id="faq-f-question" placeholder="Текст питання">
             </div>
             <div class="adm-field">
-              <label>Відповідь</label>
-              <textarea class="adm-input adm-textarea" id="faq-f-answer" rows="5" placeholder="Текст відповіді"></textarea>
+              <label>Відповідь — додавайте блоки в потрібному порядку (текст, фото, текст, фото...)</label>
+              <div id="faq-f-blocks" style="display:flex;flex-direction:column;gap:8px"></div>
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <button type="button" class="adm-btn adm-btn-secondary" id="faq-add-text-block">+ Текст</button>
+                <button type="button" class="adm-btn adm-btn-secondary" id="faq-add-image-block">+ Фото</button>
+              </div>
+              <input type="file" id="faq-image-input" accept="image/*" style="display:none">
             </div>
             <div class="adm-field">
               <label>Порядок (менше число — вище в списку)</label>
@@ -1084,18 +1089,61 @@ export async function render(container) {
       }))
   }
 
+  // Content blocks for the answer being edited: [{type:'text', text} | {type:'image', url}]
+  let faqBlocks = []
+
+  function renderFaqBlocks() {
+    const el = container.querySelector('#faq-f-blocks')
+    if (!faqBlocks.length) {
+      el.innerHTML = `<div style="font-size:12px;color:var(--text-muted)">Додайте текст або фото нижче</div>`
+      return
+    }
+    el.innerHTML = faqBlocks.map((b, i) => `
+      <div class="adm-card" style="padding:10px;display:flex;align-items:flex-start;gap:8px">
+        ${b.type === 'image'
+          ? `<img src="${b.url}" style="width:64px;height:64px;object-fit:cover;border-radius:8px;flex-shrink:0">`
+          : `<textarea class="adm-input faq-block-text" data-i="${i}" rows="2" style="flex:1" placeholder="Текст...">${esc(b.text || '')}</textarea>`
+        }
+        <button type="button" class="adm-btn adm-btn-secondary faq-block-up"   data-i="${i}" title="Вище" ${i === 0 ? 'disabled' : ''}>↑</button>
+        <button type="button" class="adm-btn adm-btn-secondary faq-block-down" data-i="${i}" title="Нижче" ${i === faqBlocks.length - 1 ? 'disabled' : ''}>↓</button>
+        <button type="button" class="adm-btn adm-btn-secondary faq-block-del"  data-i="${i}" title="Видалити">${icon('trash', 12)}</button>
+      </div>
+    `).join('')
+
+    el.querySelectorAll('.faq-block-text').forEach(ta =>
+      ta.addEventListener('input', () => { faqBlocks[Number(ta.dataset.i)].text = ta.value }))
+    el.querySelectorAll('.faq-block-del').forEach(btn =>
+      btn.addEventListener('click', () => { faqBlocks.splice(Number(btn.dataset.i), 1); renderFaqBlocks() }))
+    el.querySelectorAll('.faq-block-up').forEach(btn =>
+      btn.addEventListener('click', () => {
+        const i = Number(btn.dataset.i)
+        ;[faqBlocks[i - 1], faqBlocks[i]] = [faqBlocks[i], faqBlocks[i - 1]]
+        renderFaqBlocks()
+      }))
+    el.querySelectorAll('.faq-block-down').forEach(btn =>
+      btn.addEventListener('click', () => {
+        const i = Number(btn.dataset.i)
+        ;[faqBlocks[i + 1], faqBlocks[i]] = [faqBlocks[i], faqBlocks[i + 1]]
+        renderFaqBlocks()
+      }))
+  }
+
   function openFaqModal(faq = null) {
     editingFaqId = faq?.id || null
     container.querySelector('#faq-modal-title').textContent = faq ? 'Редагувати питання' : 'Нове питання'
     container.querySelector('#faq-f-category').value = faq?.category || ''
     container.querySelector('#faq-f-question').value = faq?.question || ''
-    container.querySelector('#faq-f-answer').value   = faq?.answer   || ''
     container.querySelector('#faq-f-order').value     = faq?.order ?? allFaq.length
+    faqBlocks = faq?.content?.length
+      ? faq.content.map(b => ({ ...b }))
+      : (faq?.answer ? [{ type: 'text', text: faq.answer }] : [])
+    renderFaqBlocks()
     container.querySelector('#faq-modal').style.display = 'flex'
   }
   function closeFaqModal() {
     container.querySelector('#faq-modal').style.display = 'none'
     editingFaqId = null
+    faqBlocks = []
   }
 
   container.querySelector('#faq-add-btn')?.addEventListener('click', () => openFaqModal())
@@ -1104,14 +1152,44 @@ export async function render(container) {
   container.querySelector('#faq-modal')?.addEventListener('click', e => {
     if (e.target.id === 'faq-modal') closeFaqModal()
   })
+
+  container.querySelector('#faq-add-text-block')?.addEventListener('click', () => {
+    faqBlocks.push({ type: 'text', text: '' })
+    renderFaqBlocks()
+  })
+  container.querySelector('#faq-add-image-block')?.addEventListener('click', () => {
+    container.querySelector('#faq-image-input').click()
+  })
+  container.querySelector('#faq-image-input')?.addEventListener('change', async (e) => {
+    const file = e.target.files[0]
+    e.target.value = ''
+    if (!file) return
+    const btn = container.querySelector('#faq-add-image-block')
+    btn.disabled = true
+    btn.textContent = 'Завантаження...'
+    try {
+      const { url } = await uploadToCloudinary(file)
+      faqBlocks.push({ type: 'image', url })
+      renderFaqBlocks()
+    } catch (err) {
+      await wbAlert('Помилка завантаження фото: ' + err.message)
+    } finally {
+      btn.disabled = false
+      btn.textContent = '+ Фото'
+    }
+  })
+
   container.querySelector('#faq-modal-save')?.addEventListener('click', async () => {
     const question = container.querySelector('#faq-f-question').value.trim()
-    const answer   = container.querySelector('#faq-f-answer').value.trim()
-    if (!question || !answer) { await wbAlert('Заповніть питання і відповідь'); return }
+    const content  = faqBlocks.filter(b => b.type === 'image' || (b.type === 'text' && b.text.trim()))
+    if (!question || !content.length) { await wbAlert('Заповніть питання і хоча б один блок відповіді'); return }
 
     const payload = {
       category: container.querySelector('#faq-f-category').value.trim() || null,
-      question, answer,
+      question,
+      content,
+      // Plain-text fallback used for search and by any older client build
+      answer: content.filter(b => b.type === 'text').map(b => b.text).join('\n\n'),
       order:    Number(container.querySelector('#faq-f-order').value) || 0,
       updatedAt: serverTimestamp(),
     }

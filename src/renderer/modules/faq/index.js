@@ -79,7 +79,7 @@ export async function render(container) {
           <span>${esc(i.question)}</span>
           ${icon('chevron-down', 14)}
         </button>
-        <div class="faq-a"><div class="faq-a-inner">${esc(i.answer)}</div></div>
+        <div class="faq-a"><div class="faq-a-inner">${renderBlocks(i)}</div></div>
       </div>
     `).join('')}</div>`
 
@@ -95,6 +95,17 @@ export async function render(container) {
     searchTerm = e.target.value
     renderList()
   })
+}
+
+function renderBlocks(item) {
+  if (item.content?.length) {
+    return item.content.map(b =>
+      b.type === 'image'
+        ? `<img class="faq-a-img" src="${esc(b.url)}" alt="">`
+        : `<p class="faq-a-text">${esc(b.text)}</p>`
+    ).join('')
+  }
+  return `<p class="faq-a-text">${esc(item.answer)}</p>`
 }
 
 function esc(s) {
@@ -138,9 +149,11 @@ function injectStyles() {
     }
     .faq-q svg { flex-shrink: 0; transition: transform .2s; color: var(--text-muted); }
     .faq-item.open .faq-q svg { transform: rotate(180deg); }
-    .faq-a { max-height: 0; overflow: hidden; transition: max-height .2s ease; }
-    .faq-item.open .faq-a { max-height: 600px; }
-    .faq-a-inner { padding: 0 16px 16px; font-size: 13.5px; line-height: 1.6; color: var(--text-secondary); white-space: pre-wrap; }
+    .faq-a { max-height: 0; overflow: hidden; transition: max-height .25s ease; }
+    .faq-item.open .faq-a { max-height: 4000px; }
+    .faq-a-inner { padding: 0 16px 16px; font-size: 13.5px; line-height: 1.6; color: var(--text-secondary); display: flex; flex-direction: column; gap: 10px; }
+    .faq-a-text { margin: 0; white-space: pre-wrap; }
+    .faq-a-img { max-width: 100%; border-radius: var(--radius-md); border: 1px solid var(--border); }
 
     .faq-empty { text-align: center; padding: 60px 20px; color: var(--text-muted); }
     .faq-empty-icon { opacity: .4; margin-bottom: 14px; display: flex; justify-content: center; }
