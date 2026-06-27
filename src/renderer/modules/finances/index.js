@@ -6,6 +6,14 @@ import {
   collection, addDoc, getDocs, deleteDoc,
   doc, updateDoc, query, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
+import { loadRates } from '../currency/index.js'
+
+const FN_CURRENCIES = ['UAH', 'USD', 'EUR', 'GBP', 'PLN']
+const CUR_SYMBOLS   = { UAH: '₴', USD: '$', EUR: '€', GBP: '£', PLN: 'zł' }
+function curSymbol(code) { return CUR_SYMBOLS[code] || code }
+function fmtOrig(v, currency) {
+  return curSymbol(currency) + Math.abs(v || 0).toLocaleString('uk-UA', { minimumFractionDigits: 0 })
+}
 
 // ── Category definitions ───────────────────────────────────────────────────
 const INCOME_CATS = [
@@ -489,7 +497,11 @@ function injectStyles() {
     /* Amount input */
     .fn-amount-wrap {
       position: relative;
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
+    .fn-amount-wrap .fn-amount-input { flex: 1; min-width: 0; }
     .fn-amount-prefix {
       position: absolute;
       left: 12px;
@@ -604,15 +616,19 @@ export async function render(container) {
               </div>
             </div>
 
-            <!-- Amount -->
+            <!-- Amount + currency -->
             <div class="field">
               <label>Сума *</label>
               <div class="fn-amount-wrap">
-                <span class="fn-amount-prefix">₴</span>
+                <span class="fn-amount-prefix" id="fn-f-amount-prefix">₴</span>
                 <input id="fn-f-amount" type="number" class="input fn-amount-input"
                        placeholder="0.00" step="0.01" min="0" />
+                <select id="fn-f-currency" class="input" style="max-width:90px;flex-shrink:0">
+                  ${FN_CURRENCIES.map(c => `<option value="${c}">${c}</option>`).join('')}
+                </select>
               </div>
               <span class="fn-field-error" id="fn-e-amount"></span>
+              <span class="fn-fx-preview" id="fn-fx-preview" style="display:none;font-size:12px;color:var(--text-muted)"></span>
             </div>
 
             <!-- Category -->
@@ -659,6 +675,30 @@ export async function render(container) {
   const modalEl   = container.querySelector('#fn-modal')
   const formEl    = container.querySelector('#fn-form')
 
+  let fxRates = null
+  loadRates().then(r => { fxRates = r.rates }).catch(() => {})
+
+  function updateFxPreview() {
+    const amountEl   = container.querySelector('#fn-f-amount')
+    const currencyEl = container.querySelector('#fn-f-currency')
+    const prefixEl   = container.querySelector('#fn-f-amount-prefix')
+    const previewEl  = container.querySelector('#fn-fx-preview')
+    if (!amountEl || !currencyEl) return
+    const currency = currencyEl.value
+    prefixEl.textContent = curSymbol(currency)
+    const amount = parseFloat(amountEl.value)
+    if (currency === 'UAH' || !amount || !fxRates) {
+      previewEl.style.display = 'none'
+      return
+    }
+    const rate = fxRates[currency]
+    if (!rate) { previewEl.style.display = 'none'; return }
+    previewEl.textContent = `≈ ₴${Math.round(amount * rate).toLocaleString('uk-UA')}`
+    previewEl.style.display = 'inline'
+  }
+  container.querySelector('#fn-f-amount')?.addEventListener('input', updateFxPreview)
+  container.querySelector('#fn-f-currency')?.addEventListener('change', updateFxPreview)
+
   // ── Load ──────────────────────────────────────────────────────────────────
   async function loadTransactions() {
     try {
@@ -698,8 +738,8 @@ export async function render(container) {
   }
 
   function renderStats() {
-    const income  = transactions.filter(t => t.type === 'income').reduce((s, t) => s + (t.amount || 0), 0)
-    const expense = transactions.filter(t => t.type === 'expense').reduce((s, t) => s + (t.amount || 0), 0)
+    const income  = transactions.filter(t => t.type === 'income').reduce((s, t) => s + (t.amountUAH ?? t.amount ?? 0), 0)
+    const expense = transactions.filter(t => t.type === 'expense').reduce((s, t) => s + (t.amountUAH ?? t.amount ?? 0), 0)
     const balance = income - expense
 
     container.querySelector('#fn-s-income').textContent  = fmtAmt(income)
@@ -742,7 +782,8 @@ export async function render(container) {
             <div class="fn-card-top">
               <span class="fn-card-cat">${cat.label}</span>
               <span class="fn-card-amount ${t.type}">
-                ${t.type === 'income' ? '+' : '−'}${fmtAmt(t.amount)}
+                ${t.type === 'income' ? '+' : '−'}${fmtOrig(t.amount, t.currency || 'UAH')}
+                ${t.currency && t.currency !== 'UAH' ? `<span style="font-size:11px;color:var(--text-muted);font-weight:400"> (${fmtAmt(t.amountUAH ?? t.amount)})</span>` : ''}
               </span>
             </div>
             ${t.description ? `<div class="fn-card-desc">${t.description}</div>` : ''}
@@ -784,7 +825,8 @@ export async function render(container) {
         <div>
           <div class="fn-detail-type-badge ${t.type}">${typeLabel}</div>
           <div class="fn-detail-amount ${t.type}">
-            ${t.type === 'income' ? '+' : '−'}${fmtAmt(t.amount)}
+            ${t.type === 'income' ? '+' : '−'}${fmtOrig(t.amount, t.currency || 'UAH')}
+            ${t.currency && t.currency !== 'UAH' ? `<span style="font-size:13px;color:var(--text-muted);font-weight:500"> (${fmtAmt(t.amountUAH ?? t.amount)})</span>` : ''}
           </div>
         </div>
         <button class="fn-detail-close" id="fn-detail-close">${icon('x', 14)}</button>
@@ -862,10 +904,12 @@ export async function render(container) {
     populateCategorySelect()
 
     // fill fields
-    container.querySelector('#fn-f-amount').value   = existing ? (existing.amount || '') : ''
+    container.querySelector('#fn-f-amount').value   = existing ? (existing.amount ?? '') : ''
+    container.querySelector('#fn-f-currency').value = existing ? (existing.currency || 'UAH') : 'UAH'
     container.querySelector('#fn-f-date').value     = existing ? (existing.date || today()) : today()
     container.querySelector('#fn-f-desc').value     = existing ? (existing.description || '') : ''
     container.querySelector('#fn-e-amount').textContent = ''
+    updateFxPreview()
 
     // select category
     if (existing && existing.category) {
@@ -925,9 +969,14 @@ export async function render(container) {
       return
     }
 
+    const currency = container.querySelector('#fn-f-currency').value
+    const rate     = currency === 'UAH' ? 1 : (fxRates?.[currency] || 1)
+
     const payload = {
       type:        modalType,
       amount,
+      currency,
+      amountUAH:   Math.round(amount * rate * 100) / 100,
       category:    container.querySelector('#fn-f-category').value,
       date:        container.querySelector('#fn-f-date').value || today(),
       description: container.querySelector('#fn-f-desc').value.trim(),

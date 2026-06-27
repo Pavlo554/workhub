@@ -289,10 +289,12 @@ async function loadWorkerStats(base, modules) {
 async function renderDashboard(container, profile, user) {
   injectStyles()
   const baseConfig = getProfessionConfig(profile?.profession)
-  // Use selectedModules if set, otherwise profession defaults
-  const activeModules = profile?.activeBusiness && profile?.activeBusinessModules?.length
+  // Use selectedModules if set, otherwise profession defaults.
+  // 'dashboard' alone isn't a usable selection — same fallback as navigation.js.
+  const hasUsableSelection = arr => arr?.length > (arr.includes('dashboard') ? 1 : 0)
+  const activeModules = profile?.activeBusiness && hasUsableSelection(profile?.activeBusinessModules)
     ? profile.activeBusinessModules
-    : (profile?.selectedModules?.length ? profile.selectedModules : baseConfig.modules)
+    : (hasUsableSelection(profile?.selectedModules) ? profile.selectedModules : baseConfig.modules)
   const config = { ...baseConfig, modules: activeModules }
   const name   = profile?.name?.split(' ')[0] || 'Користувач'
   const base   = getActivePathSegments(user.uid)

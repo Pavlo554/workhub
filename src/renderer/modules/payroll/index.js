@@ -1,4 +1,4 @@
-// src/renderer/modules/payroll/index.js — Нарахування зарплати (ПДФО 18%, ВЗ 1.5%, ЄСВ 22%)
+// src/renderer/modules/payroll/index.js — Нарахування зарплати (ПДФО 18%, ВЗ 5%, ЄСВ 22%)
 import { icon }                               from '../../utils/icons.js'
 import { db }                                 from '../../services/firebase.js'
 import { getCurrentUser, getActivePathSegments } from '../../services/auth.js'
@@ -367,7 +367,7 @@ export async function render(container) {
                 <div class="pr-kpi-val pr-pdfo">${fmt(totals.pdfo)}</div>
               </div>
               <div class="pr-kpi">
-                <div class="pr-kpi-label">ВЗ (1.5%)</div>
+                <div class="pr-kpi-label">ВЗ (5%)</div>
                 <div class="pr-kpi-val pr-vz">${fmt(totals.vz)}</div>
               </div>
               <div class="pr-kpi">
@@ -654,7 +654,7 @@ export async function render(container) {
           <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">ПОПЕРЕДНІЙ РОЗРАХУНОК</div>
           <div class="pr-calc-row"><span>Нараховано</span><span id="pv-accrual">—</span></div>
           <div class="pr-calc-row"><span>ПДФО (18%)</span><span id="pv-pdfo" class="pr-pdfo">—</span></div>
-          <div class="pr-calc-row"><span>ВЗ (1.5%)</span><span id="pv-vz" class="pr-vz">—</span></div>
+          <div class="pr-calc-row"><span>ВЗ (5%)</span><span id="pv-vz" class="pr-vz">—</span></div>
           <div class="pr-calc-row"><span>ЄСВ роботодавець (22%)</span><span id="pv-esv" class="pr-esv">—</span></div>
           <div class="pr-calc-row"><span style="color:#34D399">До виплати</span><span id="pv-net" class="pr-net">—</span></div>
           <div class="pr-calc-row"><span>Витрати роботодавця</span><span id="pv-cost" class="pr-cost">—</span></div>

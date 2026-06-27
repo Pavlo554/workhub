@@ -6,7 +6,7 @@ const CACHE_KEY = 'workhub_fx_rates'
 const CACHE_TTL = 3600_000 // 1 hour
 
 // Converter dropdown — popular currencies
-const CONVERTER_CURRENCIES = [
+export const CONVERTER_CURRENCIES = [
   { code: 'UAH', name: 'Гривня',             flag: '🇺🇦', symbol: '₴' },
   { code: 'USD', name: 'Долар США',           flag: '🇺🇸', symbol: '$' },
   { code: 'EUR', name: 'Євро',               flag: '🇪🇺', symbol: '€' },
@@ -144,7 +144,7 @@ export async function render(container) {
   })
 }
 
-async function loadRates() {
+export async function loadRates() {
   const FALLBACK = {
     rates: { UAH: 1, USD: 44.26, EUR: 51.33, GBP: 59.40, PLN: 12.10, CHF: 56.29, CZK: 2.11, CAD: 32.07, JPY: 0.278, CNY: 6.51, AED: 12.05, TRY: 0.968, GEL: 16.56, MDL: 2.55, AZN: 26.05 },
     allItems: [],
