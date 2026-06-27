@@ -10,6 +10,7 @@ package.json
 idea.txt
 info.txt
 bag.txt
+
 firebase.json
 firebase.rules
 storage.rules
