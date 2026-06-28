@@ -12,6 +12,7 @@ import { uploadToCloudinary } from '../../services/cloudinary.js'
 import { ONLINE_THRESHOLD_MS } from '../../services/presence.js'
 import { logSubscriptionChange, getSubscriptionHistory, SOURCE_LABEL } from '../../services/subscription-history.js'
 import { getLoginEvents } from '../../services/device-tracking.js'
+import { addMonths } from '../../../core/permissions.js'
 
 const PLAN_META = {
   free:     { label: 'FREE',     color: '#94A3B8', price: 0 },
@@ -277,7 +278,7 @@ export async function render(container) {
               </div>
             </div>
             <div style="font-size:11px;color:var(--text-muted);margin-top:8px">
-              Ключі з кабінету aifo.pro → Інформація про касу. Secret Key читається лише серверною Cloud Function. Webhook: https://europe-west1-desktop-crm.cloudfunctions.net/aifoWebhook
+              Ключі з кабінету aifo.pro → Інформація про касу. Secret Key читається лише серверною функцією. Webhook: https://workhub-aifo.vercel.app/api/aifo-webhook
             </div>
           </div>
 
@@ -2401,7 +2402,7 @@ export async function render(container) {
         try {
           const p0 = allPayments.find(p => p.id === btn.dataset.pid)
           const months = p0?.months || 1
-          const endDate = new Date(); endDate.setMonth(endDate.getMonth() + months)
+          const endDate = addMonths(new Date(), months)
           await Promise.all([
             updateDoc(doc(db, 'users', btn.dataset.uid), { plan: btn.dataset.plan||'pro', subscriptionEnd: endDate.toISOString(), subscriptionStatus: 'active', updatedAt: serverTimestamp() }),
             updateDoc(doc(db, 'users', btn.dataset.uid, 'pendingPayments', btn.dataset.pid), { status: 'approved', approvedAt: serverTimestamp(), approvedBy: user.uid }),

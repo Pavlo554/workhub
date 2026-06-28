@@ -5,9 +5,9 @@ import {
   fetchCryptoRate, calculateCryptoAmount, createPendingPayment
 } from '../../services/crypto-payment.js'
 import { sendPaymentNotification } from '../../services/telegram-notifications.js'
-import { db, functions } from '../../services/firebase.js'
-import { httpsCallable } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js'
+import { db } from '../../services/firebase.js'
 import { doc, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
+import { callAifoApi } from '../../services/aifo-backend.js'
 import { icon } from '../../utils/icons.js'
 
 const PLANS = [
@@ -347,8 +347,8 @@ export async function render(container) {
       }
     })
 
-    httpsCallable(functions, 'createAifoInvoice')({ planId: plan.id, months })
-      .then(({ data: { url } }) => {
+    callAifoApi('create-aifo-invoice', { planId: plan.id, months })
+      .then(({ url }) => {
         if (window.electron?.openExternal) {
           window.electron.openExternal(url)
         } else {
