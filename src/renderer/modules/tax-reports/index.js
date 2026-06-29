@@ -1,10 +1,13 @@
 // src/renderer/modules/tax-reports/index.js
 import { db } from '../../services/firebase.js'
-import { getCurrentUser, getActivePathSegments } from '../../services/auth.js'
+import { getCurrentUser, getActivePathSegments, getActiveProfile } from '../../services/auth.js'
+import { planHasFeature } from '../../../core/permissions.js'
+import { showUpgradePrompt } from '../../services/plan-guard.js'
 import {
   collection, getDocs, query, orderBy,
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 import { icon } from '../../utils/icons.js'
+import { generateTaxReportPDF } from './tax-report-pdf.js'
 
 const MONTHS_UK = ['Січень','Лютий','Березень','Квітень','Травень','Червень','Липень','Серпень','Вересень','Жовтень','Листопад','Грудень']
 
@@ -12,7 +15,8 @@ export async function render(container) {
   injectStyles()
   const user = getCurrentUser()
   if (!user) return
-  const base = getActivePathSegments(user.uid)
+  const base    = getActivePathSegments(user.uid)
+  const profile = await getActiveProfile(user.uid)
 
   const now = new Date()
   let period = { type: 'month', year: now.getFullYear(), month: now.getMonth(), quarter: Math.floor(now.getMonth() / 3) }
@@ -25,7 +29,10 @@ export async function render(container) {
           <h1 class="tr-title">${icon('bar-chart', 22)} Звіти</h1>
           <p class="tr-sub">Дохід, витрати, зарплата, ПДВ, рахунки та товарні залишки за обраний період — для подачі звітності</p>
         </div>
-        <button class="btn btn-secondary" id="tr-export">${icon('download', 14)} Експорт CSV</button>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-secondary" id="tr-export">${icon('download', 14)} Експорт CSV</button>
+          <button class="btn btn-primary" id="tr-export-pdf">${icon('documents', 14)} Експорт PDF</button>
+        </div>
       </div>
 
       <div class="tr-period-bar">
@@ -58,6 +65,7 @@ export async function render(container) {
   container.querySelector('#tr-prev').addEventListener('click', () => { shiftPeriod(-1); renderAll() })
   container.querySelector('#tr-next').addEventListener('click', () => { shiftPeriod(1); renderAll() })
   container.querySelector('#tr-export').addEventListener('click', exportCsv)
+  container.querySelector('#tr-export-pdf').addEventListener('click', exportPdf)
 
   function shiftPeriod(dir) {
     if (period.type === 'month') {
@@ -243,10 +251,46 @@ export async function render(container) {
     container._lastPayroll    = payrollInRange
     container._lastWarehouse  = warehouse
     container._lastLabel      = label
+
+    container._lastReportData = {
+      label, income, expense, profit, vatTotal, payrollCost, invoiced, paid, warehouseValue,
+      invoices: invInRange.map(inv => {
+        const d = toDate(inv.createdAt)
+        return { dateStr: d ? d.toLocaleDateString('uk-UA') : '—', clientName: inv._clientName, statusLabel: statusLabel(inv.status), amount: inv.amount || 0 }
+      }),
+      warehouse: warehouse.map(item => ({
+        name: item.name || '—',
+        category: item.category || '—',
+        qtyStr: item.category === 'digital' && item.saleType === 'copy' ? '∞' : String(item.qty ?? 0),
+        price: item.price || 0,
+        value: warehouseItemValue(item),
+      })),
+    }
   }
 
   function statusLabel(s) {
     return { paid: 'Оплачено', unpaid: 'Не оплачено', pending: 'Очікує', overdue: 'Просрочено' }[s] || s || 'Не оплачено'
+  }
+
+  async function exportPdf() {
+    if (!planHasFeature(profile?.plan || 'free', 'pdf_export')) {
+      showUpgradePrompt('PDF експорт — PRO функція', 'Завантаження PDF доступне на планах PRO та BUSINESS.')
+      return
+    }
+    const data = container._lastReportData
+    if (!data) return
+    const btn = container.querySelector('#tr-export-pdf')
+    btn.disabled = true
+    const original = btn.innerHTML
+    btn.innerHTML = '<div class="btn-spinner"></div>'
+    try {
+      await generateTaxReportPDF(data, profile)
+    } catch (err) {
+      alert('Помилка створення PDF: ' + err.message)
+    } finally {
+      btn.disabled = false
+      btn.innerHTML = original
+    }
   }
 
   function exportCsv() {
