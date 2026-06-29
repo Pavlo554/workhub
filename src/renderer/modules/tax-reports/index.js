@@ -92,10 +92,14 @@ export async function render(container) {
 
   async function loadData() {
     if (cache) return cache
-    const [transactions, invoices] = await Promise.all([
+    const [transactions, invoices, clients] = await Promise.all([
       getDocs(collection(db, ...base, 'transactions')).then(s => s.docs.map(d => ({ id: d.id, ...d.data() }))).catch(() => []),
       getDocs(query(collection(db, ...base, 'invoices'), orderBy('createdAt', 'desc'))).then(s => s.docs.map(d => ({ id: d.id, ...d.data() }))).catch(() => []),
+      getDocs(collection(db, ...base, 'clients')).then(s => s.docs.map(d => ({ id: d.id, ...d.data() }))).catch(() => []),
     ])
+    const clientMap = {}
+    clients.forEach(c => { clientMap[c.id] = c.name || c.id })
+    invoices.forEach(inv => { inv._clientName = inv.client || clientMap[inv.clientId] || 'Невідомий клієнт' })
     cache = { transactions, invoices }
     return cache
   }
@@ -169,7 +173,7 @@ export async function render(container) {
               return `
                 <div class="tr-table-row">
                   <div>${d ? d.toLocaleDateString('uk-UA') : '—'}</div>
-                  <div>${inv.clientName || 'Невідомий клієнт'}</div>
+                  <div>${inv._clientName}</div>
                   <div>₴${(inv.amount || 0).toLocaleString('uk-UA')}</div>
                   <div><span class="tr-status tr-status--${inv.status || 'unpaid'}">${statusLabel(inv.status)}</span></div>
                 </div>`
@@ -195,7 +199,7 @@ export async function render(container) {
     const headers = ['Тип', 'Дата', 'Категорія/Клієнт', 'Сума', 'Статус']
     const rows = [
       ...tx.map(t => [t.type === 'income' ? 'Дохід' : 'Витрата', t.date || '', t.category || '', t.amountUAH ?? t.amount ?? 0, '']),
-      ...inv.map(i => { const d = toDate(i.createdAt); return ['Рахунок', d ? d.toLocaleDateString('uk-UA') : '', i.clientName || '', i.amount || 0, statusLabel(i.status)] }),
+      ...inv.map(i => { const d = toDate(i.createdAt); return ['Рахунок', d ? d.toLocaleDateString('uk-UA') : '', i._clientName, i.amount || 0, statusLabel(i.status)] }),
     ]
     const csv  = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
