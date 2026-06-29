@@ -19,6 +19,7 @@ const MODULE_META = {
   tasks:           { labelKey: 'module.tasks',      label: 'Задачі' },
   finances:        { labelKey: 'module.finances',   label: 'Фінанси' },
   'tax-calendar':  { labelKey: 'module.tax-calendar', label: 'Податки' },
+  'payment-calendar': { labelKey: 'module.payment-calendar', label: 'Календар платежів' },
   appointments:    { labelKey: 'module.appointments', label: 'Розклад' },
   services:        { labelKey: 'module.services',   label: 'Послуги' },
   'content-plan':  { labelKey: 'module.smm',        label: 'Контент' },
@@ -79,7 +80,7 @@ export function renderNavigation(sidebar, profile) {
   // selected" and fall back to the niche's default modules instead of leaving
   // someone stuck with an empty sidebar (can happen if onboarding lets a user
   // deselect every module before finishing setup).
-  const hasUsableSelection = arr => arr?.length > (arr.includes('dashboard') ? 1 : 0)
+  const hasUsableSelection = arr => Array.isArray(arr) && arr.length > (arr.includes('dashboard') ? 1 : 0)
   const professionModules = profile?.activeBusiness && hasUsableSelection(profile?.activeBusinessModules)
     ? profile.activeBusinessModules
     : (hasUsableSelection(profile?.selectedModules) ? profile.selectedModules : config.modules)

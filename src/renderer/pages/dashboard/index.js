@@ -303,7 +303,7 @@ async function renderDashboard(container, profile, user) {
   const baseConfig = getProfessionConfig(profile?.profession)
   // Use selectedModules if set, otherwise profession defaults.
   // 'dashboard' alone isn't a usable selection — same fallback as navigation.js.
-  const hasUsableSelection = arr => arr?.length > (arr.includes('dashboard') ? 1 : 0)
+  const hasUsableSelection = arr => Array.isArray(arr) && arr.length > (arr.includes('dashboard') ? 1 : 0)
   const activeModules = profile?.activeBusiness && hasUsableSelection(profile?.activeBusinessModules)
     ? profile.activeBusinessModules
     : (hasUsableSelection(profile?.selectedModules) ? profile.selectedModules : baseConfig.modules)
