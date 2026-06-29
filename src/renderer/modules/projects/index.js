@@ -15,6 +15,10 @@ const STATUS_META = {
   cancelled: { label: 'Скасовано',   color: '#EF4444', bg: 'rgba(239,68,68,0.12)'   },
 }
 
+function today() {
+  return new Date().toISOString().slice(0, 10)
+}
+
 export async function render(container) {
   injectStyles()
 
@@ -400,7 +404,7 @@ export async function render(container) {
     container.querySelector('#f-client').value        = project?.client   || ''
     container.querySelector('#f-client-select').value = project?.clientId || ''
     container.querySelector('#f-budget').value   = project?.budget      || ''
-    container.querySelector('#f-start').value    = project?.startDate   || ''
+    container.querySelector('#f-start').value    = project?.startDate   || (project ? '' : today())
     container.querySelector('#f-deadline').value = project?.deadline    || ''
     container.querySelector('#f-status').value   = project?.status      || 'active'
     container.querySelector('#f-progress').value = project?.progress    ?? ''
