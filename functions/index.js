@@ -7,6 +7,18 @@ const db = admin.firestore()
 
 const PLAN_PRICES = { pro: 299, business: 799 }
 
+// setMonth() overflows on month-end dates (Jan 31 + 1mo → Mar 3 instead of Feb 28).
+// Clamp to the last day of the target month instead.
+function addMonths(date, months) {
+  const d   = new Date(date)
+  const day = d.getDate()
+  d.setDate(1)
+  d.setMonth(d.getMonth() + months)
+  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
+  d.setDate(Math.min(day, lastDay))
+  return d
+}
+
 // ── AIFO helpers (HMAC-SHA256, see https://aifo.pro/docs/swagger) ─────────
 function aifoUrlEncode(str) {
   return encodeURIComponent(str)
@@ -128,8 +140,7 @@ exports.aifoWebhook = functions
         return
       }
 
-      const expiry = new Date()
-      expiry.setMonth(expiry.getMonth() + months)
+      const expiry = addMonths(new Date(), months)
 
       await db.collection('users').doc(uid).update({
         plan:               planId,
