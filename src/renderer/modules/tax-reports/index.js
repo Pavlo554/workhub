@@ -237,8 +237,10 @@ export async function render(container) {
       ` : ''}
     `
 
+    container._lastTxInRange   = txInRange
     container._lastCbInRange  = cbInRange
     container._lastInvInRange = invInRange
+    container._lastPayroll    = payrollInRange
     container._lastWarehouse  = warehouse
     container._lastLabel      = label
   }
@@ -248,13 +250,17 @@ export async function render(container) {
   }
 
   function exportCsv() {
-    const cb  = container._lastCbInRange  || []
-    const inv = container._lastInvInRange || []
-    const wh  = container._lastWarehouse  || []
+    const tx  = container._lastTxInRange   || []
+    const cb  = container._lastCbInRange   || []
+    const inv = container._lastInvInRange  || []
+    const pr  = container._lastPayroll     || []
+    const wh  = container._lastWarehouse   || []
     const headers = ['Тип', 'Дата', 'Категорія/Клієнт', 'Сума', 'Статус']
     const rows = [
+      ...tx.map(t => [t.type === 'income' ? 'Дохід (фінанси)' : 'Витрата (фінанси)', t.date || '', t.category || '', t.amountUAH ?? t.amount ?? 0, '']),
       ...cb.map(e => [e.type === 'pko' ? 'Дохід (каса)' : 'Витрата (каса)', e.date || '', e.category || e.counterparty || '', e.amount || 0, '']),
       ...inv.map(i => { const d = toDate(i.createdAt); return ['Рахунок', d ? d.toLocaleDateString('uk-UA') : '', i._clientName, i.amount || 0, statusLabel(i.status)] }),
+      ...pr.map(p => [`Зарплата (${MONTHS_UK[p.month]} ${p.year})`, '', '', p.totalCost ?? p.net ?? 0, '']),
       ...wh.map(item => ['Товар', '', item.name || '', warehouseItemValue(item), `к-сть: ${item.qty ?? '∞'}`]),
     ]
     const csv  = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
