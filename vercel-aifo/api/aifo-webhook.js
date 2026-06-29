@@ -49,10 +49,12 @@ async function handler(req, res) {
     const eventName = payload.event || payload.status || ''
     if (!/success/i.test(eventName)) { res.status(200).send('ok'); return }
 
-    // AIFO does NOT echo back our external_id in the webhook — only its own
-    // numeric invoice_id, which we saved on the pendingPayments doc at
-    // creation time. Look it up across all users via collectionGroup.
-    const invoiceIdRaw = payload.data?.invoice_id ?? payload.invoice_id
+    // AIFO does NOT echo back our external_id. On payment, AIFO creates a
+    // NEW invoice record for the transaction itself (data.invoice_id) and
+    // puts the ORIGINAL invoice's id — the one we created and stored as
+    // aifoInvoiceId — in data.uid. Confirmed from AIFO's own dashboard:
+    // invoice #566 (paid) has uid "565", which is the invoice we made.
+    const invoiceIdRaw = payload.data?.uid ?? payload.uid
     if (!invoiceIdRaw) {
       console.warn('aifoWebhook: no invoice_id in payload')
       res.status(200).send('ok')
