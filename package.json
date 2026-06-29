@@ -1,6 +1,6 @@
 {
   "name": "workhub",
-  "version": "2.0.9",
+  "version": "2.0.10",
   "description": "CRM для малого бізнесу",
   "main": "src/main/main.js",
   "scripts": {
