@@ -243,6 +243,17 @@ function renderProfile(profile, user) {
         </div>
       </div>
 
+      <div class="st-field" style="margin-top:20px;max-width:280px">
+        <label class="st-label">Група ФОП</label>
+        <select class="st-input" id="input-fop-group">
+          <option value="" ${!profile?.fopGroup ? 'selected' : ''}>Не ФОП / не вказано</option>
+          <option value="1" ${profile?.fopGroup === '1' ? 'selected' : ''}>1 група</option>
+          <option value="2" ${profile?.fopGroup === '2' ? 'selected' : ''}>2 група</option>
+          <option value="3" ${profile?.fopGroup === '3' ? 'selected' : ''}>3 група</option>
+        </select>
+        <div class="st-field-hint">Використовується для розрахунку єдиного податку у "Звітах"</div>
+      </div>
+
       <div class="st-actions">
         <button class="st-btn st-btn-primary" id="save-business-btn">
           ${icon('business', 15)} Зберегти та оновити меню
@@ -706,6 +717,7 @@ function attachProfile(content, profile, user) {
     const website      = content.querySelector('#input-website')?.value.trim()
     const instagram    = content.querySelector('#input-instagram')?.value.trim()
     const telegram     = content.querySelector('#input-telegram')?.value.trim()
+    const fopGroup     = content.querySelector('#input-fop-group')?.value || ''
 
     if (!businessName) { showToast('Введіть назву бізнесу', 'error'); return }
 
@@ -715,7 +727,7 @@ function attachProfile(content, profile, user) {
 
     try {
       const data = {
-        businessName, website, instagram, telegram,
+        businessName, website, instagram, telegram, fopGroup,
         profession:     selectedNiche,
         accountType:    'owner',
         onboardingDone: true,
@@ -1101,6 +1113,7 @@ function injectStyles() {
       border-radius: 3px; background: linear-gradient(180deg,#667eea,#5B8DEF);
     }
     .st-panel-subtitle { font-size: 13px; color: var(--text-muted); margin-left: 14px; }
+    .st-field-hint { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
 
     /* ── Avatar row ── */
     .st-avatar-row {

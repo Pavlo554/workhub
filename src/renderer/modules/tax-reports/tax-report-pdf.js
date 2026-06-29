@@ -16,7 +16,7 @@ export async function generateTaxReportPDF(data, profile) {
 }
 
 function buildHTML(data, profile) {
-  const { label, income, expense, profit, vatTotal, payrollCost, invoiced, paid, invoices, warehouse, warehouseValue } = data
+  const { label, income, expense, profit, vatTotal, payrollCost, invoiced, paid, invoices, warehouse, warehouseValue, fopGroup, epAmount, esvOwn } = data
   const money = v => Number(v || 0).toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
   return `<!DOCTYPE html>
@@ -70,6 +70,10 @@ tbody td:last-child{text-align:right}
   <div class="kpi-box"><div class="kpi-lbl">Виставлено / оплачено</div><div class="kpi-val">₴${money(invoiced)} / ₴${money(paid)}</div></div>
   <div class="kpi-box"><div class="kpi-lbl">Зарплата нарахована</div><div class="kpi-val">₴${money(payrollCost)}</div></div>
   <div class="kpi-box"><div class="kpi-lbl">ПДВ нарахований</div><div class="kpi-val">₴${money(vatTotal)}</div></div>
+  ${fopGroup ? `
+  <div class="kpi-box"><div class="kpi-lbl">Єдиний податок (${esc(fopGroup)} гр.)</div><div class="kpi-val">₴${money(epAmount)}</div></div>
+  <div class="kpi-box"><div class="kpi-lbl">ЄСВ (особистий)</div><div class="kpi-val">₴${money(esvOwn)}</div></div>
+  ` : ''}
 </div>
 
 <div class="section-title">Рахунки за період (${invoices.length})</div>

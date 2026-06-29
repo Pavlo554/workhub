@@ -11,6 +11,12 @@ import { generateTaxReportPDF } from './tax-report-pdf.js'
 
 const MONTHS_UK = ['Січень','Лютий','Березень','Квітень','Травень','Червень','Липень','Серпень','Вересень','Жовтень','Листопад','Грудень']
 
+// ЄП / ЄСВ ставки ФОП 2026 (орієнтовно) — узгоджено з калькулятором у "Податковому календарі"
+const ESV_MIN   = 1760  // мінімальний особистий ЄСВ ФОП / міс
+const TAX_1_GRP = 302   // фіксований ЄП 1 групи / міс
+const TAX_2_GRP = 1510  // фіксований ЄП 2 групи / міс
+const TAX_3_RATE = 0.05 // ЄП 3 групи — 5% від доходу (без ПДВ)
+
 export async function render(container) {
   injectStyles()
   const user = getCurrentUser()
@@ -98,6 +104,10 @@ export async function render(container) {
     return { start, end, label: `${period.year} рік` }
   }
 
+  function monthsInPeriod() {
+    return period.type === 'month' ? 1 : period.type === 'quarter' ? 3 : 12
+  }
+
   async function loadData() {
     if (cache) return cache
     const [transactions, cashbook, invoices, clients, payrollPeriods, payrollEntries, warehouse] = await Promise.all([
@@ -160,6 +170,14 @@ export async function render(container) {
 
     const warehouseValue = warehouse.reduce((s, item) => s + warehouseItemValue(item), 0)
 
+    const months = monthsInPeriod()
+    const fopGroup = profile?.fopGroup || ''
+    let epAmount = 0
+    if (fopGroup === '1') epAmount = TAX_1_GRP * months
+    else if (fopGroup === '2') epAmount = TAX_2_GRP * months
+    else if (fopGroup === '3') epAmount = Math.round(income * TAX_3_RATE)
+    const esvOwn = fopGroup ? ESV_MIN * months : 0
+
     el.innerHTML = `
       <div class="tr-kpi-grid">
         <div class="tr-kpi-card tr-kpi--income">
@@ -204,6 +222,30 @@ export async function render(container) {
             <div class="tr-kpi-value">₴${vatTotal.toLocaleString('uk-UA')}</div>
           </div>
         </div>
+        ${fopGroup ? `
+          <div class="tr-kpi-card tr-kpi--ep">
+            <div class="tr-kpi-icon">${icon('tax-calendar', 22)}</div>
+            <div class="tr-kpi-body">
+              <div class="tr-kpi-label">Єдиний податок (${fopGroup} гр.)</div>
+              <div class="tr-kpi-value">₴${epAmount.toLocaleString('uk-UA')}</div>
+            </div>
+          </div>
+          <div class="tr-kpi-card">
+            <div class="tr-kpi-icon">${icon('shield', 22)}</div>
+            <div class="tr-kpi-body">
+              <div class="tr-kpi-label">ЄСВ (особистий)</div>
+              <div class="tr-kpi-value">₴${esvOwn.toLocaleString('uk-UA')}</div>
+            </div>
+          </div>
+        ` : `
+          <div class="tr-kpi-card tr-kpi--hint">
+            <div class="tr-kpi-icon">${icon('tax-calendar', 22)}</div>
+            <div class="tr-kpi-body">
+              <div class="tr-kpi-label">Єдиний податок</div>
+              <div class="tr-kpi-value" style="font-size:12px;color:var(--text-muted)">Вкажіть групу ФОП в налаштуваннях бізнесу</div>
+            </div>
+          </div>
+        `}
       </div>
 
       <div class="tr-section-card" style="margin-bottom:16px">
@@ -256,6 +298,7 @@ export async function render(container) {
 
     container._lastReportData = {
       label, income, expense, profit, vatTotal, payrollCost, invoiced, paid, warehouseValue,
+      fopGroup, epAmount, esvOwn,
       invoices: invInRange.map(inv => {
         const d = toDate(inv.createdAt)
         return { dateStr: d ? d.toLocaleDateString('uk-UA') : '—', clientName: inv._clientName, statusLabel: statusLabel(inv.status), amount: inv.amount || 0 }
@@ -308,6 +351,10 @@ export async function render(container) {
       ...inv.map(i => { const d = toDate(i.createdAt); return ['Рахунок', d ? d.toLocaleDateString('uk-UA') : '', i._clientName, i.amount || 0, statusLabel(i.status)] }),
       ...pr.map(e => ['Зарплата', '', e.name || '', e.totalCost ?? e.net ?? 0, '']),
       ...wh.map(item => ['Товар', '', item.name || '', warehouseItemValue(item), `к-сть: ${item.qty ?? '∞'}`]),
+      ...(container._lastReportData?.fopGroup ? [
+        [`Єдиний податок (${container._lastReportData.fopGroup} гр.)`, '', '', container._lastReportData.epAmount, ''],
+        ['ЄСВ (особистий)', '', '', container._lastReportData.esvOwn, ''],
+      ] : []),
     ]
     const csv  = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
@@ -344,6 +391,8 @@ function injectStyles() {
     .tr-kpi--income .tr-kpi-icon  { color:#34D399; }
     .tr-kpi--expense .tr-kpi-icon { color:#F87171; }
     .tr-kpi--profit .tr-kpi-icon  { color:#FBBF24; }
+    .tr-kpi--ep .tr-kpi-icon      { color:#A78BFA; }
+    .tr-kpi--hint                 { opacity:.6; }
     .tr-kpi-label { font-size:12px; color:var(--text-muted); margin-bottom:2px; }
     .tr-kpi-value { font-size:17px; font-weight:700; color:var(--text-primary); }
 
