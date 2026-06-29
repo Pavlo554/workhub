@@ -59,11 +59,22 @@ export async function render(container) {
     e.preventDefault()
     const email = emailEl.value.trim()
     if (!email) { showMsg('Введіть email для скидання пароля'); return }
+    const link = container.querySelector('#forgot-link')
+    link.textContent = 'Надсилаємо...'
+    link.style.pointerEvents = 'none'
     try {
-      await resetPassword(email)
-      showMsg('Лист надіслано на ' + email, true)
+      const res = await fetch('https://workhub-aifo.vercel.app/api/send-password-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      if (!res.ok) throw new Error((await res.json()).error || 'Помилка сервера')
+      showMsg('Лист з посиланням надіслано на ' + email + '. Перевірте вхідні та спам.', true)
     } catch (err) {
-      showMsg(getAuthErrorMessage(err.code))
+      showMsg(err.message || 'Не вдалось надіслати лист. Спробуйте пізніше.')
+    } finally {
+      link.textContent = 'Забули пароль?'
+      link.style.pointerEvents = ''
     }
   })
 
