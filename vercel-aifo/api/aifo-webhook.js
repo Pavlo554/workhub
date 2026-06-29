@@ -52,21 +52,30 @@ async function handler(req, res) {
     // AIFO does NOT echo back our external_id in the webhook — only its own
     // numeric invoice_id, which we saved on the pendingPayments doc at
     // creation time. Look it up across all users via collectionGroup.
-    const invoiceId = payload.data?.invoice_id ?? payload.invoice_id
-    if (!invoiceId) {
+    const invoiceIdRaw = payload.data?.invoice_id ?? payload.invoice_id
+    if (!invoiceIdRaw) {
       console.warn('aifoWebhook: no invoice_id in payload')
       res.status(200).send('ok')
       return
     }
-
-    const snap = await db
+    // AIFO's invoice_id type isn't guaranteed to match what we stored —
+    // try both Number and String forms rather than assuming one.
+    const invoiceIdNum = Number(invoiceIdRaw)
+    let snap = await db
       .collectionGroup('pendingPayments')
-      .where('aifoInvoiceId', '==', invoiceId)
+      .where('aifoInvoiceId', '==', invoiceIdNum)
       .limit(1)
       .get()
+    if (snap.empty) {
+      snap = await db
+        .collectionGroup('pendingPayments')
+        .where('aifoInvoiceId', '==', String(invoiceIdRaw))
+        .limit(1)
+        .get()
+    }
 
     if (snap.empty) {
-      console.warn('aifoWebhook: no pendingPayments doc for invoice_id', invoiceId)
+      console.warn('aifoWebhook: no pendingPayments doc for invoice_id', invoiceIdRaw, typeof invoiceIdRaw)
       res.status(200).send('ok')
       return
     }
