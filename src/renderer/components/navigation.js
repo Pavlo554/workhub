@@ -35,13 +35,13 @@ const MODULE_META = {
   portfolio:       { labelKey: 'module.portfolio',  label: 'Портфоліо' },
   hr:              { labelKey: 'module.hr',         label: 'Персонал' },
   currency:        { labelKey: 'module.currency',   label: 'Валюти' },
-  reports:         { labelKey: 'module.reports',    label: 'Звіти' },
+  reports:         { labelKey: 'module.reports',    label: 'Аналітика бізнесу' },
   support:         { labelKey: 'module.support',    label: 'Підтримка' },
   cashbook:        { labelKey: 'module.cashbook',   label: 'Каса' },
   bank:            { labelKey: 'module.bank',        label: 'Банк' },
   payroll:         { labelKey: 'module.payroll',    label: 'Зарплата' },
   prro:            { labelKey: 'module.prro',        label: 'ПРРО' },
-  'client-analytics': { labelKey: 'module.client-analytics', label: 'Аналітика клієнтів' },
+  'tax-reports':   { labelKey: 'module.tax-reports',  label: 'Звіти' },
 }
 
 function modLabel(m) {

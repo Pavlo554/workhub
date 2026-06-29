@@ -396,6 +396,100 @@ export async function render(container) {
           </div>
         </div>
       </div>
+
+      <div class="rp-metrics-grid rp-metrics-grid--2">
+        <div class="rp-section-card">
+          <div class="rp-section-head">
+            <div class="rp-section-title">Приріст клієнтів</div>
+            <div class="rp-section-sub">Нові клієнти за останні 12 місяців</div>
+          </div>
+          <div id="rp-growth-chart" class="rp-chart-wrap"></div>
+        </div>
+        <div class="rp-section-card">
+          <div class="rp-section-head">
+            <div class="rp-section-title">Джерела клієнтів</div>
+            <div class="rp-section-sub">Звідки приходять клієнти</div>
+          </div>
+          <div id="rp-sources-body"></div>
+        </div>
+      </div>
+    `
+
+    renderClientGrowthChart(el, clients)
+    renderClientSources(el, clients)
+  }
+
+  function renderClientGrowthChart(container, clients) {
+    const el = container.querySelector('#rp-growth-chart')
+    if (!el) return
+    if (!clients.length) { el.innerHTML = `<div class="rp-empty-mini">Клієнтів ще немає</div>`; return }
+
+    const now = new Date()
+    const monthsShort = getMonthsShort()
+    const buckets = []
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const nextD = new Date(d.getFullYear(), d.getMonth() + 1, 1)
+      const count = clients.filter(c => {
+        const cd = c.createdAt?.toDate ? c.createdAt.toDate() : (c.createdAt ? new Date(c.createdAt) : null)
+        return cd && cd >= d && cd < nextD
+      }).length
+      buckets.push({ shortLabel: monthsShort[d.getMonth()], count })
+    }
+    const maxVal = Math.max(...buckets.map(b => b.count), 1)
+
+    el.innerHTML = `
+      <div class="rp-bar-chart">
+        ${buckets.map(b => `
+          <div class="rp-bar-col">
+            <div class="rp-bar-val">${b.count > 0 ? b.count : ''}</div>
+            <div class="rp-bar" style="height:${Math.max((b.count / maxVal) * 100, b.count > 0 ? 4 : 0)}%"></div>
+            <div class="rp-bar-lbl">${b.shortLabel}</div>
+          </div>
+        `).join('')}
+      </div>
+    `
+  }
+
+  function renderClientSources(container, clients) {
+    const el = container.querySelector('#rp-sources-body')
+    if (!el) return
+
+    const SOURCES = { instagram: { label: 'Instagram', color: '#E879F9', iconName: 'camera' }, referral: { label: 'Рекомендація', color: '#34D399', iconName: 'user' }, website: { label: 'Сайт', color: '#4F8EF7', iconName: 'globe' }, facebook: { label: 'Facebook', color: '#60A5FA', iconName: 'clients' }, telegram: { label: 'Telegram', color: '#38BDF8', iconName: 'send' }, google: { label: 'Google', color: '#F59E0B', iconName: 'search' }, other: { label: 'Інше', color: '#9CA3AF', iconName: 'briefcase' } }
+
+    const counts = {}
+    clients.forEach(c => {
+      const src = (c.source || 'other').toLowerCase()
+      const key = SOURCES[src] ? src : 'other'
+      counts[key] = (counts[key] || 0) + 1
+    })
+    const total = clients.length || 1
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1])
+
+    if (!sorted.length) { el.innerHTML = `<div class="rp-empty-mini">Немає даних про джерела</div>`; return }
+
+    el.innerHTML = `
+      <div class="rp-sources-list">
+        ${sorted.map(([key, count]) => {
+          const s = SOURCES[key] || SOURCES.other
+          const pct = Math.round((count / total) * 100)
+          return `
+            <div class="rp-source-row">
+              <div class="rp-source-icon" style="color:${s.color}">${icon(s.iconName, 14)}</div>
+              <div class="rp-source-info">
+                <div class="rp-source-top">
+                  <span class="rp-source-label">${s.label}</span>
+                  <span class="rp-source-pct">${pct}%</span>
+                </div>
+                <div class="rp-source-bar-wrap">
+                  <div class="rp-source-bar" style="width:${pct}%;background:${s.color}"></div>
+                </div>
+              </div>
+              <div class="rp-source-count">${count}</div>
+            </div>
+          `
+        }).join('')}
+      </div>
     `
   }
 
@@ -778,6 +872,25 @@ function injectStyles() {
     .rp-mt-month { font-weight:600; }
     .rp-mt-paid  { font-family:var(--font-mono,monospace); font-weight:700; color:#34D399; }
     .rp-mt-chg   { font-weight:700; font-size:12px; }
+
+    /* Client growth chart + sources */
+    .rp-chart-wrap { padding:8px 4px 0; }
+    .rp-bar-chart { display:flex; align-items:flex-end; gap:6px; height:120px; }
+    .rp-bar-col   { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; }
+    .rp-bar-val   { font-size:10px; color:var(--text-muted); margin-bottom:4px; }
+    .rp-bar       { width:100%; max-width:22px; border-radius:4px 4px 0 0; background:linear-gradient(180deg,#4F8EF7,#3B6FD9); min-height:0; transition:height .5s; }
+    .rp-bar-lbl   { font-size:10px; color:var(--text-muted); margin-top:6px; }
+    .rp-empty-mini { font-size:12px; color:var(--text-muted); padding:24px 0; text-align:center; }
+    .rp-sources-list { display:flex; flex-direction:column; gap:12px; padding-top:4px; }
+    .rp-source-row { display:flex; align-items:center; gap:10px; }
+    .rp-source-icon { display:flex; align-items:center; width:24px; flex-shrink:0; }
+    .rp-source-info { flex:1; min-width:0; }
+    .rp-source-top { display:flex; justify-content:space-between; margin-bottom:4px; font-size:12px; }
+    .rp-source-label { color:var(--text-primary); font-weight:600; }
+    .rp-source-pct   { color:var(--text-muted); }
+    .rp-source-bar-wrap { height:5px; background:var(--bg-tertiary); border-radius:3px; overflow:hidden; }
+    .rp-source-bar { height:100%; border-radius:3px; }
+    .rp-source-count { font-size:12px; font-weight:700; color:var(--text-muted); min-width:20px; text-align:right; }
   `
   document.head.appendChild(s)
 }

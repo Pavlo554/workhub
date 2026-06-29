@@ -40,9 +40,9 @@ const ALL_MODULES = [
   { id: 'warehouse',        label: 'Склад' },
   { id: 'portfolio',        label: 'Портфоліо' },
   { id: 'hr',               label: 'Персонал' },
-  { id: 'client-analytics', label: 'Аналітика' },
   { id: 'currency',         label: 'Валюти' },
-  { id: 'reports',          label: 'Звіти' },
+  { id: 'reports',          label: 'Аналітика бізнесу' },
+  { id: 'tax-reports',      label: 'Звіти' },
   { id: 'support',          label: 'Підтримка' },
 ]
 
@@ -598,8 +598,8 @@ function renderModuleCard(id, stats, counts, richData) {
     appointments: '#E879F9', services: '#F472B6', 'content-plan': '#38BDF8', accounts: '#A3E635',
     passwords: '#94A3B8', notes: '#6EE7B7', documents: '#4F8EF7', 'api-keys': '#A78BFA',
     kanban: '#FB923C', templates: '#F59E0B', warehouse: '#94A3B8', portfolio: '#A78BFA',
-    hr: '#34D399', 'client-analytics': '#4F8EF7', currency: '#F59E0B',
-    reports: '#4F8EF7', support: '#38BDF8',
+    hr: '#34D399', currency: '#F59E0B',
+    reports: '#4F8EF7', 'tax-reports': '#34D399', support: '#38BDF8',
   }
   const color = colorMap[id] || '#94A3B8'
 
@@ -689,11 +689,11 @@ function renderModuleCard(id, stats, counts, richData) {
         'api-keys':       'API інтеграцій',
         accounts:         'соцмереж / акаунтів',
         'content-plan':   'постів у плані',
-        'client-analytics': 'Аналітика клієнтів',
         timer:            'Трекер часу',
         'tax-calendar':   'Податковий календар',
         currency:         'Курси валют',
-        reports:          'Звіти та метрики',
+        reports:          'Аналітика бізнесу',
+        'tax-reports':    'Звітів',
         support:          'Центр підтримки',
       }
       rows = [{ dot: color, label: descMap[id] || 'записів', val: '' }]

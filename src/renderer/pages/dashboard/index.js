@@ -887,7 +887,6 @@ const MODULE_NAV = {
   warehouse:         { label: 'Склад',      color: '#FB923C' },
   portfolio:         { label: 'Портфоліо',  color: '#34D399' },
   hr:                { label: 'Персонал',   color: '#38BDF8' },
-  'client-analytics':{ label: 'Аналітика',  color: '#4F8EF7' },
   currency:          { label: 'Валюти',     color: '#F59E0B' },
   documents:         { label: 'Документи',  color: '#94A3B8' },
 }
