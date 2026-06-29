@@ -100,18 +100,19 @@ export async function render(container) {
 
   async function loadData() {
     if (cache) return cache
-    const [transactions, cashbook, invoices, clients, payrollPeriods, warehouse] = await Promise.all([
+    const [transactions, cashbook, invoices, clients, payrollPeriods, payrollEntries, warehouse] = await Promise.all([
       getDocs(collection(db, ...base, 'transactions')).then(s => s.docs.map(d => ({ id: d.id, ...d.data() }))).catch(() => []),
       getDocs(collection(db, ...base, 'cashbook')).then(s => s.docs.map(d => ({ id: d.id, ...d.data() }))).catch(() => []),
       getDocs(query(collection(db, ...base, 'invoices'), orderBy('createdAt', 'desc'))).then(s => s.docs.map(d => ({ id: d.id, ...d.data() }))).catch(() => []),
       getDocs(collection(db, ...base, 'clients')).then(s => s.docs.map(d => ({ id: d.id, ...d.data() }))).catch(() => []),
       getDocs(collection(db, ...base, 'payroll_periods')).then(s => s.docs.map(d => ({ id: d.id, ...d.data() }))).catch(() => []),
+      getDocs(collection(db, ...base, 'payroll_entries')).then(s => s.docs.map(d => ({ id: d.id, ...d.data() }))).catch(() => []),
       getDocs(collection(db, ...base, 'warehouse')).then(s => s.docs.map(d => ({ id: d.id, ...d.data() }))).catch(() => []),
     ])
     const clientMap = {}
     clients.forEach(c => { clientMap[c.id] = c.name || c.id })
     invoices.forEach(inv => { inv._clientName = inv.client || clientMap[inv.clientId] || 'Невідомий клієнт' })
-    cache = { transactions, cashbook, invoices, payrollPeriods, warehouse }
+    cache = { transactions, cashbook, invoices, payrollPeriods, payrollEntries, warehouse }
     return cache
   }
 
@@ -133,7 +134,7 @@ export async function render(container) {
     const el = container.querySelector('#tr-content')
     el.innerHTML = `<div class="tr-loading"><div class="spinner"></div></div>`
 
-    const { transactions, cashbook, invoices, payrollPeriods, warehouse } = await loadData()
+    const { transactions, cashbook, invoices, payrollPeriods, payrollEntries, warehouse } = await loadData()
 
     const txInRange = transactions.filter(t => { const d = toDate(t.date); return d && d >= start && d < end })
     const cbInRange  = cashbook.filter(e => { const d = toDate(e.date); return d && d >= start && d < end })
@@ -145,11 +146,12 @@ export async function render(container) {
     const profit = income - expense
     const vatTotal = cbInRange.reduce((s, e) => s + (e.vatAmount || 0), 0)
 
-    const payrollInRange = payrollPeriods.filter(p => {
-      const d = new Date(p.year, p.month, 1)
+    const periodIdsInRange = new Set(payrollPeriods.filter(p => {
+      const d = new Date(p.year, p.month - 1, 1)
       return d >= start && d < end
-    })
-    const payrollCost = payrollInRange.reduce((s, p) => s + (p.totalCost ?? p.net ?? 0), 0)
+    }).map(p => p.id))
+    const payrollEntriesInRange = payrollEntries.filter(e => periodIdsInRange.has(e.periodId))
+    const payrollCost = payrollEntriesInRange.reduce((s, e) => s + (e.totalCost ?? e.net ?? 0), 0)
 
     const invInRange  = invoices.filter(inv => { const d = toDate(inv.createdAt); return d && d >= start && d < end })
     const invoiced     = invInRange.reduce((s, inv) => s + (inv.amount || 0), 0)
@@ -248,7 +250,7 @@ export async function render(container) {
     container._lastTxInRange   = txInRange
     container._lastCbInRange  = cbInRange
     container._lastInvInRange = invInRange
-    container._lastPayroll    = payrollInRange
+    container._lastPayroll    = payrollEntriesInRange
     container._lastWarehouse  = warehouse
     container._lastLabel      = label
 
@@ -304,7 +306,7 @@ export async function render(container) {
       ...tx.map(t => [t.type === 'income' ? 'Дохід (фінанси)' : 'Витрата (фінанси)', t.date || '', t.category || '', t.amountUAH ?? t.amount ?? 0, '']),
       ...cb.map(e => [e.type === 'pko' ? 'Дохід (каса)' : 'Витрата (каса)', e.date || '', e.category || e.counterparty || '', e.amount || 0, '']),
       ...inv.map(i => { const d = toDate(i.createdAt); return ['Рахунок', d ? d.toLocaleDateString('uk-UA') : '', i._clientName, i.amount || 0, statusLabel(i.status)] }),
-      ...pr.map(p => [`Зарплата (${MONTHS_UK[p.month]} ${p.year})`, '', '', p.totalCost ?? p.net ?? 0, '']),
+      ...pr.map(e => ['Зарплата', '', e.name || '', e.totalCost ?? e.net ?? 0, '']),
       ...wh.map(item => ['Товар', '', item.name || '', warehouseItemValue(item), `к-сть: ${item.qty ?? '∞'}`]),
     ]
     const csv  = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
