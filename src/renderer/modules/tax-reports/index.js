@@ -23,7 +23,7 @@ export async function render(container) {
       <div class="tr-header">
         <div>
           <h1 class="tr-title">${icon('bar-chart', 22)} Звіти</h1>
-          <p class="tr-sub">Дохід, витрати та рахунки за обраний період — для подачі звітності</p>
+          <p class="tr-sub">Дохід, витрати, зарплата, ПДВ, рахунки та товарні залишки за обраний період — для подачі звітності</p>
         </div>
         <button class="btn btn-secondary" id="tr-export">${icon('download', 14)} Експорт CSV</button>
       </div>
@@ -92,16 +92,24 @@ export async function render(container) {
 
   async function loadData() {
     if (cache) return cache
-    const [transactions, invoices, clients] = await Promise.all([
+    const [transactions, cashbook, invoices, clients, payrollPeriods, warehouse] = await Promise.all([
       getDocs(collection(db, ...base, 'transactions')).then(s => s.docs.map(d => ({ id: d.id, ...d.data() }))).catch(() => []),
+      getDocs(collection(db, ...base, 'cashbook')).then(s => s.docs.map(d => ({ id: d.id, ...d.data() }))).catch(() => []),
       getDocs(query(collection(db, ...base, 'invoices'), orderBy('createdAt', 'desc'))).then(s => s.docs.map(d => ({ id: d.id, ...d.data() }))).catch(() => []),
       getDocs(collection(db, ...base, 'clients')).then(s => s.docs.map(d => ({ id: d.id, ...d.data() }))).catch(() => []),
+      getDocs(collection(db, ...base, 'payroll_periods')).then(s => s.docs.map(d => ({ id: d.id, ...d.data() }))).catch(() => []),
+      getDocs(collection(db, ...base, 'warehouse')).then(s => s.docs.map(d => ({ id: d.id, ...d.data() }))).catch(() => []),
     ])
     const clientMap = {}
     clients.forEach(c => { clientMap[c.id] = c.name || c.id })
     invoices.forEach(inv => { inv._clientName = inv.client || clientMap[inv.clientId] || 'Невідомий клієнт' })
-    cache = { transactions, invoices }
+    cache = { transactions, cashbook, invoices, payrollPeriods, warehouse }
     return cache
+  }
+
+  function warehouseItemValue(item) {
+    const isUnlimited = item.category === 'digital' && item.saleType === 'copy'
+    return isUnlimited ? (item.price || 0) : (item.qty || 0) * (item.price || 0)
   }
 
   function toDate(val) {
@@ -117,17 +125,30 @@ export async function render(container) {
     const el = container.querySelector('#tr-content')
     el.innerHTML = `<div class="tr-loading"><div class="spinner"></div></div>`
 
-    const { transactions, invoices } = await loadData()
+    const { transactions, cashbook, invoices, payrollPeriods, warehouse } = await loadData()
 
-    const txInRange  = transactions.filter(t => { const d = toDate(t.date); return d && d >= start && d < end })
-    const income      = txInRange.filter(t => t.type === 'income').reduce((s, t) => s + (t.amountUAH ?? t.amount ?? 0), 0)
-    const expense      = txInRange.filter(t => t.type === 'expense').reduce((s, t) => s + (t.amountUAH ?? t.amount ?? 0), 0)
-    const profit       = income - expense
+    const txInRange = transactions.filter(t => { const d = toDate(t.date); return d && d >= start && d < end })
+    const cbInRange  = cashbook.filter(e => { const d = toDate(e.date); return d && d >= start && d < end })
+
+    const income = txInRange.filter(t => t.type === 'income').reduce((s, t) => s + (t.amountUAH ?? t.amount ?? 0), 0)
+              + cbInRange.filter(e => e.type === 'pko').reduce((s, e) => s + (e.amount || 0), 0)
+    const expense = txInRange.filter(t => t.type === 'expense').reduce((s, t) => s + (t.amountUAH ?? t.amount ?? 0), 0)
+              + cbInRange.filter(e => e.type === 'rko').reduce((s, e) => s + (e.amount || 0), 0)
+    const profit = income - expense
+    const vatTotal = cbInRange.reduce((s, e) => s + (e.vatAmount || 0), 0)
+
+    const payrollInRange = payrollPeriods.filter(p => {
+      const d = new Date(p.year, p.month, 1)
+      return d >= start && d < end
+    })
+    const payrollCost = payrollInRange.reduce((s, p) => s + (p.totalCost ?? p.net ?? 0), 0)
 
     const invInRange  = invoices.filter(inv => { const d = toDate(inv.createdAt); return d && d >= start && d < end })
     const invoiced     = invInRange.reduce((s, inv) => s + (inv.amount || 0), 0)
     const paidInvoices = invInRange.filter(inv => inv.status === 'paid')
     const paid          = paidInvoices.reduce((s, inv) => s + (inv.amount || 0), 0)
+
+    const warehouseValue = warehouse.reduce((s, item) => s + warehouseItemValue(item), 0)
 
     el.innerHTML = `
       <div class="tr-kpi-grid">
@@ -159,9 +180,23 @@ export async function render(container) {
             <div class="tr-kpi-value">₴${invoiced.toLocaleString('uk-UA')} / ₴${paid.toLocaleString('uk-UA')}</div>
           </div>
         </div>
+        <div class="tr-kpi-card">
+          <div class="tr-kpi-icon">${icon('hr', 22)}</div>
+          <div class="tr-kpi-body">
+            <div class="tr-kpi-label">Зарплата нарахована</div>
+            <div class="tr-kpi-value">₴${payrollCost.toLocaleString('uk-UA')}</div>
+          </div>
+        </div>
+        <div class="tr-kpi-card">
+          <div class="tr-kpi-icon">${icon('prro', 22)}</div>
+          <div class="tr-kpi-body">
+            <div class="tr-kpi-label">ПДВ нарахований</div>
+            <div class="tr-kpi-value">₴${vatTotal.toLocaleString('uk-UA')}</div>
+          </div>
+        </div>
       </div>
 
-      <div class="tr-section-card">
+      <div class="tr-section-card" style="margin-bottom:16px">
         <div class="tr-section-title">Рахунки за період (${invInRange.length})</div>
         ${invInRange.length ? `
           <div class="tr-table">
@@ -181,11 +216,30 @@ export async function render(container) {
           </div>
         ` : `<div class="tr-empty">Рахунків за цей період немає</div>`}
       </div>
+
+      ${warehouse.length ? `
+        <div class="tr-section-card">
+          <div class="tr-section-title">Товарні залишки (${warehouse.length}) — на суму ₴${warehouseValue.toLocaleString('uk-UA')}</div>
+          <div class="tr-table tr-table--wh">
+            <div class="tr-table-head tr-table-head--wh">
+              <div>Товар</div><div>Категорія</div><div>К-сть</div><div>Ціна</div><div>Сума</div>
+            </div>
+            ${warehouse.map(item => `
+              <div class="tr-table-row tr-table-row--wh">
+                <div>${item.name || '—'}</div>
+                <div>${item.category || '—'}</div>
+                <div>${item.category === 'digital' && item.saleType === 'copy' ? '∞' : (item.qty ?? 0)}</div>
+                <div>₴${(item.price || 0).toLocaleString('uk-UA')}</div>
+                <div>₴${warehouseItemValue(item).toLocaleString('uk-UA')}</div>
+              </div>`).join('')}
+          </div>
+        </div>
+      ` : ''}
     `
 
-    container.dataset.lastInRange = JSON.stringify({ income, expense, profit, invInRange: invInRange.length })
-    container._lastTxInRange  = txInRange
+    container._lastCbInRange  = cbInRange
     container._lastInvInRange = invInRange
+    container._lastWarehouse  = warehouse
     container._lastLabel      = label
   }
 
@@ -194,12 +248,14 @@ export async function render(container) {
   }
 
   function exportCsv() {
-    const tx  = container._lastTxInRange  || []
+    const cb  = container._lastCbInRange  || []
     const inv = container._lastInvInRange || []
+    const wh  = container._lastWarehouse  || []
     const headers = ['Тип', 'Дата', 'Категорія/Клієнт', 'Сума', 'Статус']
     const rows = [
-      ...tx.map(t => [t.type === 'income' ? 'Дохід' : 'Витрата', t.date || '', t.category || '', t.amountUAH ?? t.amount ?? 0, '']),
+      ...cb.map(e => [e.type === 'pko' ? 'Дохід (каса)' : 'Витрата (каса)', e.date || '', e.category || e.counterparty || '', e.amount || 0, '']),
       ...inv.map(i => { const d = toDate(i.createdAt); return ['Рахунок', d ? d.toLocaleDateString('uk-UA') : '', i._clientName, i.amount || 0, statusLabel(i.status)] }),
+      ...wh.map(item => ['Товар', '', item.name || '', warehouseItemValue(item), `к-сть: ${item.qty ?? '∞'}`]),
     ]
     const csv  = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
     const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
@@ -230,7 +286,7 @@ function injectStyles() {
     .tr-nav-btn { width:30px; height:30px; border-radius:8px; border:1px solid var(--border); background:var(--bg-secondary); color:var(--text-primary); cursor:pointer; display:flex; align-items:center; justify-content:center; }
     .tr-period-label { font-size:14px; font-weight:700; color:var(--text-primary); min-width:140px; text-align:center; }
 
-    .tr-kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px; }
+    .tr-kpi-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:14px; margin-bottom:20px; }
     .tr-kpi-card { background:var(--bg-secondary); border:1.5px solid var(--border); border-radius:var(--radius-xl,14px); padding:16px; display:flex; align-items:center; gap:12px; }
     .tr-kpi-icon { width:42px; height:42px; border-radius:10px; background:var(--bg-tertiary); display:flex; align-items:center; justify-content:center; color:#4F8EF7; flex-shrink:0; }
     .tr-kpi--income .tr-kpi-icon  { color:#34D399; }
@@ -251,6 +307,8 @@ function injectStyles() {
     .tr-status--unpaid  { background:rgba(248,113,113,.12); color:#F87171; }
     .tr-status--pending { background:rgba(251,191,36,.12); color:#FBBF24; }
     .tr-status--overdue { background:rgba(248,113,113,.12); color:#F87171; }
+
+    .tr-table-head--wh, .tr-table-row--wh { grid-template-columns: 2fr 1fr 80px 100px 110px; }
 
     .tr-empty   { text-align:center; padding:30px 0; color:var(--text-muted); font-size:13px; }
     .tr-loading { display:flex; justify-content:center; padding:60px 0; }
