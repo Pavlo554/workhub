@@ -9,11 +9,9 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 
 const COLUMNS = [
-  { id: 'backlog',     get label() { return t('kanban.col.backlog') },      color: '#64748B' },
-  { id: 'todo',        get label() { return t('kanban.col.todo') },         color: '#4F8EF7' },
-  { id: 'in_progress', get label() { return t('kanban.col.in_progress') },  color: '#F59E0B' },
-  { id: 'review',      get label() { return t('kanban.col.review') },       color: '#A78BFA' },
-  { id: 'done',        get label() { return t('kanban.col.done') },         color: '#34D399' },
+  { id: 'todo',        get label() { return t('tasks.todo') },        color: '#4F8EF7' },
+  { id: 'in_progress', get label() { return t('tasks.in_progress') }, color: '#F59E0B' },
+  { id: 'done',        get label() { return t('tasks.done') },        color: '#34D399' },
 ]
 
 const PRIORITY = {
@@ -27,29 +25,46 @@ export async function render(container) {
   const user = getCurrentUser()
   const base = getActivePathSegments(user.uid)
   let cards = []
-  let showModal = false
+  let projects = []
+  let projFilter = 'all'
   let editCard = null
   let filterPriority = 'all'
 
+  function normStatus(s) {
+    if (s === 'in-progress' || s === 'in_progress') return 'in_progress'
+    if (s === 'new' || s === 'backlog') return 'todo'
+    if (s === 'review') return 'in_progress'
+    return s || 'todo'
+  }
+
   async function load() {
     try {
-      const snap = await getDocs(query(collection(db, ...base, 'kanban'), orderBy('createdAt', 'desc')))
-      cards = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-    } catch { cards = [] }
+      const [tSnap, pSnap] = await Promise.all([
+        getDocs(query(collection(db, ...base, 'tasks'), orderBy('createdAt', 'desc'))),
+        getDocs(collection(db, ...base, 'projects')),
+      ])
+      cards    = tSnap.docs.map(d => { const data = d.data(); return { id: d.id, ...data, status: normStatus(data.status) } })
+      projects = pSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+    } catch { cards = []; projects = [] }
     rerender()
   }
 
   function rerender() {
-    const filtered = filterPriority === 'all' ? cards : cards.filter(c => c.priority === filterPriority)
+    let filtered = filterPriority === 'all' ? cards : cards.filter(c => c.priority === filterPriority)
+    if (projFilter !== 'all') filtered = filtered.filter(c => c.projectId === projFilter)
 
     container.innerHTML = `
       <div class="kb-page">
         <div class="kb-header">
           <div>
             <h1 class="kb-title">${t('kanban.title')}</h1>
-            <p class="kb-subtitle">${cards.length} · ${cards.filter(c => c.column === 'done').length} ${t('tasks.done_count')}</p>
+            <p class="kb-subtitle">${filtered.length} · ${filtered.filter(c => c.status === 'done').length} ${t('tasks.done_count')}</p>
           </div>
           <div class="kb-header-right">
+            <select class="kb-proj-select" id="kb-proj-select">
+              <option value="all">Всі проекти</option>
+              ${projects.map(p => `<option value="${p.id}" ${projFilter === p.id ? 'selected' : ''}>${p.name}</option>`).join('')}
+            </select>
             <div class="kb-filter-pills">
               ${['all','high','medium','low'].map(p => `
                 <button class="kb-pill ${filterPriority === p ? 'active' : ''}" data-p="${p}">
@@ -62,7 +77,7 @@ export async function render(container) {
 
         <div class="kb-board">
           ${COLUMNS.map(col => {
-            const colCards = filtered.filter(c => (c.column || 'todo') === col.id)
+            const colCards = filtered.filter(c => c.status === col.id)
             return `
               <div class="kb-col" data-col="${col.id}">
                 <div class="kb-col-head" style="border-top:3px solid ${col.color}">
@@ -80,13 +95,13 @@ export async function render(container) {
                         </div>
                       </div>
                       <div class="kb-card-title">${card.title}</div>
-                      ${card.desc ? `<div class="kb-card-desc">${card.desc}</div>` : ''}
+                      ${card.description ? `<div class="kb-card-desc">${card.description}</div>` : ''}
+                      ${card.projectName ? `<div class="kb-card-proj">${icon('projects', 10)} ${card.projectName}</div>` : ''}
                       <div class="kb-card-foot">
-                        ${card.assignee ? `<span class="kb-assignee">${card.assignee[0].toUpperCase()}</span>` : ''}
-                        ${card.deadline ? `<span class="kb-deadline">${card.deadline}</span>` : ''}
+                        ${card.dueDate ? `<span class="kb-deadline">${card.dueDate}</span>` : ''}
                         <div class="kb-move-btns">
-                          ${col.id !== 'backlog' ? `<button class="kb-mv kb-mv-left" data-id="${card.id}" data-col="${col.id}" title="← Назад">‹</button>` : ''}
-                          ${col.id !== 'done' ? `<button class="kb-mv kb-mv-right" data-id="${card.id}" data-col="${col.id}" title="→ Вперед">›</button>` : ''}
+                          ${col.id !== COLUMNS[0].id ? `<button class="kb-mv kb-mv-left" data-id="${card.id}" data-col="${col.id}" title="← Назад">‹</button>` : ''}
+                          ${col.id !== COLUMNS[COLUMNS.length - 1].id ? `<button class="kb-mv kb-mv-right" data-id="${card.id}" data-col="${col.id}" title="→ Вперед">›</button>` : ''}
                         </div>
                       </div>
                     </div>
@@ -130,8 +145,11 @@ export async function render(container) {
             </div>
             <div class="kb-form-row">
               <div class="kb-field">
-                <label>Виконавець</label>
-                <input id="kb-f-assignee" type="text" placeholder="Ім'я..." class="kb-input">
+                <label>Проект</label>
+                <select id="kb-f-project" class="kb-input">
+                  <option value="">Без проекту</option>
+                  ${projects.map(p => `<option value="${p.id}">${p.name}</option>`).join('')}
+                </select>
               </div>
               <div class="kb-field">
                 <label>Дедлайн</label>
@@ -153,8 +171,10 @@ export async function render(container) {
     container.querySelector('#kb-add').addEventListener('click', () => openModal())
     container.querySelector('#kb-modal-close').addEventListener('click', closeModal)
     container.querySelector('#kb-modal-cancel').addEventListener('click', closeModal)
-    container.querySelector('#kb-overlay, #kb-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal() })
+    container.querySelector('#kb-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal() })
     container.querySelector('#kb-modal-save').addEventListener('click', saveCard)
+
+    container.querySelector('#kb-proj-select').addEventListener('change', e => { projFilter = e.target.value; rerender() })
 
     container.querySelectorAll('.kb-pill').forEach(b =>
       b.addEventListener('click', () => { filterPriority = b.dataset.p; rerender() })
@@ -166,7 +186,7 @@ export async function render(container) {
       b.addEventListener('click', async e => {
         e.stopPropagation()
         if (!confirm(t('kanban.delete_confirm'))) return
-        await deleteDoc(doc(db, ...base, 'kanban', b.dataset.id))
+        await deleteDoc(doc(db, ...base, 'tasks', b.dataset.id))
         await load()
       })
     )
@@ -175,7 +195,7 @@ export async function render(container) {
         e.stopPropagation()
         const idx = COLUMNS.findIndex(c => c.id === b.dataset.col)
         if (idx < COLUMNS.length - 1) {
-          await updateDoc(doc(db, ...base, 'kanban', b.dataset.id), { column: COLUMNS[idx + 1].id })
+          await updateDoc(doc(db, ...base, 'tasks', b.dataset.id), { status: COLUMNS[idx + 1].id, updatedAt: serverTimestamp() })
           await load()
         }
       })
@@ -185,7 +205,7 @@ export async function render(container) {
         e.stopPropagation()
         const idx = COLUMNS.findIndex(c => c.id === b.dataset.col)
         if (idx > 0) {
-          await updateDoc(doc(db, ...base, 'kanban', b.dataset.id), { column: COLUMNS[idx - 1].id })
+          await updateDoc(doc(db, ...base, 'tasks', b.dataset.id), { status: COLUMNS[idx - 1].id, updatedAt: serverTimestamp() })
           await load()
         }
       })
@@ -195,12 +215,12 @@ export async function render(container) {
   function openModal(card = null) {
     editCard = card
     container.querySelector('#kb-modal-title').textContent = card ? 'Редагувати картку' : 'Нова картка'
-    container.querySelector('#kb-f-title').value    = card?.title    || ''
-    container.querySelector('#kb-f-desc').value     = card?.desc     || ''
-    container.querySelector('#kb-f-col').value      = card?.column   || 'todo'
-    container.querySelector('#kb-f-priority').value = card?.priority || 'medium'
-    container.querySelector('#kb-f-assignee').value = card?.assignee || ''
-    container.querySelector('#kb-f-deadline').value = card?.deadline || ''
+    container.querySelector('#kb-f-title').value    = card?.title       || ''
+    container.querySelector('#kb-f-desc').value     = card?.description || ''
+    container.querySelector('#kb-f-col').value      = card?.status      || 'todo'
+    container.querySelector('#kb-f-priority').value = card?.priority    || 'medium'
+    container.querySelector('#kb-f-project').value  = card?.projectId   || ''
+    container.querySelector('#kb-f-deadline').value = card?.dueDate     || ''
     container.querySelector('#kb-modal').style.display = 'flex'
     setTimeout(() => container.querySelector('#kb-f-title').focus(), 50)
   }
@@ -213,21 +233,24 @@ export async function render(container) {
   async function saveCard() {
     const title = container.querySelector('#kb-f-title').value.trim()
     if (!title) { container.querySelector('#kb-f-title').focus(); return }
+    const projectId = container.querySelector('#kb-f-project').value || null
+    const proj      = projects.find(p => p.id === projectId)
     const data = {
       title,
-      desc:     container.querySelector('#kb-f-desc').value.trim() || null,
-      column:   container.querySelector('#kb-f-col').value,
-      priority: container.querySelector('#kb-f-priority').value,
-      assignee: container.querySelector('#kb-f-assignee').value.trim() || null,
-      deadline: container.querySelector('#kb-f-deadline').value || null,
+      description: container.querySelector('#kb-f-desc').value.trim() || null,
+      status:      container.querySelector('#kb-f-col').value,
+      priority:    container.querySelector('#kb-f-priority').value,
+      projectId,
+      projectName: proj?.name || null,
+      dueDate:     container.querySelector('#kb-f-deadline').value || null,
     }
     const btn = container.querySelector('#kb-modal-save')
     btn.disabled = true; btn.textContent = '...'
     try {
       if (editCard) {
-        await updateDoc(doc(db, ...base, 'kanban', editCard.id), { ...data, updatedAt: serverTimestamp() })
+        await updateDoc(doc(db, ...base, 'tasks', editCard.id), { ...data, updatedAt: serverTimestamp() })
       } else {
-        await addDoc(collection(db, ...base, 'kanban'), { ...data, createdAt: serverTimestamp() })
+        await addDoc(collection(db, ...base, 'tasks'), { ...data, createdAt: serverTimestamp() })
       }
       closeModal(); await load()
     } finally { btn.disabled = false; btn.textContent = 'Зберегти' }
@@ -246,6 +269,7 @@ function injectStyles() {
     .kb-title { font-family:var(--font-display); font-size:24px; font-weight:800; margin-bottom:4px; }
     .kb-subtitle { font-size:13px; color:var(--text-muted); }
     .kb-header-right { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .kb-proj-select { padding:7px 12px; border-radius:var(--radius-md); font-size:12px; font-weight:600; color:var(--text-primary); background:var(--bg-secondary); border:1px solid var(--border); cursor:pointer; }
     .kb-filter-pills { display:flex; gap:5px; }
     .kb-pill { padding:5px 12px; border-radius:var(--radius-full); font-size:12px; font-weight:600; color:var(--text-secondary); background:var(--bg-secondary); border:1px solid var(--border); cursor:pointer; transition:all .15s; }
     .kb-pill.active { background:var(--accent-blue); border-color:var(--accent-blue); color:#fff; }
@@ -253,7 +277,7 @@ function injectStyles() {
     .kb-add-btn:hover { transform:translateY(-1px); box-shadow:0 4px 14px rgba(79,142,247,.4); }
 
     .kb-board { display:flex; gap:14px; overflow-x:auto; flex:1; padding-bottom:16px; }
-    .kb-col { min-width:240px; width:240px; flex-shrink:0; display:flex; flex-direction:column; }
+    .kb-col { min-width:280px; width:280px; flex-shrink:0; display:flex; flex-direction:column; }
     .kb-col-head { display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:var(--bg-secondary); border-radius:var(--radius-lg) var(--radius-lg) 0 0; font-size:13px; font-weight:700; border:1px solid var(--border); border-bottom:none; }
     .kb-col-count { font-size:11px; font-weight:800; padding:2px 8px; border-radius:var(--radius-full); }
     .kb-col-body { flex:1; background:var(--bg-secondary); border:1px solid var(--border); border-top:none; border-radius:0 0 var(--radius-lg) var(--radius-lg); padding:8px; display:flex; flex-direction:column; gap:8px; overflow-y:auto; min-height:120px; }
@@ -267,9 +291,9 @@ function injectStyles() {
     .kb-card:hover .kb-card-actions { opacity:1; }
     .kb-card-btn { width:22px; height:22px; border-radius:4px; background:var(--bg-secondary); border:none; cursor:pointer; font-size:11px; display:flex; align-items:center; justify-content:center; }
     .kb-card-title { font-size:13px; font-weight:600; line-height:1.4; margin-bottom:4px; }
-    .kb-card-desc { font-size:11px; color:var(--text-secondary); line-height:1.5; margin-bottom:8px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+    .kb-card-desc { font-size:11px; color:var(--text-secondary); line-height:1.5; margin-bottom:6px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+    .kb-card-proj { font-size:10px; color:var(--accent-blue); display:flex; align-items:center; gap:4px; margin-bottom:8px; }
     .kb-card-foot { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
-    .kb-assignee { width:22px; height:22px; border-radius:50%; background:linear-gradient(135deg,#667eea,#764ba2); color:#fff; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
     .kb-deadline { font-size:10px; color:var(--text-muted); flex:1; }
     .kb-move-btns { display:flex; gap:3px; margin-left:auto; }
     .kb-mv { width:22px; height:22px; border-radius:4px; background:var(--bg-tertiary); border:1px solid var(--border); cursor:pointer; font-size:14px; font-weight:700; color:var(--text-secondary); display:flex; align-items:center; justify-content:center; transition:all .15s; }
