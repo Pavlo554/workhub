@@ -276,9 +276,13 @@ export async function render(container) {
                 <label style="font-size:12px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">Secret Key <span id="cfg-aifo-secret-status" style="color:#34D399;font-weight:700"></span></label>
                 <input class="adm-input" id="cfg-aifo-secret" placeholder="Введіть, щоб змінити ключ" type="password">
               </div>
+              <div style="grid-column:1/-1">
+                <label style="font-size:12px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px">Webhook Secret <span id="cfg-aifo-webhook-secret-status" style="color:#34D399;font-weight:700"></span></label>
+                <input class="adm-input" id="cfg-aifo-webhook-secret" placeholder="Введіть, щоб змінити ключ" type="password">
+              </div>
             </div>
             <div style="font-size:11px;color:var(--text-muted);margin-top:8px">
-              Ключі з кабінету aifo.pro → Інформація про касу. Secret Key читається лише серверною функцією. Webhook: https://workhub-aifo.vercel.app/api/aifo-webhook
+              Shop ID / Secret Key — з кабінету aifo.pro → Інформація про касу. Webhook Secret — окремий ключ, що автогенерується при створенні вебхука (Мої магазини → Вебхуки). URL вебхука для AIFO: https://workhub-aifo.vercel.app/api/aifo-webhook
             </div>
           </div>
 
@@ -679,6 +683,8 @@ export async function render(container) {
       container.querySelector('#cfg-aifo-shop').value  = d.aifoShopId       || ''
       const aifoStatus = container.querySelector('#cfg-aifo-secret-status')
       if (aifoStatus) aifoStatus.textContent = d.aifoKeyConfigured ? '✓ встановлено' : ''
+      const webhookStatus = container.querySelector('#cfg-aifo-webhook-secret-status')
+      if (webhookStatus) webhookStatus.textContent = d.aifoWebhookSecretConfigured ? '✓ встановлено' : ''
     }
   }
 
@@ -687,8 +693,9 @@ export async function render(container) {
     const st  = container.querySelector('#pay-cfg-status')
     btn.disabled = true
     try {
-      const aifoShopId  = container.querySelector('#cfg-aifo-shop').value.trim()
-      const aifoSecret  = container.querySelector('#cfg-aifo-secret').value.trim()
+      const aifoShopId      = container.querySelector('#cfg-aifo-shop').value.trim()
+      const aifoSecret      = container.querySelector('#cfg-aifo-secret').value.trim()
+      const aifoWebhookSecret = container.querySelector('#cfg-aifo-webhook-secret').value.trim()
 
       await Promise.all([
         // Public payment config
@@ -699,18 +706,21 @@ export async function render(container) {
           monobankJar:     container.querySelector('#cfg-mono').value.trim() || null,
           aifoShopId:      aifoShopId || null,
           ...(aifoSecret ? { aifoKeyConfigured: true } : {}),
+          ...(aifoWebhookSecret ? { aifoWebhookSecretConfigured: true } : {}),
           updatedAt:       serverTimestamp(),
         }),
-        // AIFO secret key — write-only, admin-only doc (read by Cloud Function via Admin SDK)
-        (aifoShopId || aifoSecret)
+        // AIFO secret key — write-only, admin-only doc (read by our Vercel backend via Admin SDK)
+        (aifoShopId || aifoSecret || aifoWebhookSecret)
           ? setDoc(doc(db, 'config', 'aifo_keys'), {
               ...(aifoShopId ? { shopId: aifoShopId } : {}),
               ...(aifoSecret ? { secretKey: aifoSecret } : {}),
+              ...(aifoWebhookSecret ? { webhookSecret: aifoWebhookSecret } : {}),
               updatedAt: serverTimestamp(),
             }, { merge: true })
           : Promise.resolve(),
       ])
       container.querySelector('#cfg-aifo-secret').value = ''
+      container.querySelector('#cfg-aifo-webhook-secret').value = ''
       st.textContent = 'Збережено'
       setTimeout(() => { st.textContent = '' }, 3000)
     } catch (err) {
