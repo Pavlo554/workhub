@@ -84,9 +84,9 @@ export async function render(container) {
                   <span>${col.label}</span>
                   <span class="kb-col-count" style="background:${col.color}22;color:${col.color}">${colCards.length}</span>
                 </div>
-                <div class="kb-col-body">
+                <div class="kb-col-body" data-col="${col.id}">
                   ${colCards.length ? colCards.map(card => `
-                    <div class="kb-card" data-id="${card.id}">
+                    <div class="kb-card" draggable="true" data-id="${card.id}">
                       <div class="kb-card-top">
                         <span class="kb-priority-dot" style="background:${(PRIORITY[card.priority]||PRIORITY.medium).color}" title="${(PRIORITY[card.priority]||PRIORITY.medium).label}"></span>
                         <div class="kb-card-actions">
@@ -210,6 +210,40 @@ export async function render(container) {
         }
       })
     )
+
+    // ── Drag & drop ──────────────────────────────────────────
+    let draggedId = null
+    container.querySelectorAll('.kb-card').forEach(card => {
+      card.addEventListener('dragstart', e => {
+        draggedId = card.dataset.id
+        card.classList.add('kb-card--dragging')
+        e.dataTransfer.effectAllowed = 'move'
+        e.dataTransfer.setData('text/plain', card.dataset.id)
+      })
+      card.addEventListener('dragend', () => {
+        card.classList.remove('kb-card--dragging')
+        draggedId = null
+      })
+    })
+    container.querySelectorAll('.kb-col-body').forEach(colBody => {
+      colBody.addEventListener('dragover', e => {
+        e.preventDefault()
+        colBody.classList.add('kb-col-body--over')
+      })
+      colBody.addEventListener('dragleave', () => {
+        colBody.classList.remove('kb-col-body--over')
+      })
+      colBody.addEventListener('drop', async e => {
+        e.preventDefault()
+        colBody.classList.remove('kb-col-body--over')
+        const id = draggedId || e.dataTransfer.getData('text/plain')
+        const newStatus = colBody.dataset.col
+        const card = cards.find(c => c.id === id)
+        if (!id || !newStatus || !card || card.status === newStatus) return
+        await updateDoc(doc(db, ...base, 'tasks', id), { status: newStatus, updatedAt: serverTimestamp() })
+        await load()
+      })
+    })
   }
 
   function openModal(card = null) {
@@ -282,6 +316,9 @@ function injectStyles() {
     .kb-col-count { font-size:11px; font-weight:800; padding:2px 8px; border-radius:var(--radius-full); }
     .kb-col-body { flex:1; background:var(--bg-secondary); border:1px solid var(--border); border-top:none; border-radius:0 0 var(--radius-lg) var(--radius-lg); padding:8px; display:flex; flex-direction:column; gap:8px; overflow-y:auto; min-height:120px; }
     .kb-col-empty { text-align:center; color:var(--text-muted); font-size:12px; padding:20px 8px; border:2px dashed var(--border); border-radius:var(--radius-md); margin:4px 0; }
+    .kb-col-body--over { background:rgba(79,142,247,.08); outline:2px dashed var(--accent-blue); outline-offset:-2px; }
+    .kb-card--dragging { opacity:.4; }
+    .kb-card[draggable="true"] { cursor:grab; }
 
     .kb-card { background:var(--bg-primary); border:1px solid var(--border); border-radius:var(--radius-md); padding:12px; cursor:pointer; transition:all .15s; }
     .kb-card:hover { border-color:var(--accent-blue); box-shadow:0 4px 12px rgba(0,0,0,.2); transform:translateY(-1px); }
