@@ -27,7 +27,6 @@ const TRANSLATIONS = {
     'module.clients':      'Клієнти',
     'module.invoices':     'Рахунки',
     'module.tasks':        'Задачі',
-    'module.kanban':       'Kanban',
     'module.notes':        'Нотатки',
     'module.documents':    'Документи',
     'module.passwords':    'Паролі',
@@ -276,15 +275,6 @@ const TRANSLATIONS = {
     'tasks.delete_confirm':    'Видалити задачу?',
 
     // ── Kanban ────────────────────────────────────────────────
-    'kanban.title':            'Kanban',
-    'kanban.add_card':         '+ Картка',
-    'kanban.col.backlog':      'Беклог',
-    'kanban.col.todo':         'Треба зробити',
-    'kanban.col.in_progress':  'В роботі',
-    'kanban.col.review':       'Ревью',
-    'kanban.col.done':         'Готово',
-    'kanban.empty':            'Немає карток',
-    'kanban.delete_confirm':   'Видалити картку?',
 
     // ── Reports ───────────────────────────────────────────────
     'reports.title':           'Аналітика бізнесу',
@@ -551,7 +541,6 @@ const TRANSLATIONS = {
     'module.clients':      'Клиенты',
     'module.invoices':     'Счета',
     'module.tasks':        'Задачи',
-    'module.kanban':       'Kanban',
     'module.notes':        'Заметки',
     'module.documents':    'Документы',
     'module.passwords':    'Пароли',
@@ -696,15 +685,6 @@ const TRANSLATIONS = {
     'tasks.done_count':    'выполнено',
     'tasks.delete_confirm':'Удалить задачу?',
 
-    'kanban.title':        'Kanban',
-    'kanban.add_card':     '+ Карточка',
-    'kanban.col.backlog':  'Беклог',
-    'kanban.col.todo':     'Нужно сделать',
-    'kanban.col.in_progress': 'В работе',
-    'kanban.col.review':   'Ревью',
-    'kanban.col.done':     'Готово',
-    'kanban.empty':        'Нет карточек',
-    'kanban.delete_confirm':'Удалить карточку?',
 
     'reports.title':       'Аналитика бизнеса',
     'reports.metrics':     'Метрики',
@@ -1038,7 +1018,6 @@ const TRANSLATIONS = {
     'module.clients':      'Clients',
     'module.invoices':     'Invoices',
     'module.tasks':        'Tasks',
-    'module.kanban':       'Kanban',
     'module.notes':        'Notes',
     'module.documents':    'Documents',
     'module.passwords':    'Passwords',
@@ -1183,15 +1162,6 @@ const TRANSLATIONS = {
     'tasks.done_count':    'done',
     'tasks.delete_confirm':'Delete task?',
 
-    'kanban.title':        'Kanban',
-    'kanban.add_card':     '+ Card',
-    'kanban.col.backlog':  'Backlog',
-    'kanban.col.todo':     'To Do',
-    'kanban.col.in_progress': 'In Progress',
-    'kanban.col.review':   'Review',
-    'kanban.col.done':     'Done',
-    'kanban.empty':        'No cards',
-    'kanban.delete_confirm':'Delete card?',
 
     'reports.title':       'Business Analytics',
     'reports.metrics':     'Metrics',

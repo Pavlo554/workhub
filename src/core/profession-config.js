@@ -2,7 +2,7 @@
 export const PROFESSIONS = {
   freelancer: {
     id: 'freelancer', label: 'Фрілансер', iconName: 'laptop', color: '#4F8EF7',
-    modules: ['dashboard','clients','projects','invoices','contracts','cashbook','bank','tasks','timer','kanban','portfolio','templates','payment-calendar','passwords','notes','documents','reports','support'],
+    modules: ['dashboard','clients','projects','invoices','contracts','cashbook','bank','tasks','timer','portfolio','templates','payment-calendar','passwords','notes','documents','reports','support'],
     quickActions: [
       { label: 'Новий клієнт',  iconName: 'user',     action: 'new-client' },
       { label: 'Новий рахунок', iconName: 'invoices', action: 'new-invoice' },
@@ -22,7 +22,7 @@ export const PROFESSIONS = {
   },
   smm: {
     id: 'smm', label: 'SMM / Маркетолог', iconName: 'smartphone', color: '#A78BFA',
-    modules: ['dashboard','clients','content-plan','accounts','tasks','kanban','templates','passwords','notes','reports','support'],
+    modules: ['dashboard','clients','content-plan','accounts','tasks','templates','passwords','notes','reports','support'],
     quickActions: [
       { label: 'Новий пост',    iconName: 'pencil',  action: 'new-post' },
       { label: 'Новий клієнт', iconName: 'user',    action: 'new-client' },

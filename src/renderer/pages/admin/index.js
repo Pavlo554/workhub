@@ -1559,7 +1559,7 @@ export async function render(container) {
       }).join('')
 
     // Module usage — рахуємо по selectedModules / activeBusinessModules
-    const modLabels = { dashboard:'Дашборд',clients:'Клієнти',projects:'Проекти',invoices:'Рахунки',contracts:'Договори',tasks:'Задачі',timer:'Таймер',kanban:'Kanban',finances:'Фінанси','tax-calendar':'Податки',appointments:'Розклад',services:'Послуги','content-plan':'Контент',accounts:'Акаунти',passwords:'Паролі',notes:'Нотатки',documents:'Документи','api-keys':'API',hr:'Персонал',warehouse:'Склад',reports:'Звіти',support:'Підтримка',portfolio:'Портфоліо',templates:'Шаблони',currency:'Валюти',cashbook:'Каса',bank:'Банк',payroll:'Зарплата',prro:'ПРРО' }
+    const modLabels = { dashboard:'Дашборд',clients:'Клієнти',projects:'Проекти',invoices:'Рахунки',contracts:'Договори',tasks:'Задачі',timer:'Таймер',finances:'Фінанси','tax-calendar':'Податки',appointments:'Розклад',services:'Послуги','content-plan':'Контент',accounts:'Акаунти',passwords:'Паролі',notes:'Нотатки',documents:'Документи','api-keys':'API',hr:'Персонал',warehouse:'Склад',reports:'Звіти',support:'Підтримка',portfolio:'Портфоліо',templates:'Шаблони',currency:'Валюти',cashbook:'Каса',bank:'Банк',payroll:'Зарплата',prro:'ПРРО' }
     const modUsage = {}
     let usersWithModules = 0
     allUsers.forEach(u => {
@@ -1897,7 +1897,7 @@ export async function render(container) {
             <h3 class="adm-detail-section" style="margin-top:20px">Активні модулі (${modules.length})</h3>
             <div class="adm-modules-wrap" id="ud-modules-display">
               ${modules.length ? modules.map(id => {
-                const labels = { dashboard:'Дашборд',clients:'Клієнти',projects:'Проекти',invoices:'Рахунки',contracts:'Договори',tasks:'Задачі',timer:'Таймер',finances:'Фінанси','tax-calendar':'Податки',appointments:'Розклад',services:'Послуги','content-plan':'Контент',accounts:'Акаунти',passwords:'Паролі',notes:'Нотатки',documents:'Документи','api-keys':'API',hr:'Персонал',warehouse:'Склад',kanban:'Kanban',reports:'Звіти',support:'Підтримка',portfolio:'Портфоліо',templates:'Шаблони',currency:'Валюти',cashbook:'Каса',bank:'Банк',payroll:'Зарплата',prro:'ПРРО' }
+                const labels = { dashboard:'Дашборд',clients:'Клієнти',projects:'Проекти',invoices:'Рахунки',contracts:'Договори',tasks:'Задачі',timer:'Таймер',finances:'Фінанси','tax-calendar':'Податки',appointments:'Розклад',services:'Послуги','content-plan':'Контент',accounts:'Акаунти',passwords:'Паролі',notes:'Нотатки',documents:'Документи','api-keys':'API',hr:'Персонал',warehouse:'Склад',reports:'Звіти',support:'Підтримка',portfolio:'Портфоліо',templates:'Шаблони',currency:'Валюти',cashbook:'Каса',bank:'Банк',payroll:'Зарплата',prro:'ПРРО' }
                 return `<span class="adm-mod-chip">${icon(id, 12)} ${labels[id]||id}</span>`
               }).join('') : '<span style="color:var(--text-muted);font-size:13px">Немає модулів</span>'}
             </div>
@@ -2068,8 +2068,8 @@ export async function render(container) {
   }
 
   // ── Edit modules modal ────────────────────────────────────
-  const ALL_MODULE_IDS = ['dashboard','clients','projects','invoices','contracts','tasks','timer','kanban','finances','tax-calendar','appointments','services','content-plan','accounts','passwords','notes','documents','api-keys','hr','warehouse','reports','support','portfolio','templates','currency','cashbook','bank','payroll','prro']
-  const MODULE_LABELS  = { dashboard:'Дашборд',clients:'Клієнти',projects:'Проекти',invoices:'Рахунки',contracts:'Договори',tasks:'Задачі',timer:'Таймер',kanban:'Kanban',finances:'Фінанси','tax-calendar':'Податки',appointments:'Розклад',services:'Послуги','content-plan':'Контент',accounts:'Акаунти',passwords:'Паролі',notes:'Нотатки',documents:'Документи','api-keys':'API',hr:'Персонал',warehouse:'Склад',reports:'Звіти',support:'Підтримка',portfolio:'Портфоліо',templates:'Шаблони',currency:'Валюти',cashbook:'Каса',bank:'Банк',payroll:'Зарплата',prro:'ПРРО' }
+  const ALL_MODULE_IDS = ['dashboard','clients','projects','invoices','contracts','tasks','timer','finances','tax-calendar','appointments','services','content-plan','accounts','passwords','notes','documents','api-keys','hr','warehouse','reports','support','portfolio','templates','currency','cashbook','bank','payroll','prro']
+  const MODULE_LABELS  = { dashboard:'Дашборд',clients:'Клієнти',projects:'Проекти',invoices:'Рахунки',contracts:'Договори',tasks:'Задачі',timer:'Таймер',finances:'Фінанси','tax-calendar':'Податки',appointments:'Розклад',services:'Послуги','content-plan':'Контент',accounts:'Акаунти',passwords:'Паролі',notes:'Нотатки',documents:'Документи','api-keys':'API',hr:'Персонал',warehouse:'Склад',reports:'Звіти',support:'Підтримка',portfolio:'Портфоліо',templates:'Шаблони',currency:'Валюти',cashbook:'Каса',bank:'Банк',payroll:'Зарплата',prro:'ПРРО' }
 
   function openEditModulesModal(uid, u, parentModal) {
     parentModal?.remove()

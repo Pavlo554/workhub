@@ -52,6 +52,7 @@ export async function render(container) {
             </select>
             <div class="tk-view-toggle" id="tk-view-toggle">
               <button class="tk-view-btn active" data-view="list">${icon('tasks', 13)} Список</button>
+              <button class="tk-view-btn" data-view="kanban">${icon('kanban', 13)} Kanban</button>
               <button class="tk-view-btn" data-view="calendar">${icon('calendar', 13)} Календар</button>
             </div>
           </div>
@@ -234,6 +235,7 @@ export async function render(container) {
     if (projFilter !== 'all') list = list.filter(t => t.projectId === projFilter)
 
     if (viewMode === 'calendar') { renderCalendar(el, list); return }
+    if (viewMode === 'kanban')   { renderKanbanView(el, list); return }
 
     // Незакриті зверху, потім по пріоритету, потім по даті
     list = [...list].sort((a, b) => {
@@ -385,6 +387,67 @@ export async function render(container) {
     el.querySelector('#tk-cal-next').addEventListener('click', () => { calCursor.setMonth(calCursor.getMonth() + 1); renderList() })
     el.querySelectorAll('.tk-cal-chip').forEach(chip => {
       chip.addEventListener('click', () => openDetail(chip.dataset.id))
+    })
+  }
+
+  // ── Kanban view ────────────────────────────────────────────
+  const KB_COLUMNS = [
+    { id: 'todo',        label: 'До виконання', color: '#4F8EF7' },
+    { id: 'in_progress', label: 'В процесі',    color: '#F59E0B' },
+    { id: 'done',        label: 'Виконано',     color: '#34D399' },
+  ]
+
+  function renderKanbanView(el, list) {
+    el.innerHTML = `
+      <div class="tk-kb-board">
+        ${KB_COLUMNS.map(col => {
+          const colCards = list.filter(t => (t.status || 'todo') === col.id)
+          return `
+            <div class="tk-kb-col">
+              <div class="tk-kb-col-head" style="border-top:3px solid ${col.color}">
+                <span>${col.label}</span>
+                <span class="tk-kb-col-count" style="background:${col.color}22;color:${col.color}">${colCards.length}</span>
+              </div>
+              <div class="tk-kb-col-body" data-col="${col.id}">
+                ${colCards.length ? colCards.map(t => {
+                  const pri  = PRI_META[t.priority || 'medium']
+                  const proj = projects.find(p => p.id === t.projectId)
+                  return `
+                    <div class="tk-kb-card" draggable="true" data-id="${t.id}" style="--pri:${pri.color}">
+                      <div class="tk-kb-card-top"><span class="tk-kb-pri-dot" style="background:${pri.color}"></span></div>
+                      <div class="tk-kb-card-title">${t.title}</div>
+                      ${proj ? `<div class="tk-kb-card-proj">${icon('projects', 10)} ${proj.name}</div>` : ''}
+                      ${t.dueDate ? `<div class="tk-kb-card-due">${formatDate(t.dueDate)}</div>` : ''}
+                    </div>`
+                }).join('') : `<div class="tk-kb-col-empty">Перетягніть картку сюди</div>`}
+              </div>
+            </div>`
+        }).join('')}
+      </div>
+    `
+
+    el.querySelectorAll('.tk-kb-card').forEach(card => {
+      card.addEventListener('click', () => openDetail(card.dataset.id))
+      card.addEventListener('dragstart', e => {
+        card.classList.add('tk-kb-card--dragging')
+        e.dataTransfer.effectAllowed = 'move'
+        e.dataTransfer.setData('text/plain', card.dataset.id)
+      })
+      card.addEventListener('dragend', () => card.classList.remove('tk-kb-card--dragging'))
+    })
+    el.querySelectorAll('.tk-kb-col-body').forEach(colBody => {
+      colBody.addEventListener('dragover', e => { e.preventDefault(); colBody.classList.add('tk-kb-col-body--over') })
+      colBody.addEventListener('dragleave', () => colBody.classList.remove('tk-kb-col-body--over'))
+      colBody.addEventListener('drop', async e => {
+        e.preventDefault()
+        colBody.classList.remove('tk-kb-col-body--over')
+        const id = e.dataTransfer.getData('text/plain')
+        const task = tasks.find(t => t.id === id)
+        const newStatus = colBody.dataset.col
+        if (!task || task.status === newStatus) return
+        await updateDoc(doc(db, ...base, 'tasks', id), { status: newStatus, updatedAt: serverTimestamp() })
+        await loadTasks()
+      })
     })
   }
 
@@ -836,6 +899,22 @@ function injectStyles() {
     .tk-cal-tasks { display:flex; flex-direction:column; gap:3px; overflow:hidden; }
     .tk-cal-chip { font-size:10px; padding:2px 5px; border-radius:4px; background:color-mix(in srgb, var(--pc) 16%, var(--bg-tertiary)); color:var(--pc); cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .tk-cal-more { font-size:10px; color:var(--text-muted); padding:0 4px; }
+
+    .tk-kb-board { display:flex; gap:14px; overflow-x:auto; padding-bottom:16px; }
+    .tk-kb-col { min-width:260px; width:260px; flex-shrink:0; display:flex; flex-direction:column; }
+    .tk-kb-col-head { display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:var(--bg-secondary); border-radius:var(--radius-lg) var(--radius-lg) 0 0; font-size:13px; font-weight:700; border:1px solid var(--border); border-bottom:none; }
+    .tk-kb-col-count { font-size:11px; font-weight:800; padding:2px 8px; border-radius:var(--radius-full); }
+    .tk-kb-col-body { flex:1; background:var(--bg-secondary); border:1px solid var(--border); border-top:none; border-radius:0 0 var(--radius-lg) var(--radius-lg); padding:8px; display:flex; flex-direction:column; gap:8px; min-height:200px; }
+    .tk-kb-col-body--over { background:rgba(79,142,247,.08); outline:2px dashed var(--accent-blue); outline-offset:-2px; }
+    .tk-kb-col-empty { text-align:center; color:var(--text-muted); font-size:12px; padding:20px 8px; border:2px dashed var(--border); border-radius:var(--radius-md); margin:4px 0; }
+    .tk-kb-card { background:var(--bg-primary); border:1px solid var(--border); border-radius:var(--radius-md); padding:12px; cursor:pointer; transition:all .15s; }
+    .tk-kb-card:hover { border-color:var(--accent-blue); transform:translateY(-1px); }
+    .tk-kb-card--dragging { opacity:.4; }
+    .tk-kb-card-top { margin-bottom:6px; }
+    .tk-kb-pri-dot { width:9px; height:9px; border-radius:50%; display:inline-block; }
+    .tk-kb-card-title { font-size:13px; font-weight:600; line-height:1.4; margin-bottom:4px; }
+    .tk-kb-card-proj { font-size:10px; color:var(--accent-blue); margin-bottom:4px; }
+    .tk-kb-card-due { font-size:10px; color:var(--text-muted); }
 
     /* Loading */
     .tk-loading { display:flex; justify-content:center; padding:60px; }

@@ -35,7 +35,6 @@ const ALL_MODULES = [
   { id: 'notes',            label: 'Нотатки' },
   { id: 'documents',        label: 'Документи' },
   { id: 'api-keys',         label: 'API & Інтеграції' },
-  { id: 'kanban',           label: 'Kanban' },
   { id: 'templates',        label: 'Шаблони' },
   { id: 'warehouse',        label: 'Склад' },
   { id: 'portfolio',        label: 'Портфоліо' },
@@ -50,7 +49,7 @@ const ALL_MODULES = [
 const RICH_COLLECTIONS = ['clients', 'invoices', 'tasks', 'projects', 'contracts', 'finances']
 // Modules that we just count
 const COUNT_COLLECTIONS = ['notes', 'passwords', 'appointments', 'services', 'warehouse',
-                           'kanban', 'templates', 'portfolio', 'hr', 'documents', 'api-keys', 'accounts']
+                           'templates', 'portfolio', 'hr', 'documents', 'api-keys', 'accounts']
 
 export async function render(container) {
   injectStyles()
@@ -106,7 +105,7 @@ export async function render(container) {
     workspace, members, invites,
     clients, invoices, tasks, projects, contracts, finances,
     notesCount, passwordsCount, appointmentsCount, servicesCount,
-    warehouseCount, kanbanCount, templatesCount, portfolioCount,
+    warehouseCount, templatesCount, portfolioCount,
     hrCount, docsCount, apiKeysCount, accountsCount,
   ] = await Promise.all([
     isSecondary ? Promise.resolve(null)  : getWorkspace(workspaceId).catch(() => null),
@@ -123,7 +122,6 @@ export async function render(container) {
     getCount('appointments'),
     getCount('services'),
     getCount('warehouse'),
-    getCount('kanban'),
     getCount('templates'),
     getCount('portfolio'),
     getCount('hr'),
@@ -134,7 +132,7 @@ export async function render(container) {
 
   const counts = {
     notes: notesCount, passwords: passwordsCount, appointments: appointmentsCount,
-    services: servicesCount, warehouse: warehouseCount, kanban: kanbanCount,
+    services: servicesCount, warehouse: warehouseCount,
     templates: templatesCount, portfolio: portfolioCount, hr: hrCount,
     documents: docsCount, 'api-keys': apiKeysCount, accounts: accountsCount,
   }
@@ -597,7 +595,7 @@ function renderModuleCard(id, stats, counts, richData) {
     tasks: '#F472B6', timer: '#38BDF8', finances: '#34D399', 'tax-calendar': '#FB923C',
     appointments: '#E879F9', services: '#F472B6', 'content-plan': '#38BDF8', accounts: '#A3E635',
     passwords: '#94A3B8', notes: '#6EE7B7', documents: '#4F8EF7', 'api-keys': '#A78BFA',
-    kanban: '#FB923C', templates: '#F59E0B', warehouse: '#94A3B8', portfolio: '#A78BFA',
+    templates: '#F59E0B', warehouse: '#94A3B8', portfolio: '#A78BFA',
     hr: '#34D399', currency: '#F59E0B',
     reports: '#4F8EF7', 'tax-reports': '#34D399', support: '#38BDF8',
   }
@@ -681,7 +679,6 @@ function renderModuleCard(id, stats, counts, richData) {
         appointments:     'записів у розкладі',
         services:         'послуг у каталозі',
         warehouse:        'позицій на складі',
-        kanban:           'карток у Kanban',
         templates:        'шаблонів',
         portfolio:        'робіт у портфоліо',
         hr:               'співробітників',

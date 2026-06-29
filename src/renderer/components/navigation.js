@@ -29,7 +29,6 @@ const MODULE_META = {
   documents:       { labelKey: 'module.documents',  label: 'Документи' },
   'api-keys':      { labelKey: 'module.api',        label: 'API та інтеграції' },
   timer:           { labelKey: 'module.timer',      label: 'Таймер' },
-  kanban:          { labelKey: 'module.kanban',     label: 'Kanban' },
   templates:       { labelKey: 'module.templates',  label: 'Шаблони' },
   warehouse:       { labelKey: 'module.warehouse',  label: 'Склад' },
   portfolio:       { labelKey: 'module.portfolio',  label: 'Портфоліо' },

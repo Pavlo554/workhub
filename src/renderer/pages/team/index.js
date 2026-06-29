@@ -16,7 +16,6 @@ const MODULE_GROUPS = [
       { id: 'dashboard',    get label() { return t('module.dashboard') } },
       { id: 'clients',      get label() { return t('module.clients') } },
       { id: 'tasks',        get label() { return t('module.tasks') } },
-      { id: 'kanban',       get label() { return t('module.kanban') } },
       { id: 'notes',        get label() { return t('module.notes') } },
       { id: 'documents',    get label() { return t('module.documents') } },
       { id: 'passwords',    get label() { return t('module.passwords') } },

@@ -882,7 +882,6 @@ const MODULE_NAV = {
   accounts:          { label: 'Акаунти',    color: '#A3E635' },
   passwords:         { label: 'Паролі',     color: '#94A3B8' },
   notes:             { label: 'Нотатки',    color: '#6EE7B7' },
-  kanban:            { label: 'Kanban',     color: '#60A5FA' },
   templates:         { label: 'Шаблони',    color: '#C084FC' },
   warehouse:         { label: 'Склад',      color: '#FB923C' },
   portfolio:         { label: 'Портфоліо',  color: '#34D399' },
