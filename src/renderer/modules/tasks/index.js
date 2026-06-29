@@ -420,12 +420,16 @@ export async function render(container) {
                       ${t.dueDate ? `<div class="tk-kb-card-due">${formatDate(t.dueDate)}</div>` : ''}
                     </div>`
                 }).join('') : `<div class="tk-kb-col-empty">Перетягніть картку сюди</div>`}
+                <button class="tk-kb-add-btn" data-col="${col.id}">${icon('plus', 12)} Додати картку</button>
               </div>
             </div>`
         }).join('')}
       </div>
     `
 
+    el.querySelectorAll('.tk-kb-add-btn').forEach(btn => {
+      btn.addEventListener('click', () => openModal(null, btn.dataset.col))
+    })
     el.querySelectorAll('.tk-kb-card').forEach(card => {
       card.addEventListener('click', () => openDetail(card.dataset.id))
       card.addEventListener('dragstart', e => {
@@ -609,7 +613,7 @@ export async function render(container) {
   })
 
   // ── Modal ─────────────────────────────────────────────────
-  function openModal(task = null) {
+  function openModal(task = null, prefillStatus = null) {
     editingId   = task?.id   || null
     editingTask = task       || null
     newFiles    = []
@@ -618,7 +622,7 @@ export async function render(container) {
     container.querySelector('#f-title').value    = task?.title       || ''
     container.querySelector('#f-desc').value     = task?.description || ''
     container.querySelector('#f-priority').value = task?.priority    || 'medium'
-    container.querySelector('#f-status').value   = task?.status      || 'todo'
+    container.querySelector('#f-status').value   = task?.status      || prefillStatus || 'todo'
     container.querySelector('#f-due').value      = task?.dueDate     || ''
     container.querySelector('#f-project').value  = task?.projectId   || ''
     container.querySelector('#e-title').textContent = ''
@@ -915,6 +919,8 @@ function injectStyles() {
     .tk-kb-card-title { font-size:13px; font-weight:600; line-height:1.4; margin-bottom:4px; }
     .tk-kb-card-proj { font-size:10px; color:var(--accent-blue); margin-bottom:4px; }
     .tk-kb-card-due { font-size:10px; color:var(--text-muted); }
+    .tk-kb-add-btn { display:flex; align-items:center; justify-content:center; gap:5px; padding:8px; border-radius:var(--radius-md); border:1.5px dashed var(--border); background:none; color:var(--text-muted); font-size:12px; font-weight:600; cursor:pointer; transition:all .15s; }
+    .tk-kb-add-btn:hover { border-color:var(--accent-blue); color:var(--accent-blue); }
 
     /* Loading */
     .tk-loading { display:flex; justify-content:center; padding:60px; }
