@@ -113,9 +113,7 @@ async function handler(req, res) {
     res.status(200).send('ok')
   } catch (err) {
     console.error('aifoWebhook error:', err)
-    // TEMP: surface the real error in the response body while we debug the
-    // first live webhook call — remove once the payload shape is confirmed.
-    res.status(500).json({ error: err.message, stack: err.stack })
+    res.status(500).send('Internal Server Error')
   }
 }
 
