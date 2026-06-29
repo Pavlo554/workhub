@@ -2,10 +2,16 @@
 import { db } from '../../services/firebase.js'
 import { getCurrentUser, getActivePathSegments } from '../../services/auth.js'
 import { icon } from '../../utils/icons.js'
+import { uploadToCloudinary } from '../../services/cloudinary.js'
 import {
   collection, addDoc, getDocs, deleteDoc, doc, updateDoc,
   query, orderBy, serverTimestamp,
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
+
+// Підтримка старих постів з одним полем `platform` замість масиву `platforms`
+function postPlatforms(p) {
+  return p.platforms || (p.platform ? [p.platform] : [])
+}
 
 // ── Constants ─────────────────────────────────────────────
 
@@ -118,16 +124,28 @@ export async function render(container) {
 
           <div class="cp-form-row">
             <div class="cp-field">
-              <label>Платформа *</label>
+              <label>Платформи * (можна декілька)</label>
               <div class="cp-plat-grid" id="f-platform-grid">
                 ${PLATFORMS.map(p => `
                   <label class="cp-plat-pick" style="--pc:${p.color}">
-                    <input type="radio" name="f-platform" value="${p.id}" />
+                    <input type="checkbox" name="f-platform" value="${p.id}" />
                     <span class="cp-plat-pick-box">${p.label}</span>
                   </label>
                 `).join('')}
               </div>
               <span class="cp-error" id="e-platform"></span>
+            </div>
+          </div>
+
+          <div class="cp-field">
+            <label>Обкладинка / фото</label>
+            <div class="cp-cover-zone" id="cp-cover-zone">
+              <input type="file" id="f-cover" accept="image/*" style="display:none" />
+              <div id="cp-cover-preview" class="cp-cover-preview" style="display:none">
+                <img id="cp-cover-img" />
+                <button type="button" class="cp-cover-remove" id="cp-cover-remove">${icon('x', 12)}</button>
+              </div>
+              <button type="button" class="cp-cover-btn" id="cp-cover-btn">${icon('documents', 14)} Завантажити фото</button>
             </div>
           </div>
 
@@ -174,6 +192,7 @@ export async function render(container) {
 
         </div>
         <div class="cp-modal-foot">
+          <button class="btn btn-secondary" id="cp-tg-publish" style="margin-right:auto;display:none">${icon('send', 14)} Опублікувати в Telegram зараз</button>
           <button class="btn btn-secondary" id="cp-modal-cancel">Скасувати</button>
           <button class="btn btn-primary"   id="cp-modal-save">Зберегти</button>
         </div>
@@ -186,9 +205,10 @@ export async function render(container) {
   let activeView = 'kanban'
   let calYear    = new Date().getFullYear()
   let calMonth   = new Date().getMonth()
-  let editingId  = null
-  const user     = getCurrentUser()
-  const base     = getActivePathSegments(user.uid)
+  let editingId   = null
+  let coverImage  = null   // { url, name } — обкладинка, що зберігається з постом
+  const user      = getCurrentUser()
+  const base      = getActivePathSegments(user.uid)
 
   // ── Load ─────────────────────────────────────────────────
   async function loadPosts() {
@@ -203,7 +223,7 @@ export async function render(container) {
   }
 
   function filtered() {
-    return filtPlat === 'all' ? posts : posts.filter(p => p.platform === filtPlat)
+    return filtPlat === 'all' ? posts : posts.filter(p => postPlatforms(p).includes(filtPlat))
   }
 
   function renderAll() {
@@ -278,7 +298,7 @@ export async function render(container) {
           <div class="cp-cal-cell-num ${isToday ? 'today-num' : ''}">${day}</div>
           <div class="cp-cal-cell-posts">
             ${dayPosts.map(p => {
-              const plat = PLATFORMS.find(x => x.id === p.platform)
+              const plat = PLATFORMS.find(x => x.id === postPlatforms(p)[0])
               return `<div class="cp-cal-post" style="background:${plat?.color || '#94A3B8'}22;border-color:${plat?.color || '#94A3B8'}55" data-id="${p.id}">
                 <span class="cp-cal-post-text">${p.caption}</span>
               </div>`
@@ -320,23 +340,27 @@ export async function render(container) {
     }
 
     el.innerHTML = `<div class="cp-list-grid">${list.map(p => {
-      const plat   = PLATFORMS.find(x => x.id === p.platform)
+      const plats  = postPlatforms(p).map(id => PLATFORMS.find(x => x.id === id)).filter(Boolean)
+      const plat   = plats[0]
       const type   = POST_TYPES.find(x => x.id === p.type)
       const status = STATUSES[p.status || 'idea']
       return `
         <div class="cp-list-row" data-id="${p.id}">
-          <div class="cp-list-plat" style="background:${plat?.color || '#94A3B8'}22;border-color:${plat?.color || '#94A3B8'}44; color:${plat?.color || '#94A3B8'}">
-            ${icon('accounts', 18)}
-          </div>
+          ${p.coverImage?.url
+            ? `<img class="cp-list-cover" src="${p.coverImage.url}" />`
+            : `<div class="cp-list-plat" style="background:${plat?.color || '#94A3B8'}22;border-color:${plat?.color || '#94A3B8'}44; color:${plat?.color || '#94A3B8'}">${icon('accounts', 18)}</div>`
+          }
           <div class="cp-list-body">
             <div class="cp-list-caption">${p.caption}</div>
             ${p.text ? `<div class="cp-list-text">${p.text.slice(0, 100)}${p.text.length > 100 ? '…' : ''}</div>` : ''}
+            <div class="cp-list-plats">${plats.map(pl => `<span class="cp-mini-plat" style="color:${pl.color}">${pl.label}</span>`).join('')}</div>
           </div>
           <div class="cp-list-meta">
             ${p.date ? `<span class="cp-list-date">${formatDate(p.date)}${p.time ? ' ' + p.time : ''}</span>` : ''}
             <span class="cp-list-type">${type?.label || ''}</span>
           </div>
           <div class="cp-list-status" style="color:${status.color};background:${status.bg}">${status.label}</div>
+          ${p.telegramPublishedAt ? `<span class="cp-tg-done" title="Опубліковано в Telegram">${icon('send', 12)}</span>` : ''}
           <div class="cp-list-actions">
             <button class="cp-list-btn edit-btn" data-id="${p.id}">${icon('pencil', 13)}</button>
             <button class="cp-list-btn delete-btn" data-id="${p.id}">${icon('trash', 13)}</button>
@@ -360,14 +384,16 @@ export async function render(container) {
 
   // ── Post card (kanban) ────────────────────────────────────
   function postCard(p) {
-    const plat   = PLATFORMS.find(x => x.id === p.platform)
+    const plats  = postPlatforms(p).map(id => PLATFORMS.find(x => x.id === id)).filter(Boolean)
     const type   = POST_TYPES.find(x => x.id === p.type)
-    const status = STATUSES[p.status || 'idea']
     return `
       <div class="cp-card" data-id="${p.id}">
+        ${p.coverImage?.url ? `<img class="cp-card-cover" src="${p.coverImage.url}" />` : ''}
         <div class="cp-card-head">
-          <div class="cp-card-plat" style="background:${plat?.color || '#94A3B8'}22;border-color:${plat?.color || '#94A3B8'}55">
-            <span style="color:${plat?.color || '#94A3B8'}">${plat?.label || 'Інше'}</span>
+          <div class="cp-card-plats">
+            ${plats.length ? plats.map(plat => `
+              <span class="cp-card-plat" style="background:${plat.color}22;border-color:${plat.color}55;color:${plat.color}">${plat.label}</span>
+            `).join('') : `<span class="cp-card-plat">Інше</span>`}
           </div>
           <div class="cp-card-actions">
             <button class="cp-card-btn edit-btn" data-id="${p.id}">${icon('pencil', 12)}</button>
@@ -379,6 +405,7 @@ export async function render(container) {
         <div class="cp-card-foot">
           ${type ? `<span class="cp-card-type">${type.label}</span>` : ''}
           ${p.date ? `<span class="cp-card-date">${formatDate(p.date)}${p.time ? ' · ' + p.time : ''}</span>` : ''}
+          ${p.telegramPublishedAt ? `<span class="cp-tg-done" title="Опубліковано в Telegram">${icon('send', 11)} TG</span>` : ''}
           ${p.hashtags ? `<div class="cp-card-tags">${p.hashtags.split(' ').slice(0,3).map(h => `<span class="cp-tag">${h}</span>`).join('')}</div>` : ''}
         </div>
       </div>
@@ -454,10 +481,10 @@ export async function render(container) {
     container.querySelector('#f-hashtags').value   = post?.hashtags  || ''
     container.querySelector('#f-link').value       = post?.link      || ''
 
-    // Platform radio
-    const platVal = post?.platform || null
+    // Platform checkboxes
+    const platVals = postPlatforms(post || {})
     container.querySelectorAll('input[name="f-platform"]').forEach(r => {
-      r.checked = r.value === platVal
+      r.checked = platVals.includes(r.value)
     })
 
     // Type radio
@@ -465,6 +492,14 @@ export async function render(container) {
     container.querySelectorAll('input[name="f-type"]').forEach(r => {
       r.checked = r.value === typeVal
     })
+
+    // Cover image
+    coverImage = post?.coverImage || null
+    renderCoverPreview()
+
+    // Manual "publish now" button — only when telegram selected and not already published
+    const tgBtn = container.querySelector('#cp-tg-publish')
+    tgBtn.style.display = (post && platVals.includes('telegram') && !post.telegramPublishedAt) ? '' : 'none'
 
     container.querySelector('#e-caption').textContent  = ''
     container.querySelector('#e-platform').textContent = ''
@@ -474,8 +509,42 @@ export async function render(container) {
 
   function closeModal() {
     container.querySelector('#cp-modal').style.display = 'none'
-    editingId = null
+    editingId  = null
+    coverImage = null
   }
+
+  function renderCoverPreview() {
+    const preview = container.querySelector('#cp-cover-preview')
+    const img     = container.querySelector('#cp-cover-img')
+    const btn     = container.querySelector('#cp-cover-btn')
+    if (coverImage?.url) {
+      img.src = coverImage.url
+      preview.style.display = 'block'
+      btn.style.display = 'none'
+    } else {
+      preview.style.display = 'none'
+      btn.style.display = ''
+    }
+  }
+
+  container.querySelector('#cp-cover-btn').addEventListener('click', () => container.querySelector('#f-cover').click())
+  container.querySelector('#cp-cover-remove').addEventListener('click', () => { coverImage = null; renderCoverPreview() })
+  container.querySelector('#f-cover').addEventListener('change', async e => {
+    const file = e.target.files[0]
+    if (!file) return
+    const btn = container.querySelector('#cp-cover-btn')
+    const prevLabel = btn.innerHTML
+    btn.innerHTML = '<div class="btn-spinner"></div> Завантаження...'
+    try {
+      coverImage = await uploadToCloudinary(file)
+      renderCoverPreview()
+    } catch (err) {
+      alert('Помилка завантаження фото: ' + err.message)
+    } finally {
+      btn.innerHTML = prevLabel
+      e.target.value = ''
+    }
+  })
 
   container.querySelector('#cp-add-btn').addEventListener('click', () => openModal())
   container.querySelector('#cp-modal-close').addEventListener('click', closeModal)
@@ -486,11 +555,11 @@ export async function render(container) {
 
   // ── Save ──────────────────────────────────────────────────
   container.querySelector('#cp-modal-save').addEventListener('click', async () => {
-    const caption  = container.querySelector('#f-caption').value.trim()
-    const platform = container.querySelector('input[name="f-platform"]:checked')?.value || null
+    const caption   = container.querySelector('#f-caption').value.trim()
+    const platforms = [...container.querySelectorAll('input[name="f-platform"]:checked')].map(r => r.value)
     let ok = true
-    if (!caption)  { container.querySelector('#e-caption').textContent  = 'Введіть назву'; ok = false }
-    if (!platform) { container.querySelector('#e-platform').textContent = 'Оберіть платформу'; ok = false }
+    if (!caption)         { container.querySelector('#e-caption').textContent  = 'Введіть назву'; ok = false }
+    if (!platforms.length) { container.querySelector('#e-platform').textContent = 'Оберіть хоча б одну платформу'; ok = false }
     if (!ok) return
 
     const btn = container.querySelector('#cp-modal-save')
@@ -498,14 +567,15 @@ export async function render(container) {
 
     const data = {
       caption,
-      text:     container.querySelector('#f-text').value.trim()     || null,
-      platform,
-      type:     container.querySelector('input[name="f-type"]:checked')?.value || 'post',
-      status:   container.querySelector('#f-status').value,
-      date:     container.querySelector('#f-date').value             || null,
-      time:     container.querySelector('#f-time').value             || null,
-      hashtags: container.querySelector('#f-hashtags').value.trim() || null,
-      link:     container.querySelector('#f-link').value.trim()     || null,
+      text:      container.querySelector('#f-text').value.trim()     || null,
+      platforms,
+      coverImage: coverImage || null,
+      type:      container.querySelector('input[name="f-type"]:checked')?.value || 'post',
+      status:    container.querySelector('#f-status').value,
+      date:      container.querySelector('#f-date').value             || null,
+      time:      container.querySelector('#f-time').value             || null,
+      hashtags:  container.querySelector('#f-hashtags').value.trim() || null,
+      link:      container.querySelector('#f-link').value.trim()     || null,
     }
 
     try {
@@ -522,6 +592,79 @@ export async function render(container) {
       btn.disabled = false
     }
   })
+
+  // ── Telegram publishing ────────────────────────────────────
+  async function getTelegramIntegration() {
+    const snap = await getDocs(collection(db, ...base, 'integrations'))
+    const tgDoc = snap.docs.find(d => d.data().intId === 'telegram')
+    if (!tgDoc) return null
+    const { botToken, channelId } = tgDoc.data()
+    if (!botToken || !channelId) return null
+    return { botToken, channelId }
+  }
+
+  async function publishToTelegram(post) {
+    const cfg = await getTelegramIntegration()
+    if (!cfg) throw new Error('Telegram не підключено — додайте Bot Token і Channel у "API та інтеграції"')
+
+    const caption = [post.caption, post.text, post.hashtags].filter(Boolean).join('\n\n').slice(0, 1024)
+    const url  = post.coverImage?.url
+      ? `https://api.telegram.org/bot${cfg.botToken}/sendPhoto`
+      : `https://api.telegram.org/bot${cfg.botToken}/sendMessage`
+    const body = post.coverImage?.url
+      ? { chat_id: cfg.channelId, photo: post.coverImage.url, caption }
+      : { chat_id: cfg.channelId, text: caption || post.caption }
+
+    const res  = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    const data = await res.json()
+    if (!data.ok) throw new Error(data.description || 'Не вдалось опублікувати в Telegram')
+
+    await updateDoc(doc(db, ...base, 'content-plan', post.id), {
+      telegramPublishedAt: serverTimestamp(),
+      telegramMessageId: data.result?.message_id || null,
+    })
+  }
+
+  container.querySelector('#cp-tg-publish').addEventListener('click', async () => {
+    if (!editingId) return
+    const post = posts.find(p => p.id === editingId)
+    if (!post) return
+    const btn = container.querySelector('#cp-tg-publish')
+    btn.disabled = true
+    btn.innerHTML = '<div class="btn-spinner"></div> Публікація...'
+    try {
+      await publishToTelegram({ ...post, coverImage })
+      closeModal()
+      await loadPosts()
+    } catch (err) {
+      alert(err.message)
+      btn.disabled = false
+      btn.innerHTML = `${icon('send', 14)} Опублікувати в Telegram зараз`
+    }
+  })
+
+  // Автопостинг: щохвилини перевіряємо запланований час для постів з Telegram у платформах
+  const scheduleInterval = setInterval(async () => {
+    const now = new Date()
+    const due = posts.filter(p => {
+      if (p.telegramPublishedAt || !postPlatforms(p).includes('telegram')) return false
+      if (!p.date) return false
+      const dt = new Date(`${p.date}T${p.time || '00:00'}`)
+      return dt <= now
+    })
+    for (const post of due) {
+      try { await publishToTelegram(post) } catch (err) { console.error('Auto-publish failed:', err.message) }
+    }
+    if (due.length) await loadPosts()
+  }, 60000)
+
+  const observer = new MutationObserver(() => {
+    if (!container.querySelector('.cp-page')) {
+      clearInterval(scheduleInterval)
+      observer.disconnect()
+    }
+  })
+  observer.observe(container, { childList: true })
 
   await loadPosts()
 
@@ -594,7 +737,10 @@ function injectStyles() {
     .cp-card:hover { border-color:rgba(255,255,255,.14); transform:translateY(-1px); box-shadow:var(--shadow-sm); }
 
     .cp-card-head    { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .cp-card-plats   { display:flex; flex-wrap:wrap; gap:4px; }
     .cp-card-plat    { display:flex; align-items:center; gap:5px; font-size:11px; font-weight:700; padding:3px 8px; border-radius:var(--radius-full); border:1px solid; }
+    .cp-card-cover   { width:100%; height:120px; object-fit:cover; border-radius:var(--radius-md); margin-bottom:2px; }
+    .cp-tg-done      { display:inline-flex; align-items:center; gap:3px; font-size:10px; font-weight:700; color:#34D399; }
     .cp-card-actions { display:flex; gap:3px; opacity:0; transition:opacity .15s; }
     .cp-card:hover .cp-card-actions { opacity:1; }
     .cp-card-btn     { width:24px; height:24px; border-radius:5px; font-size:12px; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:background .15s; }
@@ -657,9 +803,13 @@ function injectStyles() {
     }
     .cp-list-row:hover { border-color:rgba(255,255,255,.12); transform:translateX(2px); }
     .cp-list-plat  { width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; border:1px solid; flex-shrink:0; }
+    .cp-list-cover { width:40px; height:40px; border-radius:10px; object-fit:cover; flex-shrink:0; }
     .cp-list-body  { flex:1; min-width:0; }
     .cp-list-caption { font-weight:700; font-size:14px; margin-bottom:2px; }
     .cp-list-text    { font-size:12px; color:var(--text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .cp-list-plats   { display:flex; gap:6px; margin-top:3px; }
+    .cp-mini-plat    { font-size:10px; font-weight:700; }
+    .cp-tg-done      { color:#34D399; flex-shrink:0; }
     .cp-list-meta  { display:flex; flex-direction:column; gap:3px; flex-shrink:0; }
     .cp-list-date  { font-size:12px; color:var(--text-secondary); }
     .cp-list-type  { font-size:11px; color:var(--text-muted); }
@@ -712,6 +862,14 @@ function injectStyles() {
       border-color:var(--pc); background:color-mix(in srgb, var(--pc) 15%, transparent);
       color:var(--pc);
     }
+
+    /* Cover image */
+    .cp-cover-zone   { display:flex; }
+    .cp-cover-btn    { display:flex; align-items:center; gap:6px; padding:9px 16px; border-radius:var(--radius-md); border:1.5px dashed var(--border); background:var(--bg-tertiary); color:var(--text-secondary); font-size:12px; font-weight:600; cursor:pointer; }
+    .cp-cover-btn:hover { border-color:var(--accent-blue); color:var(--text-primary); }
+    .cp-cover-preview { position:relative; display:inline-block; }
+    .cp-cover-preview img { max-width:220px; max-height:140px; border-radius:var(--radius-md); display:block; }
+    .cp-cover-remove { position:absolute; top:-8px; right:-8px; width:22px; height:22px; border-radius:50%; background:#EF4444; color:#fff; border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; }
 
     /* Type picker */
     .cp-type-grid { display:flex; flex-wrap:wrap; gap:6px; }
