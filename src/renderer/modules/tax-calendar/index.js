@@ -12,7 +12,7 @@ const BADGE = {
   other:   { label: 'Інше',      color: '#94A3B8', bg: 'rgba(148,163,184,.12)' },
 }
 
-const EVENTS = [
+export const EVENTS = [
   { date: '20 січня',    title: 'Єдиний внесок (ЄСВ) за IV квартал',       desc: 'Сплата ЄСВ за жовтень–грудень',         type: 'payment', quarter: 1 },
   { date: '1 лютого',   title: 'Декларація про майновий стан і доходи',     desc: 'Для ФОП 3-ї групи за попередній рік',   type: 'report',  quarter: 1 },
   { date: '9 лютого',   title: 'Єдиний податок за IV квартал',              desc: 'Сплата ЄП для 1-ї та 2-ї групи',        type: 'payment', quarter: 1 },
@@ -39,7 +39,7 @@ function toggleDone(id) {
   localStorage.setItem(DONE_KEY, JSON.stringify([...s]))
 }
 
-function parseDate(str) {
+export function parseDate(str) {
   const [day, month] = str.trim().split(' ')
   const now = new Date()
   let year = now.getFullYear()

@@ -64,6 +64,7 @@ addRoute('contracts',         () => import('./modules/contracts/index.js'))
 // ── Модулі Бухгалтер ──────────────────────────────────────
 addRoute('finances',          () => import('./modules/finances/index.js'))
 addRoute('tax-calendar',      () => import('./modules/tax-calendar/index.js'))
+addRoute('payment-calendar',  () => import('./modules/payment-calendar/index.js'))
 
 // ── Модулі 1С-стиль (Каса / Банк / Зарплата) ─────────────
 addRoute('cashbook',          () => import('./modules/cashbook/index.js'))
