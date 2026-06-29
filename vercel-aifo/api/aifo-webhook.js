@@ -1,13 +1,19 @@
 const { admin, db, setCors } = require('./_lib/firebase')
 const { PLAN_PRICES, addMonths, crypto } = require('./_lib/aifo')
 
-function readRawBody(req) {
-  return new Promise((resolve, reject) => {
-    let data = ''
-    req.on('data', chunk => { data += chunk })
-    req.on('end', () => resolve(data))
-    req.on('error', reject)
-  })
+async function readRawBody(req) {
+  // Fetch-style runtime (Web Request) — has .text()/.arrayBuffer(), no .on().
+  if (typeof req.text === 'function') return await req.text()
+  // Classic Node.js IncomingMessage stream.
+  if (typeof req.on === 'function') {
+    return new Promise((resolve, reject) => {
+      let data = ''
+      req.on('data', chunk => { data += chunk })
+      req.on('end', () => resolve(data))
+      req.on('error', reject)
+    })
+  }
+  return null
 }
 
 async function handler(req, res) {
@@ -16,7 +22,11 @@ async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).send('Method Not Allowed')
 
   try {
-    const rawBody = await readRawBody(req)
+    // Prefer the raw stream (needed for byte-exact HMAC verification), but
+    // fall back to re-serializing the already-parsed body if this runtime
+    // handed us a consumed/parsed request instead of a raw Node stream.
+    let rawBody = await readRawBody(req).catch(() => null)
+    if (!rawBody) rawBody = req.body && typeof req.body === 'object' ? JSON.stringify(req.body) : req.body
     const signature = req.headers['x-aifo-signature']
     if (!rawBody || !signature) { res.status(400).send('Missing data'); return }
 
@@ -33,72 +43,68 @@ async function handler(req, res) {
     }
 
     const payload = JSON.parse(rawBody)
-    // Log the full verified payload once — real field names get confirmed
-    // here on the first live webhook call, since AIFO's docs only show the
-    // deep-link query params (invoice, orderReference, status), not the
-    // webhook POST body shape itself.
     console.log('aifoWebhook payload:', JSON.stringify(payload))
 
-    const status = payload.status || payload.event || ''
-    const isSuccess = /success/i.test(status)
-    if (!isSuccess) { res.status(200).send('ok'); return }
+    // Confirmed real shape: { event: "payment.success", data: { invoice_id, amount, ... } }
+    const eventName = payload.event || payload.status || ''
+    if (!/success/i.test(eventName)) { res.status(200).send('ok'); return }
 
-    // orderReference should be the external_id we generated at invoice
-    // creation (wh-{uid}-{planId}-{months}-{timestamp}) — NOT AIFO's own
-    // numeric "invoice" id.
-    const orderReference = payload.orderReference || payload.order_reference || payload.external_id
-    const parts = String(orderReference).split('-')
-    if (parts[0] !== 'wh' || parts.length < 5) {
-      console.warn('aifoWebhook: unrecognized orderReference', orderReference)
+    // AIFO does NOT echo back our external_id in the webhook — only its own
+    // numeric invoice_id, which we saved on the pendingPayments doc at
+    // creation time. Look it up across all users via collectionGroup.
+    const invoiceId = payload.data?.invoice_id ?? payload.invoice_id
+    if (!invoiceId) {
+      console.warn('aifoWebhook: no invoice_id in payload')
       res.status(200).send('ok')
       return
     }
 
-    const uid    = parts[1]
-    const planId = parts[2]
-    const months = parseInt(parts[3], 10) || 1
-
-    if (!PLAN_PRICES[planId]) { res.status(200).send('ok'); return }
-
-    // Idempotency — skip if this invoice was already processed
     const snap = await db
-      .collection('users').doc(uid)
-      .collection('pendingPayments')
-      .where('orderId', '==', orderReference)
+      .collectionGroup('pendingPayments')
+      .where('aifoInvoiceId', '==', invoiceId)
+      .limit(1)
       .get()
 
-    if (!snap.empty && snap.docs[0].data().status === 'approved') {
+    if (snap.empty) {
+      console.warn('aifoWebhook: no pendingPayments doc for invoice_id', invoiceId)
       res.status(200).send('ok')
       return
     }
+
+    const paymentDoc = snap.docs[0]
+    const payment    = paymentDoc.data()
+    const uid        = paymentDoc.ref.parent.parent.id
+
+    if (payment.status === 'approved') { res.status(200).send('ok'); return } // idempotency
+
+    const planId = payment.planId
+    const months = payment.months || 1
+    if (!PLAN_PRICES[planId]) { res.status(200).send('ok'); return }
 
     const expiry = addMonths(new Date(), months)
 
-    await db.collection('users').doc(uid).update({
-      plan:               planId,
-      subscriptionEnd:    expiry.toISOString(),
-      subscriptionStatus: 'active',
-      planExpiresAt:      admin.firestore.Timestamp.fromDate(expiry),
-      planActivatedAt:    admin.firestore.FieldValue.serverTimestamp(),
-      planMethod:         'aifo',
-      updatedAt:          admin.firestore.FieldValue.serverTimestamp(),
-    })
-
-    if (!snap.empty) {
-      const batch = db.batch()
-      snap.forEach(d =>
-        batch.update(d.ref, {
-          status:     'approved',
-          approvedAt: admin.firestore.FieldValue.serverTimestamp(),
-        })
-      )
-      await batch.commit()
-    }
+    await Promise.all([
+      db.collection('users').doc(uid).update({
+        plan:               planId,
+        subscriptionEnd:    expiry.toISOString(),
+        subscriptionStatus: 'active',
+        planExpiresAt:      admin.firestore.Timestamp.fromDate(expiry),
+        planActivatedAt:    admin.firestore.FieldValue.serverTimestamp(),
+        planMethod:         'aifo',
+        updatedAt:          admin.firestore.FieldValue.serverTimestamp(),
+      }),
+      paymentDoc.ref.update({
+        status:     'approved',
+        approvedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }),
+    ])
 
     res.status(200).send('ok')
   } catch (err) {
     console.error('aifoWebhook error:', err)
-    res.status(500).send('Internal Server Error')
+    // TEMP: surface the real error in the response body while we debug the
+    // first live webhook call — remove once the payload shape is confirmed.
+    res.status(500).json({ error: err.message, stack: err.stack })
   }
 }
 

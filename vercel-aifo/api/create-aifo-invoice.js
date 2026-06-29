@@ -49,8 +49,11 @@ module.exports = async (req, res) => {
       return res.status(502).json({ error: result.message || 'AIFO error' })
     }
 
+    // AIFO's webhook does NOT echo back external_id — it only gives us its
+    // own numeric invoice_id, so that's what we need to look the doc up by.
     await db.collection('users').doc(uid).collection('pendingPayments').add({
-      orderId:   externalId,
+      orderId:      externalId,
+      aifoInvoiceId: result.data.invoice_id,
       planId,
       months,
       amount:    Number(amount),
