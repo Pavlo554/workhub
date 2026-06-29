@@ -41,6 +41,7 @@ const MODULE_META = {
   bank:            { labelKey: 'module.bank',        label: 'Банк' },
   payroll:         { labelKey: 'module.payroll',    label: 'Зарплата' },
   prro:            { labelKey: 'module.prro',        label: 'ПРРО' },
+  'client-analytics': { labelKey: 'module.client-analytics', label: 'Аналітика клієнтів' },
 }
 
 function modLabel(m) {

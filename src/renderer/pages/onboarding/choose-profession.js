@@ -21,6 +21,8 @@ const ALL_MODULES = [
   { id: 'timer',        label: 'Таймер',          desc: 'Трекінг часу' },
   { id: 'finances',     label: 'Фінанси',         desc: 'Доходи та витрати' },
   { id: 'tax-calendar', label: 'Податки',         desc: 'Календар податків' },
+  { id: 'payment-calendar', label: 'Календар платежів', desc: 'Усі майбутні оплати в одному списку' },
+  { id: 'client-analytics', label: 'Аналітика клієнтів', desc: 'Статистика, джерела та LTV клієнтів' },
   { id: 'appointments', label: 'Розклад',         desc: 'Записи клієнтів' },
   { id: 'services',     label: 'Послуги',         desc: 'Каталог послуг' },
   { id: 'content-plan', label: 'Контент-план',    desc: 'Планування постів' },
@@ -33,10 +35,10 @@ const ALL_MODULES = [
 
 // Default modules per profession (without 'dashboard')
 const DEFAULTS = {
-  freelancer: ['clients','projects','invoices','contracts','tasks','timer','passwords','notes'],
-  accountant: ['clients','finances','invoices','contracts','tax-calendar','passwords','notes'],
+  freelancer: ['clients','projects','invoices','contracts','tasks','timer','payment-calendar','passwords','notes'],
+  accountant: ['clients','finances','invoices','contracts','tax-calendar','payment-calendar','passwords','notes'],
   smm:        ['clients','content-plan','accounts','tasks','passwords','notes'],
-  beauty:     ['clients','appointments','services','finances','notes'],
+  beauty:     ['clients','appointments','services','finances','payment-calendar','notes'],
 }
 
 export async function render(container) {
