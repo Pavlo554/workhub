@@ -46,12 +46,15 @@ export async function render(container) {
             <button class="tk-pri-btn" data-pri="medium" style="--pc:#F59E0B">${t('tasks.priority.medium')}</button>
             <button class="tk-pri-btn" data-pri="low"    style="--pc:#34D399">${t('tasks.priority.low')}</button>
           </div>
-        </div>
-
-        <!-- Project filter -->
-        <div class="tk-proj-filter-row" id="tk-proj-row" style="display:none">
-          <span class="tk-proj-label">Проект:</span>
-          <div class="tk-proj-pills" id="tk-proj-pills"></div>
+          <div class="tk-toolbar-row3">
+            <select class="tk-proj-select" id="tk-proj-select" style="display:none">
+              <option value="all">Всі проекти</option>
+            </select>
+            <div class="tk-view-toggle" id="tk-view-toggle">
+              <button class="tk-view-btn active" data-view="list">${icon('tasks', 13)} Список</button>
+              <button class="tk-view-btn" data-view="calendar">${icon('calendar', 13)} Календар</button>
+            </div>
+          </div>
         </div>
 
         <div id="tasks-list">
@@ -148,6 +151,8 @@ export async function render(container) {
   let priFilter   = 'all'
   let projFilter  = 'all'
   let selectedId  = null
+  let viewMode    = 'list'
+  const calCursor = new Date()
   const user      = getCurrentUser()
   const base      = getActivePathSegments(user.uid)
 
@@ -169,21 +174,16 @@ export async function render(container) {
         container.querySelector('#project-field').style.display = 'none'
       }
 
-      // Build project filter pills
+      // Build project filter dropdown
       if (projects.length > 0) {
-        const row   = container.querySelector('#tk-proj-row')
-        const pills = container.querySelector('#tk-proj-pills')
-        row.style.display = 'flex'
-        pills.innerHTML = `<button class="tk-proj-pill active" data-proj="all">Всі</button>` +
-          projects.map(p => `<button class="tk-proj-pill" data-proj="${p.id}">${p.name}</button>`).join('')
-        pills.querySelectorAll('.tk-proj-pill').forEach(btn => {
-          btn.addEventListener('click', () => {
-            pills.querySelectorAll('.tk-proj-pill').forEach(b => b.classList.remove('active'))
-            btn.classList.add('active')
-            projFilter = btn.dataset.proj
-            renderList()
-            updateCount()
-          })
+        const select = container.querySelector('#tk-proj-select')
+        select.style.display = ''
+        select.innerHTML = `<option value="all">Всі проекти</option>` +
+          projects.map(p => `<option value="${p.id}">${p.name}</option>`).join('')
+        select.addEventListener('change', () => {
+          projFilter = select.value
+          renderList()
+          updateCount()
         })
       }
     } catch (_) {}
@@ -232,6 +232,8 @@ export async function render(container) {
     let list = filter === 'all' ? tasks : tasks.filter(t => t.status === filter)
     if (priFilter !== 'all') list = list.filter(t => (t.priority || 'medium') === priFilter)
     if (projFilter !== 'all') list = list.filter(t => t.projectId === projFilter)
+
+    if (viewMode === 'calendar') { renderCalendar(el, list); return }
 
     // Незакриті зверху, потім по пріоритету, потім по даті
     list = [...list].sort((a, b) => {
@@ -326,6 +328,63 @@ export async function render(container) {
         await deleteDoc(doc(db, ...base, 'tasks', btn.dataset.id))
         await loadTasks()
       })
+    })
+  }
+
+  // ── Calendar view ─────────────────────────────────────────
+  const WEEKDAYS_UK = ['Пн','Вт','Ср','Чт','Пт','Сб','Нд']
+  const MONTHS_UK_FULL = ['Січень','Лютий','Березень','Квітень','Травень','Червень','Липень','Серпень','Вересень','Жовтень','Листопад','Грудень']
+
+  function renderCalendar(el, list) {
+    const year  = calCursor.getFullYear()
+    const month = calCursor.getMonth()
+    const byDay = {}
+    list.filter(t => t.dueDate).forEach(t => {
+      (byDay[t.dueDate] ||= []).push(t)
+    })
+
+    const firstOfMonth = new Date(year, month, 1)
+    const startOffset  = (firstOfMonth.getDay() + 6) % 7 // Monday = 0
+    const daysInMonth   = new Date(year, month + 1, 0).getDate()
+    const todayStr = new Date().toISOString().slice(0, 10)
+
+    const cells = []
+    for (let i = 0; i < startOffset; i++) cells.push(null)
+    for (let d = 1; d <= daysInMonth; d++) cells.push(d)
+
+    el.innerHTML = `
+      <div class="tk-cal">
+        <div class="tk-cal-head">
+          <button class="tk-cal-nav" id="tk-cal-prev">${icon('chevron-left', 16)}</button>
+          <span class="tk-cal-label">${MONTHS_UK_FULL[month]} ${year}</span>
+          <button class="tk-cal-nav" id="tk-cal-next">${icon('chevron-right', 16)}</button>
+        </div>
+        <div class="tk-cal-grid">
+          ${WEEKDAYS_UK.map(w => `<div class="tk-cal-wd">${w}</div>`).join('')}
+          ${cells.map(d => {
+            if (d === null) return `<div class="tk-cal-cell tk-cal-cell--empty"></div>`
+            const dateStr = `${year}-${String(month + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`
+            const dayTasks = byDay[dateStr] || []
+            return `
+              <div class="tk-cal-cell ${dateStr === todayStr ? 'tk-cal-cell--today' : ''}">
+                <div class="tk-cal-day">${d}</div>
+                <div class="tk-cal-tasks">
+                  ${dayTasks.slice(0, 3).map(t => {
+                    const pri = PRI_META[t.priority || 'medium']
+                    return `<div class="tk-cal-chip" data-id="${t.id}" style="--pc:${pri.color}" title="${t.title}">${t.title}</div>`
+                  }).join('')}
+                  ${dayTasks.length > 3 ? `<div class="tk-cal-more">+${dayTasks.length - 3}</div>` : ''}
+                </div>
+              </div>`
+          }).join('')}
+        </div>
+      </div>
+    `
+
+    el.querySelector('#tk-cal-prev').addEventListener('click', () => { calCursor.setMonth(calCursor.getMonth() - 1); renderList() })
+    el.querySelector('#tk-cal-next').addEventListener('click', () => { calCursor.setMonth(calCursor.getMonth() + 1); renderList() })
+    el.querySelectorAll('.tk-cal-chip').forEach(chip => {
+      chip.addEventListener('click', () => openDetail(chip.dataset.id))
     })
   }
 
@@ -474,6 +533,15 @@ export async function render(container) {
     container.querySelectorAll('.tk-pri-btn').forEach(b => b.classList.remove('active'))
     btn.classList.add('active')
     priFilter = btn.dataset.pri
+    renderList()
+  })
+
+  container.querySelector('#tk-view-toggle').addEventListener('click', e => {
+    const btn = e.target.closest('.tk-view-btn')
+    if (!btn) return
+    container.querySelectorAll('.tk-view-btn').forEach(b => b.classList.remove('active'))
+    btn.classList.add('active')
+    viewMode = btn.dataset.view
     renderList()
   })
 
@@ -747,12 +815,27 @@ function injectStyles() {
     .tk-pri-btn.active  { background:var(--pc, var(--accent-blue)); border-color:var(--pc, var(--accent-blue)); color:#fff; }
     .tk-pri-btn[data-pri="all"].active { background:var(--bg-secondary); border-color:rgba(255,255,255,.2); color:var(--text-primary); }
 
-    .tk-proj-filter-row { display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
-    .tk-proj-label      { font-size:12px; font-weight:700; color:var(--text-muted); white-space:nowrap; }
-    .tk-proj-pills      { display:flex; gap:6px; flex-wrap:wrap; }
-    .tk-proj-pill       { padding:5px 14px; border-radius:var(--radius-full); font-size:12px; font-weight:600; color:var(--text-secondary); background:var(--bg-secondary); border:1.5px solid var(--border); cursor:pointer; transition:all .2s; }
-    .tk-proj-pill:hover { border-color:rgba(79,142,247,.5); color:var(--text-primary); }
-    .tk-proj-pill.active { background:rgba(79,142,247,.15); border-color:var(--accent-blue); color:var(--accent-blue); }
+    .tk-toolbar-row3 { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .tk-proj-select { padding:7px 12px; border-radius:var(--radius-md); font-size:12px; font-weight:600; color:var(--text-primary); background:var(--bg-secondary); border:1.5px solid var(--border); cursor:pointer; }
+
+    .tk-view-toggle { display:flex; gap:2px; background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-md); padding:3px; margin-left:auto; }
+    .tk-view-btn { display:flex; align-items:center; gap:5px; padding:6px 12px; border:none; background:none; border-radius:6px; font-size:12px; font-weight:600; color:var(--text-muted); cursor:pointer; transition:all .15s; }
+    .tk-view-btn.active { background:var(--accent-blue); color:#fff; }
+
+    .tk-cal { display:flex; flex-direction:column; }
+    .tk-cal-head { display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:14px; }
+    .tk-cal-label { font-size:15px; font-weight:700; color:var(--text-primary); min-width:160px; text-align:center; }
+    .tk-cal-nav { width:30px; height:30px; border-radius:8px; border:1px solid var(--border); background:var(--bg-secondary); color:var(--text-primary); cursor:pointer; display:flex; align-items:center; justify-content:center; }
+    .tk-cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:6px; }
+    .tk-cal-wd { text-align:center; font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; padding-bottom:6px; }
+    .tk-cal-cell { min-height:88px; background:var(--bg-secondary); border:1px solid var(--border); border-radius:var(--radius-md); padding:6px; display:flex; flex-direction:column; gap:3px; }
+    .tk-cal-cell--empty { background:transparent; border-color:transparent; }
+    .tk-cal-cell--today { border-color:var(--accent-blue); }
+    .tk-cal-day { font-size:11px; font-weight:700; color:var(--text-muted); }
+    .tk-cal-cell--today .tk-cal-day { color:var(--accent-blue); }
+    .tk-cal-tasks { display:flex; flex-direction:column; gap:3px; overflow:hidden; }
+    .tk-cal-chip { font-size:10px; padding:2px 5px; border-radius:4px; background:color-mix(in srgb, var(--pc) 16%, var(--bg-tertiary)); color:var(--pc); cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .tk-cal-more { font-size:10px; color:var(--text-muted); padding:0 4px; }
 
     /* Loading */
     .tk-loading { display:flex; justify-content:center; padding:60px; }
