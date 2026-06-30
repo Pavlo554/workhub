@@ -693,53 +693,62 @@ export async function render(container) {
         showUpgradePrompt('Клієнтський портал — PRO функція', 'Надайте клієнту особисту сторінку з рахунками та статусом проектів на планах PRO та BUSINESS.')
         return
       }
-      let token = client.portalToken
-      if (!token) {
-        token = Math.random().toString(36).slice(2) + Date.now().toString(36)
+      const btn = detailEl.querySelector('#cl-portal-btn')
+      const origBtnHtml = btn.innerHTML
+      btn.disabled = true; btn.innerHTML = '<div class="btn-spinner"></div>'
+
+      try {
+        // Use existing token OR generate new one
+        const token = client.portalToken || (Math.random().toString(36).slice(2) + Date.now().toString(36))
         const basePath = base.join('/')
-        await Promise.all([
+
+        // Always write portal doc (handles partial-write recovery)
+        const writes = [
           setDoc(doc(db, 'clientPortals', token), {
             ownerUid: user.uid, basePath, clientId: client.id,
-            clientName: client.name,
-            clientCompany: client.company || null,
-            enabled: true,
-            createdAt: serverTimestamp(),
+            clientName: client.name, clientCompany: client.company || null,
+            enabled: true, updatedAt: serverTimestamp(),
           }),
-          updateDoc(doc(db, ...base, 'clients', client.id), { portalToken: token }),
-        ])
+        ]
+        if (!client.portalToken) {
+          writes.push(updateDoc(doc(db, ...base, 'clients', client.id), { portalToken: token }))
+        }
+        await Promise.all(writes)
         client.portalToken = token
-        detailEl.querySelector('#cl-portal-btn span').textContent = 'Портал'
-      }
-      const url = `https://workhub-aifo.vercel.app/api/portal?t=${token}`
-      // Show dialog with copy link
-      const overlay = document.createElement('div')
-      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:9999'
-      overlay.innerHTML = `
-        <div style="background:var(--bg-secondary);border:1.5px solid var(--border);border-radius:16px;padding:28px 32px;width:440px;max-width:95vw">
-          <div style="font-size:17px;font-weight:800;margin-bottom:6px">Клієнтський портал</div>
-          <div style="font-size:13px;color:var(--text-muted);margin-bottom:18px">Поділіться цим посиланням з клієнтом — він побачить свої рахунки та проекти</div>
-          <div style="display:flex;gap:8px">
-            <input id="portal-url-input" value="${url}" readonly
-              style="flex:1;padding:9px 12px;background:var(--bg-tertiary);border:1.5px solid var(--border);border-radius:8px;font-size:12px;color:var(--text-primary);outline:none">
-            <button id="portal-copy-btn" style="padding:9px 16px;background:#4F8EF7;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;white-space:nowrap">Копіювати</button>
-          </div>
-          <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
-            <button id="portal-open-btn" style="padding:7px 14px;background:none;border:1.5px solid var(--border);color:var(--text-primary);border-radius:8px;cursor:pointer;font-size:12px">Відкрити ↗</button>
-            <button id="portal-close-btn" style="padding:7px 14px;background:var(--bg-tertiary);border:none;color:var(--text-muted);border-radius:8px;cursor:pointer;font-size:12px">Закрити</button>
-          </div>
-        </div>`
-      document.body.appendChild(overlay)
-      overlay.querySelector('#portal-copy-btn').addEventListener('click', () => {
-        navigator.clipboard.writeText(url).then(() => {
-          overlay.querySelector('#portal-copy-btn').textContent = '✓ Скопійовано'
-          setTimeout(() => { overlay.querySelector('#portal-copy-btn').textContent = 'Копіювати' }, 2000)
+
+        // Show dialog
+        const overlay = document.createElement('div')
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:9999'
+        overlay.innerHTML = `
+          <div style="background:var(--bg-secondary);border:1.5px solid var(--border);border-radius:16px;padding:28px 32px;width:440px;max-width:95vw">
+            <div style="font-size:17px;font-weight:800;margin-bottom:6px">Клієнтський портал</div>
+            <div style="font-size:13px;color:var(--text-muted);margin-bottom:18px">Поділіться цим посиланням з клієнтом — він побачить свої рахунки та проекти</div>
+            <div style="display:flex;gap:8px">
+              <input id="portal-url-input" value="${url}" readonly
+                style="flex:1;padding:9px 12px;background:var(--bg-tertiary);border:1.5px solid var(--border);border-radius:8px;font-size:12px;color:var(--text-primary);outline:none">
+              <button id="portal-copy-btn" style="padding:9px 16px;background:#4F8EF7;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;white-space:nowrap">Копіювати</button>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
+              <button id="portal-open-btn" style="padding:7px 14px;background:none;border:1.5px solid var(--border);color:var(--text-primary);border-radius:8px;cursor:pointer;font-size:12px">Відкрити ↗</button>
+              <button id="portal-close-btn" style="padding:7px 14px;background:var(--bg-tertiary);border:none;color:var(--text-muted);border-radius:8px;cursor:pointer;font-size:12px">Закрити</button>
+            </div>
+          </div>`
+        document.body.appendChild(overlay)
+        overlay.querySelector('#portal-copy-btn').addEventListener('click', () => {
+          navigator.clipboard.writeText(url).then(() => {
+            overlay.querySelector('#portal-copy-btn').textContent = '✓ Скопійовано'
+            setTimeout(() => { overlay.querySelector('#portal-copy-btn').textContent = 'Копіювати' }, 2000)
+          })
         })
-      })
-      overlay.querySelector('#portal-open-btn').addEventListener('click', () => {
-        window.electron?.openExternal(url)
-      })
-      overlay.querySelector('#portal-close-btn').addEventListener('click', () => overlay.remove())
-      overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove() })
+        overlay.querySelector('#portal-open-btn').addEventListener('click', () => { window.electron?.openExternal(url) })
+        overlay.querySelector('#portal-close-btn').addEventListener('click', () => overlay.remove())
+        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove() })
+      } catch (err) {
+        console.error('Portal error:', err)
+        alert('Помилка створення порталу: ' + err.message)
+      } finally {
+        btn.disabled = false; btn.innerHTML = origBtnHtml
+      }
     })
 
     let selType = 'note'
