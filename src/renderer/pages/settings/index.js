@@ -73,7 +73,7 @@ export async function render(container) {
 
         <!-- ── Content ── -->
         <main class="st-content" id="st-content">
-          ${renderTab(activeTab, profile, user)}
+          ${renderTab(activeTab, profile, user, bizDoc)}
         </main>
 
       </div>
@@ -85,7 +85,7 @@ export async function render(container) {
         container.querySelectorAll('.st-tab').forEach(b => b.classList.remove('active'))
         btn.classList.add('active')
         const content = container.querySelector('#st-content')
-        content.innerHTML = renderTab(activeTab, profile, user)
+        content.innerHTML = renderTab(activeTab, profile, user, bizDoc)
         content.scrollTop = 0
         attachTabEvents(content, activeTab, profile, user)
       })
@@ -120,7 +120,7 @@ export async function render(container) {
 }
 
 // ── Tab renderer ─────────────────────────────────────────────
-function renderTab(tab, profile, user) {
+function renderTab(tab, profile, user, bizDoc) {
   switch (tab) {
     case 'profile':       return renderProfile(profile, user, bizDoc)
     case 'language':      return renderLanguage()
