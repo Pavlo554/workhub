@@ -111,7 +111,7 @@ service cloud.firestore {
 
     // ── Users ──────────────────────────────────────────────────────────────
     match /users/{userId} {
-      allow read: if request.auth != null && (request.auth.uid == userId || isAdmin() || isOwner());
+      allow read: if request.auth != null && (request.auth.uid == userId || isAdmin() || isOwner() || isWorkspaceMember(userId));
 
       // New account creation: allow only safe default values
       allow create: if request.auth != null &&
