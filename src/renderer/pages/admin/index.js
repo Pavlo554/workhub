@@ -79,7 +79,7 @@ async function show2faGate(container, user) {
         if (!snap.exists()) { errEl.textContent = '2FA не налаштовано коректно'; resolve(true); return }
         const ok = await verifyTotpCode(snap.data().secret, code)
         if (!ok) { errEl.textContent = 'Невірний код'; return }
-        sessionStorage.setItem('wh-2fa-verified-' + user.uid, '1')
+        localStorage.setItem('wh-2fa-verified-' + user.uid, String(Date.now()))
         resolve(true)
       } catch (err) { errEl.textContent = 'Помилка: ' + err.message }
     }
@@ -106,7 +106,9 @@ export async function render(container) {
   }
 
   // ── 2FA gate (раз на сесію) ────────────────────────────────
-  if (profile?.totpEnabled && !sessionStorage.getItem('wh-2fa-verified-' + user.uid)) {
+  const _2faTs = localStorage.getItem('wh-2fa-verified-' + user.uid)
+  const _2faOk = _2faTs && (Date.now() - Number(_2faTs)) < 30 * 24 * 60 * 60 * 1000
+  if (profile?.totpEnabled && !_2faOk) {
     const passed = await show2faGate(container, user)
     if (!passed) return
   }
