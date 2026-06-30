@@ -699,7 +699,7 @@ export async function render(container) {
         const basePath = base.join('/')
         await Promise.all([
           setDoc(doc(db, 'clientPortals', token), {
-            basePath, clientId: client.id,
+            ownerUid: user.uid, basePath, clientId: client.id,
             clientName: client.name,
             clientCompany: client.company || null,
             enabled: true,
