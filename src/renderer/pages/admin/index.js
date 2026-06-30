@@ -2815,7 +2815,8 @@ function injectStyles() {
     .adm-row-checkbox { width:16px; height:16px; cursor:pointer; }
 
     /* Tabs */
-    .adm-tabs  { display:flex; gap:4px; margin-bottom:22px; background:var(--bg-secondary); padding:4px; border-radius:var(--radius-md); border:1px solid var(--border); width:fit-content; }
+    .adm-tabs  { display:flex; gap:4px; margin-bottom:22px; background:var(--bg-secondary); padding:4px; border-radius:var(--radius-md); border:1px solid var(--border); overflow-x:auto; scrollbar-width:none; }
+    .adm-tabs::-webkit-scrollbar { display:none; }
     .adm-tab   { display:flex; align-items:center; gap:6px; padding:7px 18px; border-radius:var(--radius-sm); font-size:13px; font-weight:600; color:var(--text-muted); cursor:pointer; border:none; background:none; transition:all .15s; white-space:nowrap; }
     .adm-tab:hover  { color:var(--text-primary); }
     .adm-tab.active { background:var(--bg-primary); color:var(--text-primary); box-shadow:0 1px 4px rgba(0,0,0,.3); }
