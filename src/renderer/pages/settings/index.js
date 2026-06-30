@@ -122,7 +122,7 @@ export async function render(container) {
 // ── Tab renderer ─────────────────────────────────────────────
 function renderTab(tab, profile, user) {
   switch (tab) {
-    case 'profile':       return renderProfile(profile, user)
+    case 'profile':       return renderProfile(profile, user, bizDoc)
     case 'language':      return renderLanguage()
     case 'appearance':    return renderAppearance()
     case 'notifications': return renderNotifications()
@@ -142,7 +142,8 @@ const NICHES = [
 ]
 
 // ── Profile tab ───────────────────────────────────────────────
-function renderProfile(profile, user) {
+function renderProfile(profile, user, bizDoc) {
+  const bizData      = bizDoc || profile
   const currentNiche = (bizDoc ? bizDoc.profession : profile?.profession) || null
   return `
     <div class="st-panel">
