@@ -3046,12 +3046,21 @@ function injectStyles() {
     .adm-toast-success { border-left:3px solid #34D399; }
     .adm-toast-error   { border-left:3px solid #F87171; }
 
-    @media (max-width:1100px) {
+    @media (max-width:1400px) {
+      .adm-stats-row { grid-template-columns:repeat(4,1fr); }
+      .adm-overview-grid { grid-template-columns:1.2fr 1fr; }
+    }
+    @media (max-width:1150px) {
+      .adm-header { flex-wrap:wrap; }
+      .adm-header-right { flex-wrap:wrap; }
       .adm-stats-row { grid-template-columns:repeat(3,1fr); }
       .adm-overview-grid { grid-template-columns:1fr; }
       .adm-an-grid { grid-template-columns:1fr; }
       .adm-detail-body { grid-template-columns:1fr; }
       .adm-notif-layout { grid-template-columns:1fr; }
+    }
+    @media (max-width:800px) {
+      .adm-stats-row { grid-template-columns:repeat(2,1fr); }
     }
   `
   document.head.appendChild(s)
