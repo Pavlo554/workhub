@@ -291,7 +291,7 @@ function convert(container, rates) {
 function updateTimestamp(container, rates, exchangeDate) {
   const ts = container.querySelector('#fx-rates-ts')
   if (!ts) return
-  const isLive = !!rates.USD && Math.abs(rates.USD - 44.26) > 0.5
+  const isLive = !!rates.USD && rates.USD !== 44.26
   if (exchangeDate) {
     ts.textContent = `Офіційний курс НБУ · Дані на ${exchangeDate}`
   } else if (rates.USD) {

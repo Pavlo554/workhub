@@ -246,7 +246,12 @@ service cloud.firestore {
         allow create, delete: if request.auth != null && request.auth.uid == workspaceId;
         allow update: if request.auth != null && (
           request.auth.uid == workspaceId ||
-          (resource.data.get('used', false) == false && request.resource.data.used == true)
+          (
+            resource.data.get('used', false) == false &&
+            request.resource.data.used == true &&
+            request.resource.data.usedBy == request.auth.uid &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used', 'usedBy', 'usedAt'])
+          )
         );
       }
     }
@@ -258,7 +263,12 @@ service cloud.firestore {
         request.auth.uid == request.resource.data.workspaceId;
       allow update: if request.auth != null && (
         request.auth.uid == resource.data.workspaceId ||
-        (resource.data.get('used', false) == false && request.resource.data.used == true)
+        (
+          resource.data.get('used', false) == false &&
+          request.resource.data.used == true &&
+          request.resource.data.usedBy == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used', 'usedBy', 'usedAt'])
+        )
       );
       allow delete: if request.auth != null &&
         request.auth.uid == resource.data.workspaceId;

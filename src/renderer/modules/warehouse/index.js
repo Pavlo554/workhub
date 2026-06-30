@@ -107,7 +107,7 @@ export async function render(container) {
             <thead><tr><th>${t('warehouse.name')}</th><th>${t('warehouse.category')}</th><th>${t('warehouse.qty')}</th><th>${t('warehouse.price')}</th><th>${t('warehouse.total_val')}</th><th>${t('warehouse.supplier')}</th><th></th></tr></thead>
             <tbody>
               ${filtered.map(item => {
-                const cat = CATS.find(c => c.id === item.category) || CATS.at(-1)
+                const cat = CATS.find(c => c.id === item.category) || CATS[CATS.length - 1]
                 const isUnlimited = item.category === 'digital' && item.saleType === 'copy'
                 const isLow = !isUnlimited && item.minQty > 0 && (item.qty || 0) <= item.minQty
                 const isEmpty = !isUnlimited && (item.qty || 0) === 0
