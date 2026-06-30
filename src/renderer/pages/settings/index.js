@@ -3,7 +3,7 @@ import { navigate, invalidateRoute } from '../../../core/router.js'
 import { getCurrentUser, getUserProfile, updateProfileCache } from '../../services/auth.js'
 import { auth, db } from '../../services/firebase.js'
 import { signOut, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js'
-import { doc, updateDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
+import { doc, getDoc, updateDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 import { t, getLang, setLang, SUPPORTED_LANGS } from '../../../core/i18n.js'
 import { wbPrompt, wbAlert, wbConfirm } from '../../utils/dialogs.js'
 import { applyTheme, applyAccent, ACCENT_COLORS } from '../../../core/theme.js'
@@ -14,6 +14,15 @@ export async function render(container) {
 
   const user    = getCurrentUser()
   const profile = await getUserProfile(user.uid)
+
+  // Load active secondary business doc if one is selected
+  let bizDoc = null
+  if (profile?.activeBusiness) {
+    const snap = await getDoc(doc(db, 'users', user.uid, 'businesses', profile.activeBusiness)).catch(() => null)
+    if (snap?.exists()) bizDoc = { id: snap.id, ...snap.data() }
+  }
+  // bizData = data source for "Мій бізнес" form (active biz or root profile)
+  const bizData = bizDoc || profile
 
   let activeTab = 'profile'
 
@@ -134,7 +143,7 @@ const NICHES = [
 
 // ── Profile tab ───────────────────────────────────────────────
 function renderProfile(profile, user) {
-  const currentNiche = profile?.profession || null
+  const currentNiche = (bizDoc ? bizDoc.profession : profile?.profession) || null
   return `
     <div class="st-panel">
       <div class="st-panel-header">
@@ -191,20 +200,25 @@ function renderProfile(profile, user) {
       <div class="st-divider" style="margin:28px 0"></div>
 
       <h3 class="st-section-label">Мій бізнес</h3>
+      ${bizDoc ? `
+        <div class="st-biz-banner">
+          ${icon('business', 14)}
+          <span>Редагуєш: <strong>${esc(bizDoc.name || '')}</strong></span>
+        </div>` : ''}
       <p class="st-panel-subtitle" style="margin-bottom:20px">Використовується в рахунках, договорах та навігації</p>
 
       <div class="st-form-grid">
         <div class="st-field" style="grid-column:1/-1">
           <label class="st-label">Назва бізнесу або ваше ім'я *</label>
           <input class="st-input" type="text" id="input-business"
-            value="${esc(profile?.businessName || '')}"
+            value="${esc(bizDoc ? (bizDoc.name || '') : (profile?.businessName || ''))}"
             placeholder="ФОП Іванов або Design Studio">
         </div>
 
         <div class="st-field">
           <label class="st-label">Веб-сайт</label>
           <input class="st-input" type="text" id="input-website"
-            value="${esc(profile?.website || '')}" placeholder="yoursite.com">
+            value="${esc(bizData?.website || '')}" placeholder="yoursite.com">
         </div>
 
         <div class="st-field">
@@ -212,7 +226,7 @@ function renderProfile(profile, user) {
           <div class="st-input-wrap">
             <span class="st-input-at">@</span>
             <input class="st-input st-input-at-pad" type="text" id="input-instagram"
-              value="${esc(profile?.instagram || '')}" placeholder="username">
+              value="${esc(bizData?.instagram || '')}" placeholder="username">
           </div>
         </div>
 
@@ -221,7 +235,7 @@ function renderProfile(profile, user) {
           <div class="st-input-wrap">
             <span class="st-input-at">@</span>
             <input class="st-input st-input-at-pad" type="text" id="input-telegram"
-              value="${esc(profile?.telegram || '')}" placeholder="username або канал">
+              value="${esc(bizData?.telegram || '')}" placeholder="username або канал">
           </div>
         </div>
       </div>
@@ -246,10 +260,10 @@ function renderProfile(profile, user) {
       <div class="st-field" style="margin-top:20px;max-width:280px">
         <label class="st-label">Група ФОП</label>
         <select class="st-input" id="input-fop-group">
-          <option value="" ${!profile?.fopGroup ? 'selected' : ''}>Не ФОП / не вказано</option>
-          <option value="1" ${profile?.fopGroup === '1' ? 'selected' : ''}>1 група</option>
-          <option value="2" ${profile?.fopGroup === '2' ? 'selected' : ''}>2 група</option>
-          <option value="3" ${profile?.fopGroup === '3' ? 'selected' : ''}>3 група</option>
+          <option value="" ${!bizData?.fopGroup ? 'selected' : ''}>Не ФОП / не вказано</option>
+          <option value="1" ${bizData?.fopGroup === '1' ? 'selected' : ''}>1 група</option>
+          <option value="2" ${bizData?.fopGroup === '2' ? 'selected' : ''}>2 група</option>
+          <option value="3" ${bizData?.fopGroup === '3' ? 'selected' : ''}>3 група</option>
         </select>
         <div class="st-field-hint">Використовується для розрахунку єдиного податку у "Звітах"</div>
       </div>
@@ -726,20 +740,31 @@ function attachProfile(content, profile, user) {
     btn.innerHTML = `<div class="spinner" style="width:14px;height:14px"></div> ${t('common.saving')}`
 
     try {
-      const data = {
-        businessName, website, instagram, telegram, fopGroup,
-        profession:     selectedNiche,
-        accountType:    'owner',
-        onboardingDone: true,
-        updatedAt:      serverTimestamp(),
+      if (bizDoc) {
+        // Save to the active secondary business document
+        const bizData2 = { name: businessName, website, instagram, telegram, fopGroup, profession: selectedNiche, updatedAt: serverTimestamp() }
+        await updateDoc(doc(db, 'users', user.uid, 'businesses', bizDoc.id), bizData2)
+        // Also update cached active business name in root profile so navbar shows updated name
+        const patch = { activeBusinessName: businessName }
+        await updateDoc(doc(db, 'users', user.uid), patch)
+        updateProfileCache(user.uid, patch)
+      } else {
+        // Primary business — save to root user profile as before
+        const data = {
+          businessName, website, instagram, telegram, fopGroup,
+          profession:     selectedNiche,
+          accountType:    'owner',
+          onboardingDone: true,
+          updatedAt:      serverTimestamp(),
+        }
+        await updateDoc(doc(db, 'users', user.uid), data)
+        updateProfileCache(user.uid, data)
       }
-      await updateDoc(doc(db, 'users', user.uid), data)
-      updateProfileCache(user.uid, data)
 
       const { renderNavigation } = await import('../../components/navigation.js')
-      const updatedProfile = { ...profile, ...data }
+      const freshProfile = await getUserProfile(user.uid)
       const sidebar = document.getElementById('sidebar')
-      if (sidebar) renderNavigation(sidebar, updatedProfile)
+      if (sidebar) renderNavigation(sidebar, freshProfile)
 
       showToast('Бізнес збережено. Меню оновлено', 'success')
     } catch (err) {
@@ -1113,6 +1138,7 @@ function injectStyles() {
       border-radius: 3px; background: linear-gradient(180deg,#667eea,#5B8DEF);
     }
     .st-panel-subtitle { font-size: 13px; color: var(--text-muted); margin-left: 14px; }
+    .st-biz-banner { display:flex; align-items:center; gap:8px; padding:10px 14px; background:rgba(79,142,247,.1); border:1px solid rgba(79,142,247,.25); border-radius:var(--radius-md); font-size:13px; color:var(--accent-blue); margin-bottom:16px; }
     .st-field-hint { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
 
     /* ── Avatar row ── */
