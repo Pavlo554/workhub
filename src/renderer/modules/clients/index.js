@@ -716,6 +716,8 @@ export async function render(container) {
         await Promise.all(writes)
         client.portalToken = token
 
+        const url = `https://workhub-aifo.vercel.app/api/portal?t=${token}`
+
         // Show dialog
         const overlay = document.createElement('div')
         overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:9999'
