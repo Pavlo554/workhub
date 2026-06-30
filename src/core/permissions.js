@@ -13,6 +13,7 @@ export const PLANS = {
       team_members:     1,
       pdf_export:       false,
       encryption:       false,
+      client_portal:    false,
     }
   },
   pro: {
@@ -27,6 +28,7 @@ export const PLANS = {
       team_members:     1,
       pdf_export:       true,
       encryption:       true,
+      client_portal:    true,
     }
   },
   business: {
@@ -41,6 +43,7 @@ export const PLANS = {
       team_members:     5,
       pdf_export:       true,
       encryption:       true,
+      client_portal:    true,
     }
   }
 }

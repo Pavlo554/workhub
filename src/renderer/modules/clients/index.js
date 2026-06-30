@@ -3,8 +3,10 @@ import { db } from '../../services/firebase.js'
 import { getCurrentUser, getUserProfile, getActivePathSegments } from '../../services/auth.js'
 import { checkPlanLimit } from '../../services/plan-guard.js'
 import { debounce } from '../../../core/utils.js'
+import { planHasFeature } from '../../../core/permissions.js'
+import { showUpgradePrompt } from '../../services/plan-guard.js'
 import {
-  collection, addDoc, getDocs, deleteDoc, doc, updateDoc,
+  collection, addDoc, getDocs, deleteDoc, doc, updateDoc, setDoc, getDoc,
   query, orderBy, serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'
 import { icon } from '../../utils/icons.js'
@@ -626,6 +628,9 @@ export async function render(container) {
           ${client.whatsapp ? `<a class="cl-quick-btn" href="https://wa.me/${client.whatsapp}" target="_blank"><span>WhatsApp</span></a>` : ''}
           ${client.site     ? `<a class="cl-quick-btn" href="${client.site}" target="_blank"><span>Сайт</span></a>` : ''}
           <button class="cl-quick-btn" id="cl-edit-detail"><span>Редагувати</span></button>
+          <button class="cl-quick-btn cl-portal-btn" id="cl-portal-btn" data-cid="${client.id}" data-cname="${client.name.replace(/"/g,'')}" data-cco="${(client.company||'').replace(/"/g,'')}">
+            ${icon('globe', 13)} <span>${client.portalToken ? 'Портал' : 'Портал ↗'}</span>
+          </button>
         </div>
 
         <div class="cl-section">
@@ -680,6 +685,62 @@ export async function render(container) {
 
     detailEl.querySelector('#cl-detail-close').addEventListener('click', closeDetail)
     detailEl.querySelector('#cl-edit-detail')?.addEventListener('click', () => openModal(client))
+
+    // ── Client portal ────────────────────────────────────────
+    detailEl.querySelector('#cl-portal-btn')?.addEventListener('click', async () => {
+      const profile = await getUserProfile(user.uid)
+      if (!planHasFeature(profile?.plan || 'free', 'client_portal')) {
+        showUpgradePrompt('Клієнтський портал — PRO функція', 'Надайте клієнту особисту сторінку з рахунками та статусом проектів на планах PRO та BUSINESS.')
+        return
+      }
+      let token = client.portalToken
+      if (!token) {
+        token = Math.random().toString(36).slice(2) + Date.now().toString(36)
+        const basePath = base.join('/')
+        await Promise.all([
+          setDoc(doc(db, 'clientPortals', token), {
+            basePath, clientId: client.id,
+            clientName: client.name,
+            clientCompany: client.company || null,
+            enabled: true,
+            createdAt: serverTimestamp(),
+          }),
+          updateDoc(doc(db, ...base, 'clients', client.id), { portalToken: token }),
+        ])
+        client.portalToken = token
+        detailEl.querySelector('#cl-portal-btn span').textContent = 'Портал'
+      }
+      const url = `https://workhub-aifo.vercel.app/api/portal?t=${token}`
+      // Show dialog with copy link
+      const overlay = document.createElement('div')
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:9999'
+      overlay.innerHTML = `
+        <div style="background:var(--bg-secondary);border:1.5px solid var(--border);border-radius:16px;padding:28px 32px;width:440px;max-width:95vw">
+          <div style="font-size:17px;font-weight:800;margin-bottom:6px">Клієнтський портал</div>
+          <div style="font-size:13px;color:var(--text-muted);margin-bottom:18px">Поділіться цим посиланням з клієнтом — він побачить свої рахунки та проекти</div>
+          <div style="display:flex;gap:8px">
+            <input id="portal-url-input" value="${url}" readonly
+              style="flex:1;padding:9px 12px;background:var(--bg-tertiary);border:1.5px solid var(--border);border-radius:8px;font-size:12px;color:var(--text-primary);outline:none">
+            <button id="portal-copy-btn" style="padding:9px 16px;background:#4F8EF7;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;white-space:nowrap">Копіювати</button>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
+            <button id="portal-open-btn" style="padding:7px 14px;background:none;border:1.5px solid var(--border);color:var(--text-primary);border-radius:8px;cursor:pointer;font-size:12px">Відкрити ↗</button>
+            <button id="portal-close-btn" style="padding:7px 14px;background:var(--bg-tertiary);border:none;color:var(--text-muted);border-radius:8px;cursor:pointer;font-size:12px">Закрити</button>
+          </div>
+        </div>`
+      document.body.appendChild(overlay)
+      overlay.querySelector('#portal-copy-btn').addEventListener('click', () => {
+        navigator.clipboard.writeText(url).then(() => {
+          overlay.querySelector('#portal-copy-btn').textContent = '✓ Скопійовано'
+          setTimeout(() => { overlay.querySelector('#portal-copy-btn').textContent = 'Копіювати' }, 2000)
+        })
+      })
+      overlay.querySelector('#portal-open-btn').addEventListener('click', () => {
+        window.electron?.openExternal(url)
+      })
+      overlay.querySelector('#portal-close-btn').addEventListener('click', () => overlay.remove())
+      overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove() })
+    })
 
     let selType = 'note'
     detailEl.querySelector('#cl-inter-types').addEventListener('click', e => {
